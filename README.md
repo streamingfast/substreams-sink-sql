@@ -1,0 +1,1 @@
+# substreams-postgres-sink
