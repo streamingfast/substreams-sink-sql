@@ -34,7 +34,7 @@ func init() {
 	loadPostgresCmd.Flags().Int64P("start-block", "s", -1, "Start block for blockchain firehose")
 	loadPostgresCmd.Flags().Uint64P("stop-block", "t", 0, "Stop block for blockchain firehose")
 
-	loadPostgresCmd.Flags().StringP("firehose-endpoint", "e", "bsc-dev.streamingfast.io:443", "firehose GRPC endpoint")
+	loadPostgresCmd.Flags().StringP("endpoint", "e", "bsc-dev.streamingfast.io:443", "firehose GRPC endpoint")
 	loadPostgresCmd.Flags().String("substreams-api-key-envvar", "FIREHOSE_API_TOKEN", "name of variable containing firehose authentication token (JWT)")
 	loadPostgresCmd.Flags().BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
 	loadPostgresCmd.Flags().BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
@@ -82,7 +82,7 @@ func runLoadPostgres(cmd *cobra.Command, args []string) error {
 	}
 
 	ssClient, callOpts, err := client.NewSubstreamsClient(
-		mustGetString(cmd, "firehose-endpoint"),
+		mustGetString(cmd, "endpoint"),
 		os.Getenv(mustGetString(cmd, "substreams-api-key-envvar")),
 		mustGetBool(cmd, "insecure"),
 		mustGetBool(cmd, "plaintext"),
