@@ -320,15 +320,26 @@ func (pgm *PostgresLoader) value(schema, table, column, value string) (string, e
 	switch valType.Kind() {
 	case reflect.String:
 		return fmt.Sprintf("'%s'", value), nil
-	case reflect.Struct: //time?
-		i, err := strconv.Atoi(value)
-		if err != nil {
-			return value, nil
-		}
-
-		v := time.Unix(int64(i), 0).Format("2006-01-02 15:04:05")
-		return fmt.Sprintf("'%s'", v), nil
-	default:
+	case reflect.Bool:
+		return fmt.Sprintf("'%s'", value), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return value, nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return value, nil
+	case reflect.Float32, reflect.Float64:
+		return value, nil
+	case reflect.Struct:
+		if valType == reflect.TypeOf(time.Time{}) {
+			i, err := strconv.Atoi(value)
+			if err != nil {
+				return "", fmt.Errorf("could not convert %s to int: %w", value, err)
+			}
+
+			v := time.Unix(int64(i), 0).Format(time.RFC3339)
+			return fmt.Sprintf("'%s'", v), nil
+		}
+		return "", fmt.Errorf("unsupported type %s for column %s in table %s.%s", valType, column, schema, table)
+	default:
+		return "", fmt.Errorf("unsupported type %s for column %s in table %s.%s", valType, column, schema, table)
 	}
 }
