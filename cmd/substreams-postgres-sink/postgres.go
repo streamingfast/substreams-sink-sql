@@ -11,14 +11,15 @@ import (
 	"time"
 
 	"github.com/jimsmart/schema"
-	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"github.com/streamingfast/bstream"
-	_ "github.com/streamingfast/sf-ethereum/types"
-	database "github.com/streamingfast/substreams-postgres-sink/cmd/substreams-postgres-sink/db"
+	database "github.com/streamingfast/substreams-postgres-sink/db"
 	"github.com/streamingfast/substreams/client"
 	"github.com/streamingfast/substreams/manifest"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
+
+	_ "github.com/lib/pq"
+	_ "github.com/streamingfast/sf-ethereum/types"
 	"google.golang.org/protobuf/proto"
 )
 
