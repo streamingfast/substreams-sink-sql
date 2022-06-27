@@ -28,6 +28,8 @@ func init() {
 	loadPostgresCmd.Flags().Int64P("start-block", "s", -1, "Start block for blockchain firehose")
 	loadPostgresCmd.Flags().Uint64P("stop-block", "t", 0, "Stop block for blockchain firehose")
 
+	loadPostgresCmd.Flags().String("output-module", "db_out", "Output module name")
+
 	loadPostgresCmd.Flags().StringP("endpoint", "e", "bsc-dev.streamingfast.io:443", "firehose GRPC endpoint")
 	loadPostgresCmd.Flags().String("substreams-api-key-envvar", "FIREHOSE_API_TOKEN", "name of variable containing firehose authentication token (JWT)")
 	loadPostgresCmd.Flags().BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
@@ -99,6 +101,8 @@ func runLoadPostgresE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("call sf.substreams.v1.Stream/Blocks: %w", err)
 	}
 
+	outputModuleName := mustGetString(cmd, "output-module")
+
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
@@ -123,16 +127,19 @@ func runLoadPostgresE(cmd *cobra.Command, args []string) error {
 				for _, log := range output.Logs {
 					fmt.Println("LOG: ", log)
 				}
-				if output.Name == "db_out" {
-					databaseChanges := &database.DatabaseChanges{}
-					err := proto.Unmarshal(output.GetMapOutput().GetValue(), databaseChanges)
-					if err != nil {
-						return fmt.Errorf("unmarshalling database changes: %w", err)
-					}
-					err = applyDatabaseChanges(loader, databaseChanges, databaseSchema)
-					if err != nil {
-						return fmt.Errorf("applying database changes: %w", err)
-					}
+
+				if output.Name != outputModuleName {
+					continue
+				}
+
+				databaseChanges := &database.DatabaseChanges{}
+				err := proto.Unmarshal(output.GetMapOutput().GetValue(), databaseChanges)
+				if err != nil {
+					return fmt.Errorf("unmarshalling database changes: %w", err)
+				}
+				err = applyDatabaseChanges(loader, databaseChanges, databaseSchema)
+				if err != nil {
+					return fmt.Errorf("applying database changes: %w", err)
 				}
 			}
 		}
