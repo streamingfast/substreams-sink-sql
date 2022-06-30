@@ -6,51 +6,59 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/streamingfast/bstream"
+
+	// FIXME: use `pb/substreams/databases/deltas/v1/models.pb.go` instead, and move that `database.go` helpers over there.
 	database "github.com/streamingfast/substreams-postgres-sink/db"
 	"github.com/streamingfast/substreams/client"
 	"github.com/streamingfast/substreams/manifest"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 
+	// FIXME: ideally, we wouldn't rely on the `streamingfast/substreams` package, if only to show
+	// that all those sinks can be written in isolation from our stack.
+
 	_ "github.com/lib/pq"
-	_ "github.com/streamingfast/sf-ethereum/types"
 	"google.golang.org/protobuf/proto"
 )
 
-var loadPostgresCmd = &cobra.Command{
-	Use:          "load [manifest]",
+var rootCmd = &cobra.Command{
+	Use:          "substreams-postgres-sink <substreams_package> <output_module>",
 	RunE:         runLoadPostgresE,
 	Args:         cobra.ExactArgs(2),
 	SilenceUsage: true,
 }
 
 func init() {
-	loadPostgresCmd.Flags().Int64P("start-block", "s", -1, "Start block for blockchain firehose")
-	loadPostgresCmd.Flags().Uint64P("stop-block", "t", 0, "Stop block for blockchain firehose")
+	rootCmd.Flags().Int64P("start-block", "s", -1, "Start block to stream from.")
+	rootCmd.Flags().Uint64P("stop-block", "t", 0, "Stop block to end stream at, inclusively.")
 
-	loadPostgresCmd.Flags().String("output-module", "db_out", "Output module name")
+	rootCmd.Flags().StringP("endpoint", "e", "bsc-dev.streamingfast.io:443", "firehose GRPC endpoint")
+	rootCmd.Flags().String("substreams-api-token-envvar", "SUBSTREAMS_API_TOKEN", "name of variable containing the Substreams authentication token")
+	rootCmd.Flags().BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
+	rootCmd.Flags().BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
 
-	loadPostgresCmd.Flags().StringP("endpoint", "e", "bsc-dev.streamingfast.io:443", "firehose GRPC endpoint")
-	loadPostgresCmd.Flags().String("substreams-api-key-envvar", "FIREHOSE_API_TOKEN", "name of variable containing firehose authentication token (JWT)")
-	loadPostgresCmd.Flags().BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
-	loadPostgresCmd.Flags().BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
-
-	loadPostgresCmd.Flags().String("postgres-host", "localhost", "Set database hostname")
-	loadPostgresCmd.Flags().String("postgres-port", "5432", "Set database port")
-	loadPostgresCmd.Flags().String("postgres-username", "admin", "Set database username")
-	loadPostgresCmd.Flags().String("postgres-password", "admin", "Set database password")
-	loadPostgresCmd.Flags().Bool("postgres-ssl-enabled", false, "Set database ssl mode")
-	loadPostgresCmd.Flags().String("postgres-name", "substreams", "Set database name")
-	loadPostgresCmd.Flags().String("postgres-schema", "pancakeswap", "Mongo database schema for unmarshalling data")
-
-	rootCmd.AddCommand(loadPostgresCmd)
+	// DISCUSSION: why wouldn't we have people pass that connection
+	// string directly, a single one, "host=abc port=234 user=abc
+	// sslmode=disable" it's much more annoying to pass a dozen flags,
+	// and overriding anything would simply mean overiding one param.
+	// We could have var interpolation like ${} to pick it up from
+	// environment, so it doesn't show the password.
+	// Waddayathink?
+	rootCmd.Flags().String("postgres-host", "localhost", "Set database hostname")
+	rootCmd.Flags().String("postgres-port", "5432", "Set database port")
+	rootCmd.Flags().String("postgres-username", "admin", "Set database username")
+	rootCmd.Flags().String("postgres-password", "admin", "Set database password")
+	rootCmd.Flags().Bool("postgres-ssl-enabled", false, "Set database ssl mode")
+	rootCmd.Flags().String("postgres-name", "postgres", "Set database name")
+	rootCmd.Flags().String("postgres-schema", "postgres", "PostgreSQL database schema")
 }
 
 func runLoadPostgresE(cmd *cobra.Command, args []string) error {
-	err := bstream.ValidateRegistry()
-	if err != nil {
-		return fmt.Errorf("bstream validate registry %w", err)
-	}
+	// FIXME: why would we do that?! we're running a remote service, why validate a registry? why load
+	// the whole `sf-ethereum` also?!
+	// err := bstream.ValidateRegistry()
+	// if err != nil {
+	// 	return fmt.Errorf("bstream validate registry %w", err)
+	// }
 
 	ctx := cmd.Context()
 
@@ -79,7 +87,7 @@ func runLoadPostgresE(cmd *cobra.Command, args []string) error {
 
 	ssClient, callOpts, err := client.NewSubstreamsClient(
 		mustGetString(cmd, "endpoint"),
-		os.Getenv(mustGetString(cmd, "substreams-api-key-envvar")),
+		os.Getenv(mustGetString(cmd, "substreams-api-token-envvar")),
 		mustGetBool(cmd, "insecure"),
 		mustGetBool(cmd, "plaintext"),
 	)
@@ -100,8 +108,6 @@ func runLoadPostgresE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("call sf.substreams.v1.Stream/Blocks: %w", err)
 	}
-
-	outputModuleName := mustGetString(cmd, "output-module")
 
 	for {
 		resp, err := stream.Recv()
@@ -128,7 +134,7 @@ func runLoadPostgresE(cmd *cobra.Command, args []string) error {
 					fmt.Println("LOG: ", log)
 				}
 
-				if output.Name != outputModuleName {
+				if output.Name != moduleName {
 					continue
 				}
 
@@ -160,26 +166,24 @@ func applyDatabaseChanges(loader *PostgresLoader, databaseChanges *database.Data
 		}
 
 		switch change.Operation {
-		case database.TableChange_CREATE: //insert
+		case database.TableChange_CREATE:
 			err := loader.Insert(schemaName, change.Table, id, changes)
 			if err != nil {
 				return fmt.Errorf("loader insert: %w", err)
 			}
-		case database.TableChange_UPDATE: //update
+		case database.TableChange_UPDATE:
 			err := loader.Update(schemaName, change.Table, id, changes)
 			if err != nil {
 				return fmt.Errorf("loader update: %w", err)
 			}
-		case database.TableChange_UNSET: //ignore
-		case database.TableChange_DELETE: //delete
+		case database.TableChange_DELETE:
 			err := loader.Delete(schemaName, change.Table, id)
 			if err != nil {
 				return fmt.Errorf("loader delete: %w", err)
 			}
-		default: //ignore
+		default:
+			//case database.TableChange_UNSET:
 		}
-
 	}
-
 	return nil
 }

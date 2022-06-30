@@ -8,9 +8,7 @@ require (
 	github.com/lib/pq v1.10.6
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/pflag v1.0.5
-	github.com/streamingfast/bstream v0.0.2-0.20220505155906-a0834b9c5258
 	github.com/streamingfast/logging v0.0.0-20220511154537-ce373d264338
-	github.com/streamingfast/sf-ethereum/types v0.0.0-20220617155704-a15a152bd578
 	github.com/streamingfast/substreams v0.0.13
 	go.uber.org/zap v1.21.0
 	google.golang.org/protobuf v1.27.1
@@ -54,12 +52,12 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680 // indirect
+	github.com/streamingfast/bstream v0.0.2-0.20220505155906-a0834b9c5258 // indirect
 	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20220301153539-536adf71b594 // indirect
 	github.com/streamingfast/dmetrics v0.0.0-20210811180524-8494aeb34447 // indirect
 	github.com/streamingfast/dstore v0.1.1-0.20220419183635-aad7bcb15b8e // indirect
 	github.com/streamingfast/dtracing v0.0.0-20210811175635-d55665d3622a // indirect
-	github.com/streamingfast/jsonpb v0.0.0-20210811021341-3670f0aa02d0 // indirect
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect
 	github.com/streamingfast/pbgo v0.0.6-0.20220428192744-f80aee7d4688 // indirect
 	github.com/streamingfast/shutter v1.5.0 // indirect

@@ -109,6 +109,9 @@ func (pgm *PostgresLoader) Update(schemaName, table string, key string, data map
 
 	var updates []string
 	for i := 0; i < len(keys); i++ {
+		// FIXME: merely using %s for key can lead to SQL injection. I
+		// know, you should trust the Substreams you're putting in
+		// front, but still.
 		update := fmt.Sprintf("%s=%s", keys[i], values[i])
 		updates = append(updates, update)
 	}
@@ -144,6 +147,8 @@ func (pgm *PostgresLoader) value(schemaName, table, column, value string) (strin
 		return "", fmt.Errorf("could not find column %s in table %s.%s", column, schemaName, table)
 	}
 
+	// FIXME: all these values need proper escaping of values. merely wrapping in ' is an
+	// opening for SQL injection.
 	switch valType.Kind() {
 	case reflect.String:
 		return fmt.Sprintf("'%s'", value), nil

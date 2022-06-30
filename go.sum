@@ -503,8 +503,6 @@ github.com/streamingfast/dstore v0.1.1-0.20220419183635-aad7bcb15b8e h1:yXNSEK3e
 github.com/streamingfast/dstore v0.1.1-0.20220419183635-aad7bcb15b8e/go.mod h1:SHSEIPowGeE1TfNNmGeAUUnlO3dwevmX5kFOSazU60M=
 github.com/streamingfast/dtracing v0.0.0-20210811175635-d55665d3622a h1:/7Rw3pYpueJYOQReTJpfAhAPk0uZD4I58LfiUAr4IMc=
 github.com/streamingfast/dtracing v0.0.0-20210811175635-d55665d3622a/go.mod h1:bqiYZaX6L/MoXNfFQeAdau6g9HLA3yKHkX8KzStt58Q=
-github.com/streamingfast/jsonpb v0.0.0-20210811021341-3670f0aa02d0 h1:g8eEYbFSykyzIyuxNMmHEUGGUvJE0ivmqZagLDK42gw=
-github.com/streamingfast/jsonpb v0.0.0-20210811021341-3670f0aa02d0/go.mod h1:cTNObq2Uofb330y05JbbZZ6RwE6QUXw5iVcHk1Fx3fk=
 github.com/streamingfast/logging v0.0.0-20210811175431-f3b44b61606a/go.mod h1:4GdqELhZOXj4xwc4IaBmzofzdErGynnaSzuzxy0ZIBo=
 github.com/streamingfast/logging v0.0.0-20210908162127-bdc5856d5341/go.mod h1:4GdqELhZOXj4xwc4IaBmzofzdErGynnaSzuzxy0ZIBo=
 github.com/streamingfast/logging v0.0.0-20220222131651-12c3943aac2e/go.mod h1:4GdqELhZOXj4xwc4IaBmzofzdErGynnaSzuzxy0ZIBo=
@@ -515,8 +513,6 @@ github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 h1:xlWSfi1BoP
 github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308/go.mod h1:K1p8Bj/wG34KJvYzPUqtzpndffmpkrVY11u2hkyxCWQ=
 github.com/streamingfast/pbgo v0.0.6-0.20220428192744-f80aee7d4688 h1:TNGT5KhvyowkTU68qVwpUv15BQ2VLynOun28B++p32U=
 github.com/streamingfast/pbgo v0.0.6-0.20220428192744-f80aee7d4688/go.mod h1:huKwfgTGFIFZMKSVbD5TywClM7zAeBUG/zePZMqvXQQ=
-github.com/streamingfast/sf-ethereum/types v0.0.0-20220617155704-a15a152bd578 h1:mwEHf/nehQY1nRkUVRaHQkYOzbNuPxHY25tV1VbBc50=
-github.com/streamingfast/sf-ethereum/types v0.0.0-20220617155704-a15a152bd578/go.mod h1:/rhbE8VBSZc1zvajcSXTHZ4w0uuiHkDc68HMowNS8T8=
 github.com/streamingfast/shutter v1.5.0 h1:NpzDYzj0HVpSiDJVO/FFSL6QIK/YKOxY0gJAtyaTOgs=
 github.com/streamingfast/shutter v1.5.0/go.mod h1:B/T6efqdeMGbGwjzPS1ToXzYZI4kDzI5/u4I+7qbjY8=
 github.com/streamingfast/substreams v0.0.13 h1:EDfwJw4fK099rMbdIZn1ipufEych8HR//6UUo0pshhw=
