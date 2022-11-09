@@ -1,82 +1,19 @@
-package main
+package db
 
 import (
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jimsmart/schema"
 )
 
-type PostgresLoader struct {
-	db *sql.DB
-
-	schema string
-
-	tableRegistry    map[[2]string]map[string]reflect.Type
-	tablePrimaryKeys map[[2]string]string
-}
-
-func NewPostgresLoader(host, port, username, password, dbname, schemaName string, sslEnabled bool) (*PostgresLoader, error) {
-	var sslmode string
-	if sslEnabled {
-		sslmode = "enable"
-	} else {
-		sslmode = "disable"
-	}
-
-	db, err := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", host, port, username, password, dbname, sslmode))
-	if err != nil {
-		return nil, err
-	}
-
-	tables, err := schema.Tables(db)
-	if err != nil {
-		return nil, err
-	}
-
-	tableRegistry := map[[2]string]map[string]reflect.Type{}
-	primaryKeys := map[[2]string]string{}
-
-	for k, t := range tables {
-		if k[0] != schemaName {
-			continue
-		}
-
-		m := map[string]reflect.Type{}
-		for _, f := range t {
-			m[f.Name()] = f.ScanType()
-		}
-		tableRegistry[k] = m
-
-		key, err := schema.PrimaryKey(db, k[0], k[1])
-		if err != nil {
-			return nil, err
-		}
-		if len(key) > 0 {
-			primaryKeys[k] = key[0]
-		} else {
-			primaryKeys[k] = "id"
-		}
-	}
-
-	return &PostgresLoader{
-		db:               db,
-		tableRegistry:    tableRegistry,
-		tablePrimaryKeys: primaryKeys,
-		schema:           schemaName,
-	}, err
-}
-
-func (pgm *PostgresLoader) Insert(schemaName, table string, key string, data map[string]string) error {
+func (l Loader) Insert(schemaName, table string, key string, data map[string]string) error {
 	var keys []string
 	var values []string
 	for k, v := range data {
 		keys = append(keys, k)
-		value, err := pgm.value(schemaName, table, k, v)
+		value, err := l.value(schemaName, table, k, v)
 		if err != nil {
 			return fmt.Errorf("getting sql value for column %s raw value %s: %w", k, v, err)
 		}
@@ -87,11 +24,11 @@ func (pgm *PostgresLoader) Insert(schemaName, table string, key string, data map
 	valuesString := strings.Join(values, ",")
 
 	query := fmt.Sprintf("insert into %s.%s (%s) values (%s)", schemaName, table, keysString, valuesString)
-	return pgm.exec(query)
+	return l.exec(query)
 }
 
-func (pgm *PostgresLoader) Update(schemaName, table string, key string, data map[string]string) error {
-	pk, ok := pgm.tablePrimaryKeys[[2]string{schemaName, table}]
+func (l *Loader) Update(schemaName, table string, key string, data map[string]string) error {
+	pk, ok := l.tablePrimaryKeys[[2]string{schemaName, table}]
 	if !ok {
 		pk = "id"
 	}
@@ -100,7 +37,7 @@ func (pgm *PostgresLoader) Update(schemaName, table string, key string, data map
 	var values []string
 	for k, v := range data {
 		keys = append(keys, k)
-		value, err := pgm.value(schemaName, table, k, v)
+		value, err := l.value(schemaName, table, k, v)
 		if err != nil {
 			return fmt.Errorf("getting sql value for column %s raw value %s: %w", k, v, err)
 		}
@@ -119,21 +56,21 @@ func (pgm *PostgresLoader) Update(schemaName, table string, key string, data map
 	updatesString := strings.Join(updates, ", ")
 
 	query := fmt.Sprintf("update %s.%s set %s where %s = %s", schemaName, table, updatesString, pk, key)
-	return pgm.exec(query)
+	return l.exec(query)
 }
 
-func (pgm *PostgresLoader) Delete(schemaName, table string, key string) error {
-	pk, ok := pgm.tablePrimaryKeys[[2]string{schemaName, table}]
+func (l *Loader) Delete(schemaName, table string, key string) error {
+	pk, ok := l.tablePrimaryKeys[[2]string{schemaName, table}]
 	if !ok {
 		pk = "id"
 	}
 
 	query := fmt.Sprintf("delete from %s.%s where %s = %s", schemaName, table, pk, key)
-	return pgm.exec(query)
+	return l.exec(query)
 }
 
-func (pgm *PostgresLoader) exec(query string) error {
-	_, err := pgm.db.Exec(query)
+func (l *Loader) exec(query string) error {
+	_, err := l.DB.Exec(query)
 	if err != nil {
 		return fmt.Errorf("executing query:\n`%s`\n err: %w", query, err)
 	}
@@ -141,8 +78,8 @@ func (pgm *PostgresLoader) exec(query string) error {
 	return nil
 }
 
-func (pgm *PostgresLoader) value(schemaName, table, column, value string) (string, error) {
-	valType, ok := pgm.tableRegistry[[2]string{schemaName, table}][column]
+func (l *Loader) value(schemaName, table, column, value string) (string, error) {
+	valType, ok := l.tableRegistry[[2]string{schemaName, table}][column]
 	if !ok {
 		return "", fmt.Errorf("could not find column %s in table %s.%s", column, schemaName, table)
 	}

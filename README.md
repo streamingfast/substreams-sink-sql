@@ -1,4 +1,4 @@
-# Substreams postgres sink
+# Substreams Postgres Sink
 
 ### Create a schema for the database changes
 For the moment, we only support these types:
@@ -32,3 +32,5 @@ substreams-postgres-sink load ./substreams.yaml db_out --endpoint localhost:9000
 sftoken # https://substreams.streamingfast.io/reference-and-specs/authentication
 substreams-postgres-sink load ./substreams.yaml db_out --endpoint bsc-dev.streamingfast.io -k -s 6810706 -t 6810806
 ```
+
+
