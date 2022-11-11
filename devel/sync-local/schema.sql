@@ -11,14 +11,14 @@ create table tokens
 create table token_ownerships
 (
     id                text not null constraint token_ownership_pk primary key,
+    block_num         bigint,
+    transaction_id    text,
     contract_address  text,
     token_id          text,
     owner_address     text,
-    block_num         bigint,
-    created_at        bigint,
-    quantity          bigint
+    quantity          bigint,
+    created_at        bigint
 );
-
 
 create table cursors
 (
