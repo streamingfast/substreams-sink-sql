@@ -11,7 +11,7 @@ func (l *Loader) Insert(tableName string, primaryKey string, data map[string]str
 		l.entries[tableName] = map[string]*Operation{}
 	}
 	if _, found := l.entries[tableName][primaryKey]; found {
-		return fmt.Errorf("attempting to insert in table %q a private key %q, that is already scheduled for insertion. Insert should only be called once for a given private key", tableName, primaryKey
+		return fmt.Errorf("attempting to insert in table %q a private key %q, that is already scheduled for insertion. Insert should only be called once for a given private key", tableName, primaryKey)
 	}
 	// we need to make sure to add the primary key in the data so that
 	// it gets created
