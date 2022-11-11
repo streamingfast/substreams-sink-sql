@@ -2,13 +2,19 @@ package syncer
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"time"
 
+	pbddatabase "github.com/streamingfast/substreams-postgres-sink/pb/database/v1"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/streamingfast/substreams/manifest"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/streamingfast/bstream"
-	"github.com/streamingfast/lidar/store"
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/shutter"
 	"github.com/streamingfast/substreams-postgres-sink/db"
@@ -17,18 +23,19 @@ import (
 	"go.uber.org/zap"
 )
 
-type Streamer struct {
+type Syncer struct {
 	*shutter.Shutter
 
-	startBlock     uint64
-	stopBlock      uint64
-	clientConfig   *client.SubstreamsClientConfig
-	pkg            *pbsubstreams.Package
-	outputModule   *pbsubstreams.Module
-	stats          *Stats
-	db             *db.Loader
-	cache          *cache
-	requestAttempt uint64
+	startBlock       uint64
+	stopBlock        uint64
+	clientConfig     *client.SubstreamsClientConfig
+	pkg              *pbsubstreams.Package
+	outputModule     *pbsubstreams.Module
+	outputModuelHash string
+	stats            *Stats
+	db               *db.Loader
+	cache            *cache
+	requestAttempt   uint64
 
 	logger *zap.Logger
 	tracer logging.Tracer
@@ -36,67 +43,56 @@ type Streamer struct {
 
 const BLOCK_PROGESS = 1000
 
-func New(
-	pkg *pbsubstreams.Package,
-	outputModule *pbsubstreams.Module,
-	startBlock,
-	stopBlock uint64,
-	clientConfig *client.SubstreamsClientConfig,
-	db *db.Loader,
-	logger *zap.Logger,
-	tracer logging.Tracer,
-) (*Streamer, error) {
-	s := &Streamer{
-		Shutter:      shutter.New(),
-		clientConfig: clientConfig,
-		pkg:          pkg,
-		outputModule: outputModule,
-		stats:        NewStats(logger),
-		startBlock:   startBlock,
-		stopBlock:    stopBlock,
-		db:           db,
-		//cache:        newCache(db),
-		logger: logger,
-		tracer: tracer,
+func New(pkg *pbsubstreams.Package, outputModule *pbsubstreams.Module, hash manifest.ModuleHash, startBlock, stopBlock uint64, clientConfig *client.SubstreamsClientConfig, db *db.Loader, logger *zap.Logger, tracer logging.Tracer) (*Syncer, error) {
+	s := &Syncer{
+		Shutter:          shutter.New(),
+		clientConfig:     clientConfig,
+		pkg:              pkg,
+		outputModule:     outputModule,
+		outputModuelHash: hex.EncodeToString(hash),
+		stats:            NewStats(logger),
+		startBlock:       startBlock,
+		stopBlock:        stopBlock,
+		db:               db,
+		logger:           logger,
+		tracer:           tracer,
 	}
 
 	return s, nil
 }
 
-func (s *Streamer) Start(ctx context.Context) error {
-	//cursor, err := s.store.GetCursor()
-	//if err != nil && !errors.Is(err, store.NotFound) {
-	//	return fmt.Errorf("unable to retrieve cursor: %w", err)
-	//}
-	//
-	//if errors.Is(err, store.NotFound) {
-	//	cursorStartBlock := s.startBlock
-	//	if s.startBlock > 0 {
-	//		cursorStartBlock = s.startBlock - 1
-	//	}
-	//
-	//	cursor = &store.Cursor{
-	//		Model: gorm.Model{
-	//			ID: 1,
-	//		},
-	//		Cursor:   "",
-	//		BlockNum: cursorStartBlock,
-	//	}
-	//
-	//	cursor, err = s.store.CreateCursor(cursor)
-	//	if err != nil {
-	//		return fmt.Errorf("failed to create initial cursor: %w", err)
-	//	}
-	//}
+func (s *Syncer) Start(ctx context.Context) error {
+	cursor, err := s.db.GetCursor(s.outputModuelHash)
+	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
+		return fmt.Errorf("unable to retrieve cursor: %w", err)
+	}
+
+	if errors.Is(err, db.ErrCursorNotFound) {
+		cursorStartBlock := s.startBlock
+		if s.startBlock > 0 {
+			cursorStartBlock = s.startBlock - 1
+		}
+
+		cursor = &db.Cursor{
+			Id:       s.outputModuelHash,
+			Cursor:   "",
+			BlockNum: cursorStartBlock,
+		}
+
+		if err = s.db.WriteCursor(cursor); err != nil {
+			return fmt.Errorf("failed to create initial cursor: %w", err)
+		}
+	}
 
 	s.OnTerminating(func(_ error) { s.stats.Close() })
 	s.stats.OnTerminated(func(err error) { s.Shutdown(err) })
-	s.stats.Start(15 * time.Second)
+	s.stats.Start(2 * time.Second)
 
-	return s.run(ctx, nil)
+	return s.run(ctx, cursor)
 }
 
-func (s *Streamer) run(ctx context.Context, cursor *store.Cursor) error {
+func (s *Syncer) run(ctx context.Context, cursor *db.Cursor) error {
+	s.logger.Info("run substreams syncer", zap.Reflect("cursor", cursor))
 	ssClient, closeFunc, callOpts, err := client.NewSubstreamsClient(s.clientConfig)
 	if err != nil {
 		return fmt.Errorf("new substreams client: %w", err)
@@ -117,7 +113,7 @@ func (s *Streamer) run(ctx context.Context, cursor *store.Cursor) error {
 			// adjusted to be minus one to be account for that.
 			StartBlockNum: int64(cursor.BlockNum + 1),
 			// Cursor is not working for now in Substreams, so let's use StartBlockNum instead
-			// StartCursor:   cursor.Cursor,
+			//StartCursor:   cursor.Cursor,
 			ForkSteps:     []pbsubstreams.ForkStep{pbsubstreams.ForkStep_STEP_IRREVERSIBLE},
 			Modules:       s.pkg.Modules,
 			OutputModules: []string{s.outputModule.Name},
@@ -169,62 +165,43 @@ func (s *Streamer) run(ctx context.Context, cursor *store.Cursor) error {
 				atBlock := bstream.NewBlockRef(r.Data.Clock.Id, r.Data.Clock.Number)
 				cursor.Cursor = r.Data.Cursor
 				cursor.BlockNum = r.Data.Clock.Number
-
 				s.stats.RecordBlock(atBlock)
+				BlockCount.AddInt(1)
 
 				for _, output := range r.Data.Outputs {
 					DataMessageCount.Inc(output.Name)
 
-					if output.Name == "store_transfers" {
-						//deltas := output.GetStoreDeltas()
-						//StoreDeltasCount.AddInt(len(deltas.Deltas), output.Name)
-						//
-						//if err := s.processStoreTransfersDeltas(deltas, atBlock); err != nil {
-						//	return fmt.Errorf("failed to process store transfers deltas at block %q: %w", r.Data.Clock.String(), err)
-						//}
+					if output.Name != s.outputModule.Name {
+						continue
 					}
-					if output.Name == "store_tokens" {
-						//deltas := output.GetStoreDeltas()
-						//if deltas == nil {
-						//	continue
-						//}
-						//StoreDeltasCount.AddInt(len(deltas.Deltas), output.Name)
-						//if err := s.processStoreTokenDeltas(deltas, atBlock); err != nil {
-						//	return fmt.Errorf("failed to process store token deltas at block %q: %w", r.Data.Clock.String(), err)
-						//}
-
+					dbChanges := &pbddatabase.DatabaseChanges{}
+					err := proto.Unmarshal(output.GetMapOutput().GetValue(), dbChanges)
+					if err != nil {
+						return fmt.Errorf("unmarshalling database changes: %w", err)
 					}
-					if output.Name == "store_ownership" {
-						//deltas := output.GetStoreDeltas()
-						//if deltas == nil {
-						//	continue
-						//}
-						//StoreDeltasCount.AddInt(len(deltas.Deltas), output.Name)
-						//if err := s.processStoreOwnershipDeltas(deltas, atBlock); err != nil {
-						//	return fmt.Errorf("failed to process store ownership at block %q: %w", r.Data.Clock.String(), err)
-						//}
+					err = s.applyDatabaseChanges(dbChanges)
+					if err != nil {
+						return fmt.Errorf("applying  database changes: %w", err)
 					}
 				}
 
 				if cursor.BlockNum%BLOCK_PROGESS == 0 {
-					//if s.tracer.Enabled() {
 					s.logger.Info(fmt.Sprintf("processing block 1/%d... flushing", BLOCK_PROGESS),
 						zap.Uint64("block_num", cursor.BlockNum),
 						zap.String("cursor", cursor.Cursor),
+						zap.Object("db_cache", s.db),
 					)
-					//}
-
+					FlushedEntriesCount.AddUint64(s.db.EntriesCount)
 					t0 := time.Now()
-					if err := s.cache.Flush(cursor); err != nil {
+					if err := s.db.Flush(ctx, cursor); err != nil {
 						return fmt.Errorf("failed to flush: %w", err)
 					}
 					elapsed := time.Since(t0)
 					s.logger.Info("flushing cache to db", zap.Duration("elapsed", elapsed))
-					//FlushDuration.AddInt(int(elapsed.Nanoseconds()))
-
-					s.cache.Reset()
+					FlushCount.Inc()
+					FlushDuration.AddInt(int(elapsed.Nanoseconds()))
+					s.db.Reset()
 				}
-
 			default:
 				s.logger.Error("received unknown type of message")
 			}
@@ -246,4 +223,40 @@ func (s *Streamer) run(ctx context.Context, cursor *store.Cursor) error {
 			time.Sleep(sleepFor)
 		}
 	}
+}
+
+func (s *Syncer) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseChanges) error {
+	for _, change := range dbChanges.TableChanges {
+
+		if !s.db.HasTable(change.Table) {
+			continue
+		}
+
+		primaryKey := change.Pk
+		changes := map[string]string{}
+		for _, field := range change.Fields {
+			changes[field.Name] = field.NewValue
+		}
+
+		switch change.Operation {
+		case pbddatabase.TableChange_CREATE:
+			err := s.db.Insert(change.Table, primaryKey, changes)
+			if err != nil {
+				return fmt.Errorf("database insert: %w", err)
+			}
+		case pbddatabase.TableChange_UPDATE:
+			err := s.db.Update(change.Table, primaryKey, changes)
+			if err != nil {
+				return fmt.Errorf("database update: %w", err)
+			}
+		case pbddatabase.TableChange_DELETE:
+			err := s.db.Delete(change.Table, primaryKey)
+			if err != nil {
+				return fmt.Errorf("database delete: %w", err)
+			}
+		default:
+			//case database.TableChange_UNSET:
+		}
+	}
+	return nil
 }

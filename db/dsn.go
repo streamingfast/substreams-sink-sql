@@ -60,10 +60,10 @@ func parseDSN(dsn string) (*DSN, error) {
 		original: dsn,
 		host:     host,
 		port:     port,
-		username: database,
-		password: username,
-		database: password,
-		schema:   "default",
+		username: username,
+		password: password,
+		database: database,
+		schema:   "public",
 	}
 
 	options := make([]string, len(query))

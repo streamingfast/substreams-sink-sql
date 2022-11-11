@@ -3,6 +3,8 @@ package syncer
 import (
 	"time"
 
+	"github.com/streamingfast/dmetrics"
+
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/shutter"
 	"go.uber.org/zap"
@@ -11,25 +13,26 @@ import (
 type Stats struct {
 	*shutter.Shutter
 
-	dbFlushRate     *RateFromCounter
-	dataMsgRate     *RateFromCounter
-	progressMsgRate *RateFromCounter
-	storeDeltaRate  *RateFromCounter
+	dbFlushRate     *dmetrics.AvgRatePromCounter
+	dataMsgRate     *dmetrics.AvgRatePromCounter
+	progressMsgRate *dmetrics.AvgRatePromCounter
+	blockRate       *dmetrics.AvgRatePromCounter
+	flusehdEntries  *dmetrics.ValueFromMetric
 	lastBlock       bstream.BlockRef
-
-	logger *zap.Logger
+	logger          *zap.Logger
 }
 
+//
 func NewStats(logger *zap.Logger) *Stats {
 	return &Stats{
 		Shutter: shutter.New(),
 
-		dbFlushRate:     NewPerSecondAverageRateFromCounter(FlushCount, 30*time.Second, "flush"),
-		dataMsgRate:     NewPerSecondAverageRateFromCounter(DataMessageCount, 30*time.Second, "msg"),
-		progressMsgRate: NewPerSecondAverageRateFromCounter(ProgressMessageCount, 30*time.Second, "msg"),
-		storeDeltaRate:  NewPerSecondAverageRateFromCounter(StoreDeltasCount, 30*time.Second, "delta"),
-
-		logger: logger,
+		dbFlushRate:     dmetrics.MustNewAvgRateFromPromCounter(FlushCount, 1*time.Second, 30*time.Second, "flush"),
+		dataMsgRate:     dmetrics.MustNewAvgRateFromPromCounter(DataMessageCount, 1*time.Second, 30*time.Second, "msg"),
+		progressMsgRate: dmetrics.MustNewAvgRateFromPromCounter(ProgressMessageCount, 1*time.Second, 30*time.Second, "msg"),
+		blockRate:       dmetrics.MustNewAvgRateFromPromCounter(BlockCount, 1*time.Second, 30*time.Second, "blocks"),
+		flusehdEntries:  dmetrics.NewValueFromMetric(FlushedEntriesCount, "entries"),
+		logger:          logger,
 	}
 }
 
@@ -57,7 +60,8 @@ func (s *Stats) Start(each time.Duration) {
 					zap.Stringer("db_flush_rate", s.dbFlushRate),
 					zap.Stringer("data_msg_rate", s.dataMsgRate),
 					zap.Stringer("progress_msg_rate", s.progressMsgRate),
-					zap.Stringer("store_delta_rate", s.storeDeltaRate),
+					zap.Stringer("block_rate", s.blockRate),
+					zap.Uint64("flushed_entries", s.flusehdEntries.ValueUint()),
 				}
 
 				if s.lastBlock == nil {

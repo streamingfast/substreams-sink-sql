@@ -14,12 +14,12 @@ main() {
     set -e
 
     if [[ -z "${PG_DSN}" ]]; then
-      pg_dsn="postgres://postgres:postgres@localhost/sync?enable_incremental_sort=off&sslmode=disable"
+      pg_dsn="psql://postgres:postgres@localhost/substreams_lidar?enable_incremental_sort=off&sslmode=disable"
     else
       pg_dsn="${PG_DSN}"
     fi
 
-    $sink run substreams run \
+    $sink run \
       ${pg_dsn} \
       "api-dev.streamingfast.io:443" \
       "./lidar-v0.0.2.spkg" \

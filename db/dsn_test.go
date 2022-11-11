@@ -18,13 +18,13 @@ func TestParseDSN(t *testing.T) {
 		{
 			name:             "golden path",
 			dns:              "psql://postgres:postgres@localhost/substreams-dev?enable_incremental_sort=off&sslmode=disable",
-			expectConnString: "host=localhost port=5432 user=postgres password=postgres dbname=substreams-dev enable_incremental_sort=off sslmode=disable",
-			expectSchema:     "default",
+			expectConnString: "host=localhost port=5432 user=postgres dbname=substreams-dev enable_incremental_sort=off sslmode=disable password=postgres",
+			expectSchema:     "public",
 		},
 		{
 			name:             "with schema",
 			dns:              "psql://postgres:postgres@localhost/substreams-dev?enable_incremental_sort=off&sslmode=disable&schema=foo",
-			expectConnString: "host=localhost port=5432 user=postgres password=postgres dbname=substreams-dev enable_incremental_sort=off sslmode=disable",
+			expectConnString: "host=localhost port=5432 user=postgres dbname=substreams-dev enable_incremental_sort=off  sslmode=disable password=postgres",
 			expectSchema:     "foo",
 		},
 	}

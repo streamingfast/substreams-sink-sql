@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 var SyncRunCmd = Command(syncRunE,
 	"run <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
 	"Runs  extractor code",
-	RangeArgs(3, 4),
+	RangeArgs(4, 5),
 	Flags(func(flags *pflag.FlagSet) {
 		flags.BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
 		flags.BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
@@ -44,8 +45,8 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 	manifestPath := args[2]
 	outputModuleName := args[3]
 	blockRange := ""
-	if len(args) > 3 {
-		blockRange = args[3]
+	if len(args) > 4 {
+		blockRange = args[4]
 	}
 	zlog.Info("sink from psql",
 		zap.String("dsn", psqlDSN),
@@ -60,6 +61,20 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := dbLoader.LoadTables(); err != nil {
+		var e *db.CursorError
+		if errors.As(err, &e) {
+			fmt.Println("Error validating the cursors table: ", e.Error())
+			fmt.Println("You can use the following sql schema to create a cursors table")
+			fmt.Println(`
+create table cursors
+(
+	id         bigserial not null constraint cursor_pk primary key,
+	cursors     text,
+	block_num  bigint
+);
+			`)
+			return fmt.Errorf("invalid cursors table")
+		}
 		return fmt.Errorf("load psql table: %w", err)
 	}
 
@@ -68,13 +83,13 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
 	}
+
 	graph, err := manifest.NewModuleGraph(pkg.Modules.Modules)
 	if err != nil {
 		return fmt.Errorf("create substreams moduel graph: %w", err)
 	}
 
 	zlog.Info("validating output store", zap.String("output_store", outputModuleName))
-
 	module, err := graph.Module(outputModuleName)
 	if err != nil {
 		return fmt.Errorf("get output module %q: %w", outputModuleName, err)
@@ -82,6 +97,12 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 	if module.GetKindMap() == nil {
 		return fmt.Errorf("ouput module %q is *not* of  type 'Mapper'", outputModuleName)
 	}
+
+	if module.Output.Type != "proto:substreams.database.v1.DatabaseChanges" {
+		return fmt.Errorf("postgresql sync only supports maps with output type 'proto:substreams.database.v1.DatabaseChanges'")
+	}
+	hashes := manifest.NewModuleHashes()
+	outputModuleHash := hashes.HashModule(pkg.Modules, module, graph)
 
 	resolvedStartBlock, resolvedStopBlock, err := readBlockRange(module, blockRange)
 	if err != nil {
@@ -97,6 +118,7 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 	syncer, err := syncer.New(
 		pkg,
 		module,
+		outputModuleHash,
 		uint64(resolvedStartBlock),
 		resolvedStopBlock,
 		client.NewSubstreamsClientConfig(
