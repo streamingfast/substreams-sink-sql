@@ -12,3 +12,7 @@ create table pancakeswap.pair
 
 alter table pancakeswap.pair
     owner to admin;
+
+
+--> DatabaseChange
+//substreams-postgres-sink run psql://unane@pword:localhost/database_v1?.... api-unstable.mainnet.streamingfast.io manifest.spkg db_out [<start>:<stop>]
