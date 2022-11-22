@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	pbddatabase "github.com/streamingfast/substreams-postgres-sink/pb/database/v1"
+	pbddatabase "github.com/streamingfast/substreams-sink-postgres/pb/database/v1"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/streamingfast/substreams/manifest"
@@ -17,7 +17,7 @@ import (
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/shutter"
-	"github.com/streamingfast/substreams-postgres-sink/db"
+	"github.com/streamingfast/substreams-sink-postgres/db"
 	"github.com/streamingfast/substreams/client"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"

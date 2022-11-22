@@ -22,7 +22,6 @@ type Stats struct {
 	logger          *zap.Logger
 }
 
-//
 func NewStats(logger *zap.Logger) *Stats {
 	return &Stats{
 		Shutter: shutter.New(),
@@ -70,9 +69,9 @@ func (s *Stats) Start(each time.Duration) {
 					fields = append(fields, zap.Stringer("last_block", s.lastBlock))
 				}
 
-				s.logger.Info("substreams lidar stats", fields...)
+				s.logger.Info("substreams sink stats", fields...)
 			case <-s.Terminating():
-				break
+				return
 			}
 		}
 	}()

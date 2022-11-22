@@ -31,35 +31,35 @@ type Operation struct {
 	data                 map[string]string
 }
 
-func (l *Loader) newInsertOperation(tableName string, privateKey string, data map[string]string) *Operation {
+func (l *Loader) newInsertOperation(tableName string, primaryKey string, data map[string]string) *Operation {
 	return &Operation{
 		schemaName:           l.schema,
 		tableName:            tableName,
 		opType:               OperationTypeInsert,
 		primaryKeyColumnName: l.tablePrimaryKeys[tableName],
-		primaryKey:           privateKey,
+		primaryKey:           primaryKey,
 		data:                 data,
 	}
 }
 
-func (l *Loader) newUpdateOperation(tableName string, privateKey string, data map[string]string) *Operation {
+func (l *Loader) newUpdateOperation(tableName string, primaryKey string, data map[string]string) *Operation {
 	return &Operation{
 		schemaName:           l.schema,
 		tableName:            tableName,
 		opType:               OperationTypeUpdate,
 		primaryKeyColumnName: l.tablePrimaryKeys[tableName],
-		primaryKey:           privateKey,
+		primaryKey:           primaryKey,
 		data:                 data,
 	}
 }
 
-func (l *Loader) newDeleteOperation(tableName string, privateKey string) *Operation {
+func (l *Loader) newDeleteOperation(tableName string, primaryKey string) *Operation {
 	return &Operation{
 		schemaName:           l.schema,
 		tableName:            tableName,
 		opType:               OperationTypeDelete,
 		primaryKeyColumnName: l.tablePrimaryKeys[tableName],
-		primaryKey:           privateKey,
+		primaryKey:           primaryKey,
 	}
 }
 func (o *Operation) mergeData(newData map[string]string) error {

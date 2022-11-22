@@ -25,14 +25,14 @@ var version = "dev"
 // Date value, injected via go build `ldflags` at build time
 var date = ""
 
-var zlog, tracer = logging.RootLogger("lidar", "github.com/streamingfast/substreams-postgres-sink/cmd/substreams-postgres-sink")
+var zlog, tracer = logging.RootLogger("sink-postgres", "github.com/streamingfast/substreams-sink-postgres/cmd/substreams-sink-postgres")
 
 func init() {
 	logging.InstantiateLoggers(logging.WithDefaultLevel(zap.InfoLevel))
 }
 
 func main() {
-	Run("substreams-postgres-sink", "Substreams Postgres Sync",
+	Run("substreams-sink-postgres", "Substreams Postgres Sink",
 		SyncRunCmd,
 
 		ConfigureViper("SINK"),

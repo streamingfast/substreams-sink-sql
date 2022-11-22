@@ -8,8 +8,8 @@ This is a command line tool to quickly sync a substreams with a posgresql databa
 By convention, we name the `map` module `db_out`. The [substreams-data-change](https://github.com/streamingfast/substreams-database-change) crate, contains the rust objects.
 
 
-2) A postgresql database needs to be created with a schema applied, that matched the output `map` database changes. The 
-schema should contain a cursors table with columnes `id`, `cursor`, `block_num`. 
+2) A postgresql database needs to be created with a schema applied, that matched the output `map` database changes. The
+schema should contain a cursors table with columnes `id`, `cursor`, `block_num`.
 
 Sample SQL schema
 
@@ -33,7 +33,7 @@ create table cursors
 );
 ```
 
-Once the SQL schema is created, you can run the following commands from the folder that has your schema, to create 
+Once the SQL schema is created, you can run the following commands from the folder that has your schema, to create
 a database `substreams_example` and load your schema into it.
 
 ```shell
@@ -50,12 +50,12 @@ psql
 
 
 ```shell
-go install ./cmd/substreams-postgres-sink
-substreams-postgres-sink run \
+go install ./cmd/substreams-sink-postgres
+substreams-sink-postgres run \
 "psql://postgres:postgres@localhost/substreams_example?enable_incremental_sort=off&sslmode=disable" \
-"api-dev.streamingfast.io:443" \
+"mainnet.eth.streamingfast.io:443" \
 "substreams.yaml" \
-db_out 
+db_out
 ```
 
 

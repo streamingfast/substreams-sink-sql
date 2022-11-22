@@ -1,4 +1,4 @@
-module github.com/streamingfast/substreams-postgres-sink
+module github.com/streamingfast/substreams-sink-postgres
 
 go 1.18
 
@@ -11,7 +11,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.10.1
 	github.com/streamingfast/derr v0.0.0-20220526184630-695c21740145
-	github.com/streamingfast/lidar v0.0.0-20221101153758-e37512850a5e
 	github.com/streamingfast/logging v0.0.0-20220511154537-ce373d264338
 	github.com/streamingfast/substreams v0.0.21
 	github.com/stretchr/testify v1.8.0
@@ -20,11 +19,9 @@ require (
 )
 
 require (
-	github.com/btcsuite/btcd/btcec/v2 v2.1.3 // indirect
 	github.com/cncf/udpa/go v0.0.0-20210930031921-04548b0d99d4 // indirect
 	github.com/cncf/xds/go v0.0.0-20211130200136-a8f946100490 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1 // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.6.2 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
@@ -34,16 +31,6 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
-	github.com/jackc/pgconn v1.12.1 // indirect
-	github.com/jackc/pgio v1.0.0 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.3.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
-	github.com/jackc/pgtype v1.11.0 // indirect
-	github.com/jackc/pgx/v4 v4.16.1 // indirect
-	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mattn/go-sqlite3 v1.14.12 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -57,7 +44,6 @@ require (
 	github.com/spf13/afero v1.8.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/streamingfast/eth-go v0.0.0-20220426114504-288d584d894f // indirect
 	github.com/subosito/gotenv v1.3.0 // indirect
 	github.com/teris-io/shortid v0.0.0-20171029131806-771a37caa5cf // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.36.4 // indirect
@@ -65,9 +51,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.11.1 // indirect
 	gopkg.in/ini.v1 v1.66.4 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gorm.io/driver/postgres v1.3.8 // indirect
-	gorm.io/driver/sqlite v1.3.6 // indirect
-	gorm.io/gorm v1.24.1 // indirect
 )
 
 require (
