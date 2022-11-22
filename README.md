@@ -29,11 +29,12 @@ create table cursors
 (
     id         text not null constraint cursor_pk primary key,
     cursor     text,
-    block_num  bigint
+    block_num  bigint,
+    block_id   text
 );
 ```
 
-Once the SQL schema is created, you can run the following commands from the folder that has your schema, to create
+Once the SQL schema is created, you can Run the following commands from the folder that has your schema, to create
 a database `substreams_example` and load your schema into it.
 
 ```shell
@@ -43,7 +44,7 @@ psql
 > \i schema.sql
 ```
 
-3) Run the syncer
+3) Run the sink
 
 | Note: to connect to substreams you will nee an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) |
 |------------------------------------------------------------------------------------------------------------------------------------------------------------------|

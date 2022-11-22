@@ -3,7 +3,6 @@ module github.com/streamingfast/substreams-sink-postgres
 go 1.18
 
 require (
-	github.com/cenkalti/backoff/v4 v4.1.3
 	github.com/drone/envsubst v1.0.3
 	github.com/jimsmart/schema v0.2.0
 	github.com/lib/pq v1.10.6
@@ -11,14 +10,16 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.10.1
 	github.com/streamingfast/derr v0.0.0-20220526184630-695c21740145
-	github.com/streamingfast/logging v0.0.0-20220511154537-ce373d264338
-	github.com/streamingfast/substreams v0.0.21
-	github.com/stretchr/testify v1.8.0
-	go.uber.org/zap v1.21.0
+	github.com/streamingfast/logging v0.0.0-20220813175024-b4fbb0e893df
+	github.com/streamingfast/substreams v0.0.22-0.20221114180215-45c1bb1d4804
+	github.com/streamingfast/substreams-sink v0.0.0-20221121212016-ffb387fd92df
+	github.com/stretchr/testify v1.8.1
+	go.uber.org/zap v1.23.0
 	google.golang.org/protobuf v1.28.1
 )
 
 require (
+	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cncf/udpa/go v0.0.0-20210930031921-04548b0d99d4 // indirect
 	github.com/cncf/xds/go v0.0.0-20211130200136-a8f946100490 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -39,7 +40,6 @@ require (
 	github.com/paulbellamy/ratecounter v0.2.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/sethvargo/go-retry v0.2.3 // indirect
 	github.com/spf13/afero v1.8.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
@@ -72,7 +72,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/jhump/protoreflect v1.12.0 // indirect
+	github.com/jhump/protoreflect v1.14.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/juju/ansiterm v0.0.0-20180109212912-720a0952cc2a // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
@@ -90,7 +90,7 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20221017131819-2a7e38be1047
+	github.com/streamingfast/bstream v0.0.2-0.20221117104246-5660c4ba5e8c
 	github.com/streamingfast/cli v0.0.4-0.20220630165922-bc58c6666fc8
 	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20221031174241-978a7951c117 // indirect

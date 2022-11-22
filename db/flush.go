@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"reflect"
 
+	sink "github.com/streamingfast/substreams-sink"
 	"go.uber.org/zap"
 )
 
-func (l *Loader) Flush(ctx context.Context, cursor *Cursor) (err error) {
+func (l *Loader) Flush(ctx context.Context, moduleHash string, cursor *sink.Cursor) (err error) {
 	tx, err := l.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to being db transaction: %w", err)
@@ -35,7 +36,7 @@ func (l *Loader) Flush(ctx context.Context, cursor *Cursor) (err error) {
 		}
 	}
 
-	cursorQuery := l.updateCursorQuery(cursor)
+	cursorQuery := l.UpdateCursorQuery(moduleHash, cursor)
 	if _, err := tx.ExecContext(ctx, cursorQuery); err != nil {
 		return fmt.Errorf("executing query:\n`%s`\n err: %w", cursorQuery, err)
 	}

@@ -94,11 +94,12 @@ func (l *Loader) LoadTables() error {
 }
 
 func (l *Loader) validateCursorTables(columns []*sql.ColumnType) error {
-	if len(columns) != 3 {
-		return &CursorError{fmt.Errorf("table requires 3 columns ('id', 'cursor', 'block_num')")}
+	if len(columns) != 4 {
+		return &CursorError{fmt.Errorf("table requires 4 columns ('id', 'cursor', 'block_num', 'block_id')")}
 	}
 	columnsCheck := map[string]string{
 		"block_num": "int64",
+		"block_id":  "string",
 		"cursor":    "string",
 		"id":        "string",
 	}

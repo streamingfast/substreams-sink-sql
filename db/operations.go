@@ -10,7 +10,7 @@ import (
 
 type TypeGetter func(tableName string, columnName string) (reflect.Type, error)
 
-type Queriable interface {
+type Queryable interface {
 	query() (string, error)
 }
 

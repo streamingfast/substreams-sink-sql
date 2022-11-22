@@ -13,13 +13,13 @@ import (
 	"github.com/streamingfast/derr"
 	"github.com/streamingfast/shutter"
 	"github.com/streamingfast/substreams-sink-postgres/db"
-	"github.com/streamingfast/substreams-sink-postgres/syncer"
+	"github.com/streamingfast/substreams-sink-postgres/sinker"
 	"github.com/streamingfast/substreams/client"
 	"github.com/streamingfast/substreams/manifest"
 	"go.uber.org/zap"
 )
 
-var SyncRunCmd = Command(syncRunE,
+var SyncRunCmd = Command(sinkRunE,
 	"run <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
 	"Runs  extractor code",
 	RangeArgs(4, 5),
@@ -28,11 +28,11 @@ var SyncRunCmd = Command(syncRunE,
 		flags.BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
 	}),
 	AfterAllHook(func(_ *cobra.Command) {
-		syncer.RegisterMetrics()
+		sinker.RegisterMetrics()
 	}),
 )
 
-func syncRunE(cmd *cobra.Command, args []string) error {
+func sinkRunE(cmd *cobra.Command, args []string) error {
 	app := shutter.New()
 
 	ctx, cancelApp := context.WithCancel(cmd.Context())
@@ -48,6 +48,7 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 	if len(args) > 4 {
 		blockRange = args[4]
 	}
+
 	zlog.Info("sink from psql",
 		zap.String("dsn", psqlDSN),
 		zap.String("endpoint", endpoint),
@@ -55,6 +56,7 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 		zap.String("output_module_name", outputModuleName),
 		zap.String("block_range", blockRange),
 	)
+
 	dbLoader, err := db.NewLoader(psqlDSN, zlog)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
@@ -69,8 +71,9 @@ func syncRunE(cmd *cobra.Command, args []string) error {
 create table cursors
 (
 	id         bigserial not null constraint cursor_pk primary key,
-	cursors     text,
-	block_num  bigint
+	cursors    text,
+	block_num  bigint,
+	block_id   text
 );
 			`)
 			return fmt.Errorf("invalid cursors table")
@@ -114,37 +117,40 @@ create table cursors
 	)
 
 	apiToken := readAPIToken()
-
-	syncer, err := syncer.New(
-		pkg,
-		module,
-		outputModuleHash,
-		uint64(resolvedStartBlock),
-		resolvedStopBlock,
-		client.NewSubstreamsClientConfig(
+	config := &sinker.Config{
+		DBLoader:         dbLoader,
+		BlockRange:       blockRange,
+		Pkg:              pkg,
+		OutputModule:     module,
+		OutputModuleName: outputModuleName,
+		OutputModuleHash: outputModuleHash,
+		ClientConfig: client.NewSubstreamsClientConfig(
 			endpoint,
 			apiToken,
-			viper.GetBool("extractor-substreams-run-insecure"),
-			viper.GetBool("extractor-substreams-run-plaintext"),
+			viper.GetBool("extractor-substreams-run-insecure"),  //todo(colin): check this
+			viper.GetBool("extractor-substreams-run-plaintext"), //todo(colin): check this
 		),
-		dbLoader,
+	}
+
+	postgresSinker, err := sinker.New(
+		config,
 		zlog,
 		tracer,
 	)
 	if err != nil {
-		return fmt.Errorf("unable to setup syncer: %w", err)
+		return fmt.Errorf("unable to setup sinker: %w", err)
 	}
-	syncer.OnTerminating(app.Shutdown)
+	postgresSinker.OnTerminating(app.Shutdown)
 
 	app.OnTerminating(func(err error) {
-		zlog.Info("application terminating shutting down syncer")
-		syncer.Shutdown(err)
+		zlog.Info("application terminating shutting down sinker")
+		postgresSinker.Shutdown(err)
 	})
 
 	go func() {
-		if err := syncer.Start(ctx); err != nil {
-			zlog.Error("syncer failed", zap.Error(err))
-			syncer.Shutdown(err)
+		if err := postgresSinker.Start(ctx); err != nil {
+			zlog.Error("sinker failed", zap.Error(err))
+			postgresSinker.Shutdown(err)
 		}
 	}()
 
@@ -168,70 +174,4 @@ create table cursors
 
 	zlog.Info("app terminated")
 	return nil
-	//
-	//ssClient, callOpts, err := client.NewSubstreamsClient(
-	//	mustGetString(cmd, "endpoint"),
-	//	os.Getenv(mustGetString(cmd, "substreams-api-token-envvar")),
-	//	mustGetBool(cmd, "insecure"),
-	//	mustGetBool(cmd, "plaintext"),
-	//)
-	//
-	//if err != nil {
-	//	return fmt.Errorf("substreams client setup: %w", err)
-	//}
-	//
-	//req := &pbsubstreams.Request{
-	//	StartBlockNum: mustGetInt64(cmd, "start-block"),
-	//	StopBlockNum:  mustGetUint64(cmd, "stop-block"),
-	//	ForkSteps:     []pbsubstreams.ForkStep{pbsubstreams.ForkStep_STEP_IRREVERSIBLE},
-	//	Modules:       pkg.Modules,
-	//	OutputModules: []string{moduleName},
-	//}
-	//
-	//stream, err := ssClient.Blocks(ctx, req, callOpts...)
-	//if err != nil {
-	//	return fmt.Errorf("call sf.substreams.v1.Stream/Blocks: %w", err)
-	//}
-	//
-	//for {
-	//	resp, err := stream.Recv()
-	//	if err != nil {
-	//		if err == io.EOF {
-	//			return nil
-	//		}
-	//		return fmt.Errorf("receiving from stream: %w", err)
-	//	}
-	//
-	//	switch r := resp.Message.(type) {
-	//	case *pbsubstreams.Response_Progress:
-	//		p := r.Progress
-	//		for _, module := range p.Modules {
-	//			fmt.Println("progress:", module.Name, module.GetProcessedRanges())
-	//		}
-	//	case *pbsubstreams.Response_SnapshotData:
-	//		_ = r.SnapshotData
-	//	case *pbsubstreams.Response_SnapshotComplete:
-	//		_ = r.SnapshotComplete
-	//	case *pbsubstreams.Response_Data:
-	//		for _, output := range r.Data.Outputs {
-	//			for _, log := range output.Logs {
-	//				fmt.Println("LOG: ", log)
-	//			}
-	//
-	//			if output.Name != moduleName {
-	//				continue
-	//			}
-	//
-	//			databaseChanges := &database.DatabaseChanges{}
-	//			err := proto.Unmarshal(output.GetMapOutput().GetValue(), databaseChanges)
-	//			if err != nil {
-	//				return fmt.Errorf("unmarshalling database changes: %w", err)
-	//			}
-	//			err = applyDatabaseChanges(loader, databaseChanges, databaseSchema)
-	//			if err != nil {
-	//				return fmt.Errorf("applying database changes: %w", err)
-	//			}
-	//		}
-	//	}
-	//}
 }

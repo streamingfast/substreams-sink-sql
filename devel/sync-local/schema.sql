@@ -24,5 +24,6 @@ create table cursors
 (
     id         text not null constraint cursor_pk primary key,
     cursor     text,
-    block_num  bigint
+    block_num  bigint,
+    block_id   text
 );

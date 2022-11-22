@@ -11,7 +11,6 @@ main() {
   sink="$ROOT/../substreams-sink-postgres"
 
   echo $pg_dsn
-  exit 1
 
   $sink run \
     ${pg_dsn} \

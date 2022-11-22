@@ -1,4 +1,4 @@
-package syncer
+package sinker
 
 import "github.com/streamingfast/dmetrics"
 
