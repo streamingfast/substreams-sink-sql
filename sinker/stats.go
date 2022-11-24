@@ -3,9 +3,8 @@ package sinker
 import (
 	"time"
 
-	"github.com/streamingfast/dmetrics"
-
 	"github.com/streamingfast/bstream"
+	"github.com/streamingfast/dmetrics"
 	"github.com/streamingfast/shutter"
 	"go.uber.org/zap"
 )
