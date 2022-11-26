@@ -11,8 +11,8 @@ require (
 	github.com/spf13/viper v1.10.1
 	github.com/streamingfast/derr v0.0.0-20220526184630-695c21740145
 	github.com/streamingfast/logging v0.0.0-20220813175024-b4fbb0e893df
-	github.com/streamingfast/substreams v0.0.22-0.20221114180215-45c1bb1d4804
-	github.com/streamingfast/substreams-sink v0.0.0-20221121212016-ffb387fd92df
+	github.com/streamingfast/substreams v0.0.22-0.20221124192438-6ef4954ac865
+	github.com/streamingfast/substreams-sink v0.0.0-20221126181610-9684cae306cd
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.23.0
 	google.golang.org/protobuf v1.28.1
@@ -95,7 +95,7 @@ require (
 	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20221031174241-978a7951c117 // indirect
 	github.com/streamingfast/dmetrics v0.0.0-20221107142404-e88fe183f07d
-	github.com/streamingfast/dstore v0.1.1-0.20221025062403-36259703e97b // indirect
+	github.com/streamingfast/dstore v0.1.1-0.20221118114203-13f4092e3bf0 // indirect
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect
 	github.com/streamingfast/pbgo v0.0.6-0.20220630154121-2e8bba36234e // indirect
 	github.com/streamingfast/shutter v1.5.0

@@ -31,6 +31,10 @@ type Operation struct {
 	data                 map[string]string
 }
 
+func (o *Operation) String() string {
+	return fmt.Sprintf("%s.%s/%s (%s)", o.schemaName, o.tableName, o.primaryKey, strings.ToLower(string(o.opType)))
+}
+
 func (l *Loader) newInsertOperation(tableName string, primaryKey string, data map[string]string) *Operation {
 	return &Operation{
 		schemaName:           l.schema,
@@ -62,6 +66,7 @@ func (l *Loader) newDeleteOperation(tableName string, primaryKey string) *Operat
 		primaryKey:           primaryKey,
 	}
 }
+
 func (o *Operation) mergeData(newData map[string]string) error {
 	if o.opType == OperationTypeDelete {
 		return fmt.Errorf("unable to merge data for a delete operation")

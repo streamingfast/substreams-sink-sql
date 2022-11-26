@@ -57,7 +57,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		zap.String("block_range", blockRange),
 	)
 
-	dbLoader, err := db.NewLoader(psqlDSN, zlog)
+	dbLoader, err := db.NewLoader(psqlDSN, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}

@@ -4,11 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-
-	"go.uber.org/zap/zapcore"
+	"strings"
 
 	"github.com/jimsmart/schema"
+	"github.com/streamingfast/logging"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type CursorError struct {
@@ -18,6 +19,7 @@ type CursorError struct {
 type Loader struct {
 	*sql.DB
 
+	database         string
 	schema           string
 	entries          map[string]map[string]*Operation
 	EntriesCount     uint64
@@ -25,9 +27,10 @@ type Loader struct {
 	tablePrimaryKeys map[string]string
 
 	logger *zap.Logger
+	tracer logging.Tracer
 }
 
-func NewLoader(psqlDsn string, logger *zap.Logger) (*Loader, error) {
+func NewLoader(psqlDsn string, logger *zap.Logger, tracer logging.Tracer) (*Loader, error) {
 	dsn, err := parseDSN(psqlDsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
@@ -40,11 +43,13 @@ func NewLoader(psqlDsn string, logger *zap.Logger) (*Loader, error) {
 
 	return &Loader{
 		DB:               db,
+		database:         dsn.database,
 		schema:           dsn.schema,
 		entries:          map[string]map[string]*Operation{},
 		tables:           map[string]map[string]reflect.Type{},
 		tablePrimaryKeys: map[string]string{},
 		logger:           logger,
+		tracer:           tracer,
 	}, nil
 }
 
@@ -57,9 +62,9 @@ func (l *Loader) LoadTables() error {
 	for schemaTableName, columns := range schemaTables {
 		schemaName := schemaTableName[0]
 		tableName := schemaTableName[1]
-		l.logger.Debug("processing schemaName table",
-			zap.String("schemaName", schemaName),
-			zap.String("tableName", tableName),
+		l.logger.Debug("processing schema's table",
+			zap.String("schema_name", schemaName),
+			zap.String("table_name", tableName),
 		)
 		if schemaName != l.schema {
 			continue
@@ -116,7 +121,7 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType) error {
 		delete(columnsCheck, columnName)
 	}
 	if len(columnsCheck) != 0 {
-		for k, _ := range columnsCheck {
+		for k := range columnsCheck {
 			return &CursorError{fmt.Errorf("missing column %q from cursors", k)}
 		}
 	}
@@ -131,6 +136,26 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType) error {
 		return &CursorError{fmt.Errorf("column 'id' should be primary key not %q", key[0])}
 	}
 	return nil
+}
+
+// GetIdentifier returns <database>/<schema> suitable for user presentation
+func (l *Loader) GetIdentifier() string {
+	return fmt.Sprintf("%s/%s", l.database, l.schema)
+}
+
+func (l *Loader) GetAvailableTablesInSchema() string {
+	tables := make([]string, len(l.tablePrimaryKeys))
+	i := 0
+	for table := range l.tablePrimaryKeys {
+		tables[i] = table
+		i++
+	}
+
+	return strings.Join(tables, ", ")
+}
+
+func (l *Loader) GetSchema() string {
+	return l.schema
 }
 
 func (l *Loader) HasTable(tableName string) bool {

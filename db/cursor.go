@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/streamingfast/bstream"
-
 	sink "github.com/streamingfast/substreams-sink"
 )
 

@@ -109,6 +109,7 @@ func (s *PostgresSinker) Run(ctx context.Context) error {
 	}
 
 	s.sink, err = sink.New(
+		sink.SubstreamsModeProduction,
 		s.Pkg.Modules,
 		s.OutputModule,
 		s.OutputModuleHash,
@@ -137,7 +138,12 @@ func (s *PostgresSinker) Run(ctx context.Context) error {
 func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseChanges) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.DBLoader.HasTable(change.Table) {
-			continue
+			return fmt.Errorf(
+				"your Substreams sent us a change for a table named %s we don't know about on %s (available tables: %s)",
+				change.Table,
+				s.DBLoader.GetIdentifier(),
+				s.DBLoader.GetAvailableTablesInSchema(),
+			)
 		}
 
 		primaryKey := change.Pk
@@ -190,8 +196,9 @@ func (s *PostgresSinker) handleBlockScopeData(ctx context.Context, cursor *sink.
 	if cursor.Block.Num()%BLOCK_PROGRESS == 0 {
 		flushStart := time.Now()
 		if err := s.DBLoader.Flush(ctx, hex.EncodeToString(s.OutputModuleHash), cursor); err != nil {
-			return fmt.Errorf("failed to roll: %w", err)
+			return fmt.Errorf("failed to flush: %w", err)
 		}
+
 		flushDuration := time.Since(flushStart)
 		FlushCount.Inc()
 		FlushedEntriesCount.AddUint64(s.DBLoader.EntriesCount)

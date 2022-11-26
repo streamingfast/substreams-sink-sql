@@ -30,6 +30,10 @@ func (l *Loader) Flush(ctx context.Context, moduleHash string, cursor *sink.Curs
 				return fmt.Errorf("failed to get query: %w", err)
 			}
 
+			if l.tracer.Enabled() {
+				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
+			}
+
 			if _, err := tx.ExecContext(ctx, query); err != nil {
 				return fmt.Errorf("executing query:\n`%s`\n err: %w", query, err)
 			}
@@ -48,7 +52,7 @@ func (l *Loader) Flush(ctx context.Context, moduleHash string, cursor *sink.Curs
 }
 
 func (l *Loader) Reset() {
-	for tableName, _ := range l.entries {
+	for tableName := range l.entries {
 		l.entries[tableName] = map[string]*Operation{}
 	}
 	l.EntriesCount = 0
