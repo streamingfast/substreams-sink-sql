@@ -127,8 +127,8 @@ create table cursors
 		ClientConfig: client.NewSubstreamsClientConfig(
 			endpoint,
 			apiToken,
-			viper.GetBool("extractor-substreams-run-insecure"),  //todo(colin): check this
-			viper.GetBool("extractor-substreams-run-plaintext"), //todo(colin): check this
+			viper.GetBool("run-insecure"),
+			viper.GetBool("run-plaintext"),
 		),
 	}
 
