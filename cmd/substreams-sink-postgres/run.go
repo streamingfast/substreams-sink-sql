@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var SyncRunCmd = Command(sinkRunE,
+var SinkRunCmd = Command(sinkRunE,
 	"run <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
 	"Runs  extractor code",
 	RangeArgs(4, 5),
