@@ -48,10 +48,13 @@ func (l *Loader) Flush(ctx context.Context, moduleHash string, cursor *sink.Curs
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit db transaction: %w", err)
 	}
+
+	l.reset()
+
 	return nil
 }
 
-func (l *Loader) Reset() {
+func (l *Loader) reset() {
 	for tableName := range l.entries {
 		l.entries[tableName] = map[string]*Operation{}
 	}
