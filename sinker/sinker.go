@@ -43,7 +43,9 @@ type PostgresSinker struct {
 	OutputModuleHash manifest.ModuleHash
 	ClientConfig     *client.SubstreamsClientConfig
 
-	sink  *sink.Sinker
+	sink       *sink.Sinker
+	lastCursor *sink.Cursor
+
 	stats *Stats
 
 	blockRange *bstream.Range
@@ -67,6 +69,12 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 		ClientConfig:     config.ClientConfig,
 	}
 
+	s.OnTerminating(func(err error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		s.Stop(ctx, err)
+	})
+
 	var err error
 	s.blockRange, err = resolveBlockRange(config.BlockRange, config.OutputModule)
 	if err != nil {
@@ -77,7 +85,7 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 }
 
 func (s *PostgresSinker) Start(ctx context.Context) error {
-	cursor, err := s.DBLoader.GetCursor(hex.EncodeToString(s.OutputModuleHash))
+	cursor, err := s.DBLoader.GetCursor(ctx, hex.EncodeToString(s.OutputModuleHash))
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		return fmt.Errorf("unable to retrieve cursor: %w", err)
 	}
@@ -90,7 +98,7 @@ func (s *PostgresSinker) Start(ctx context.Context) error {
 
 		cursor = sink.NewCursor("", bstream.NewBlockRef("", cursorStartBlock))
 
-		if err = s.DBLoader.WriteCursor(hex.EncodeToString(s.OutputModuleHash), cursor); err != nil {
+		if err = s.DBLoader.WriteCursor(ctx, hex.EncodeToString(s.OutputModuleHash), cursor); err != nil {
 			return fmt.Errorf("failed to create initial cursor: %w", err)
 		}
 	}
@@ -102,8 +110,16 @@ func (s *PostgresSinker) Start(ctx context.Context) error {
 	return s.Run(ctx)
 }
 
+func (s *PostgresSinker) Stop(ctx context.Context, err error) {
+	if s.lastCursor == nil || err != nil {
+		return
+	}
+
+	_ = s.DBLoader.WriteCursor(ctx, hex.EncodeToString(s.OutputModuleHash), s.lastCursor)
+}
+
 func (s *PostgresSinker) Run(ctx context.Context) error {
-	cursor, err := s.DBLoader.GetCursor(hex.EncodeToString(s.OutputModuleHash))
+	cursor, err := s.DBLoader.GetCursor(ctx, hex.EncodeToString(s.OutputModuleHash))
 	if err != nil {
 		return fmt.Errorf("unable to retrieve cursor: %w", err)
 	}
@@ -192,6 +208,8 @@ func (s *PostgresSinker) handleBlockScopeData(ctx context.Context, cursor *sink.
 			return fmt.Errorf("apply database changes: %w", err)
 		}
 	}
+
+	s.lastCursor = cursor
 
 	if cursor.Block.Num()%BLOCK_PROGRESS == 0 {
 		flushStart := time.Now()

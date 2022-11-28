@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 
 var ErrCursorNotFound = errors.New("cursor not found")
 
-func (l *Loader) GetCursor(outputModuleHash string) (*sink.Cursor, error) {
+func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (*sink.Cursor, error) {
 	type cursorRow struct {
 		Id       string
 		Cursor   string
@@ -20,7 +21,7 @@ func (l *Loader) GetCursor(outputModuleHash string) (*sink.Cursor, error) {
 	}
 
 	query := fmt.Sprintf("SELECT id, cursor, block_num, block_id from cursors WHERE id = '%s'", outputModuleHash)
-	row := l.DB.QueryRow(query)
+	row := l.DB.QueryRowContext(ctx, query)
 
 	c := &cursorRow{}
 	if err := row.Scan(&c.Id, &c.Cursor, &c.BlockNum, &c.BlockID); err != nil {
@@ -33,9 +34,9 @@ func (l *Loader) GetCursor(outputModuleHash string) (*sink.Cursor, error) {
 	return sink.NewCursor(c.Cursor, bstream.NewBlockRef(c.BlockID, c.BlockNum)), nil
 }
 
-func (l *Loader) WriteCursor(moduleHash string, c *sink.Cursor) error {
+func (l *Loader) WriteCursor(ctx context.Context, moduleHash string, c *sink.Cursor) error {
 	query := fmt.Sprintf("INSERT INTO cursors (id, cursor, block_num, block_id) values ('%s', '%s', %d, '%s')", moduleHash, c.Cursor, c.Block.Num(), c.Block.ID())
-	if _, err := l.DB.Exec(query); err != nil {
+	if _, err := l.DB.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("write cursor: %w", err)
 	}
 	return nil
