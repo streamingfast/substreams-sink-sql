@@ -1,8 +1,10 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -168,5 +170,42 @@ func (l *Loader) HasTable(tableName string) bool {
 func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 	//TODO implement me
 	encoder.AddUint64("entries_count", l.EntriesCount)
+	return nil
+}
+
+func (l *Loader) Setup(ctx context.Context, schemaFile string) error {
+	b, err := os.ReadFile(schemaFile)
+	if err != nil {
+		return fmt.Errorf("read schema file: %w", err)
+	}
+
+	schemaSql := string(b)
+	if _, err := l.ExecContext(ctx, schemaSql); err != nil {
+		return fmt.Errorf("exec schema: %w", err)
+	}
+
+	err = l.setupCursorTable(ctx)
+	if err != nil {
+		return fmt.Errorf("setup cursor table: %w", err)
+	}
+
+	return nil
+}
+
+func (l *Loader) setupCursorTable(ctx context.Context) error {
+	_, err := l.ExecContext(ctx, `
+		create table if not exists cursors
+		(
+			id         text not null constraint cursor_pk primary key,
+			cursor     text,
+			block_num  bigint,
+			block_id   text
+		);
+	`)
+
+	if err != nil {
+		return fmt.Errorf("creating cursor table: %w", err)
+	}
+
 	return nil
 }

@@ -2,6 +2,24 @@
 
 This is a command line tool to quickly sync a substreams with a posgresql database.
 
+### Setup
+
+1. Install `substreams-sink-postgres` (Installation from source required for now):
+
+ ```bash
+ go install ./cmd/substreams-sink-postgres
+ ```
+
+2. Run setup command
+
+```bash
+substreams-postgres-sink setup <psql connection string> <path to schema file>
+```
+
+This will connect to the given database, create the tables and indexes specified in the given schema file, and will create the required tables to run the sink (ie: the `cursors` table).
+
+For the sake of idempotency, we recommend that the schema file only contain `create table if not exists` statements.
+
 ### Running It
 
 1. Your Substreams needs to implement a `map` that has an output type of `proto:substreams.database.v1.DatabaseChanges`.

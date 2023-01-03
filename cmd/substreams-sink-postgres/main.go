@@ -34,6 +34,7 @@ func init() {
 func main() {
 	Run("substreams-sink-postgres", "Substreams Postgres Sink",
 		SinkRunCmd,
+		SinkSetupCmd,
 
 		ConfigureViper("SINK"),
 		ConfigureVersion(),
