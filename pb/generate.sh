@@ -26,7 +26,7 @@ function main() {
 
   pushd "$ROOT/pb" > /dev/null
 
-  generate "database/v1/database.proto"
+  generate "substreams/sink/database/v1/database.proto"
 
   echo "generate.sh - `date` - `whoami`" > $ROOT/pb/last_generate.txt
   echo "streamingfast/proto revision: `GIT_DIR=$ROOT/.git git rev-parse HEAD`" >> $ROOT/pb/last_generate.txt
@@ -46,7 +46,7 @@ function generate() {
         --go_out=. \
         --go_opt=paths=source_relative \
         --go-grpc_out=. \
-        --go_opt="Mdatabase/v1/database.proto=github.com/streamingfast/substreams-database-change/pb;pbddatabase" \
+        --go_opt="Msubstreams/sink/database/v1/database.proto=github.com/streamingfast/substreams-database-change/pb;pbdatabase" \
         --go-grpc_opt=paths=source_relative,require_unimplemented_servers=false \
          $base$file
     done
