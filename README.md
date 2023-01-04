@@ -13,7 +13,7 @@ This is a command line tool to quickly sync a substreams with a posgresql databa
 2. Run setup command
 
 ```bash
-substreams-postgres-sink setup <psql connection string> <path to schema file>
+substreams-sink-postgres setup <psql connection string> <path to schema file>
 ```
 
 This will connect to the given database, create the tables and indexes specified in the given schema file, and will create the required tables to run the sink (ie: the `cursors` table).
