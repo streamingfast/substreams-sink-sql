@@ -31,6 +31,8 @@ type Config struct {
 	OutputModuleName string
 	OutputModuleHash manifest.ModuleHash
 	ClientConfig     *client.SubstreamsClientConfig
+
+	UndoBufferSize int
 }
 
 type PostgresSinker struct {
@@ -42,6 +44,8 @@ type PostgresSinker struct {
 	OutputModuleName string
 	OutputModuleHash manifest.ModuleHash
 	ClientConfig     *client.SubstreamsClientConfig
+
+	UndoBufferSize int
 
 	sink       *sink.Sinker
 	lastCursor *sink.Cursor
@@ -67,6 +71,8 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 		OutputModuleName: config.OutputModuleName,
 		OutputModuleHash: config.OutputModuleHash,
 		ClientConfig:     config.ClientConfig,
+
+		UndoBufferSize: config.UndoBufferSize,
 	}
 
 	s.OnTerminating(func(err error) {
@@ -124,6 +130,11 @@ func (s *PostgresSinker) Run(ctx context.Context) error {
 		return fmt.Errorf("unable to retrieve cursor: %w", err)
 	}
 
+	var sinkOptions []sink.Option
+	if s.UndoBufferSize > 0 {
+		sinkOptions = append(sinkOptions, sink.WithBlockDataBuffer(s.UndoBufferSize))
+	}
+
 	s.sink, err = sink.New(
 		sink.SubstreamsModeProduction,
 		s.Pkg.Modules,
@@ -138,6 +149,7 @@ func (s *PostgresSinker) Run(ctx context.Context) error {
 		},
 		s.logger,
 		s.tracer,
+		sinkOptions...,
 	)
 	if err != nil {
 		return fmt.Errorf("unable to create sink: %w", err)
