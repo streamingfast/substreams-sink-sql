@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/drone/envsubst v1.0.3
+	github.com/golang/protobuf v1.5.2
 	github.com/jimsmart/schema v0.2.0
 	github.com/lib/pq v1.10.6
 	github.com/spf13/cobra v1.4.0
@@ -12,7 +13,7 @@ require (
 	github.com/streamingfast/derr v0.0.0-20220526184630-695c21740145
 	github.com/streamingfast/logging v0.0.0-20220813175024-b4fbb0e893df
 	github.com/streamingfast/substreams v0.0.22-0.20221124192438-6ef4954ac865
-	github.com/streamingfast/substreams-sink v0.0.0-20221126181610-9684cae306cd
+	github.com/streamingfast/substreams-sink v0.0.0-20230109131242-c4f476b5db87
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.23.0
 	google.golang.org/protobuf v1.28.1
@@ -28,7 +29,6 @@ require (
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
@@ -72,7 +72,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/jhump/protoreflect v1.14.0
+	github.com/jhump/protoreflect v1.14.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/juju/ansiterm v0.0.0-20180109212912-720a0952cc2a // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
