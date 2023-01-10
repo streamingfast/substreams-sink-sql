@@ -22,7 +22,7 @@ For the sake of idempotency, we recommend that the schema file only contain `cre
 
 ### Running It
 
-1. Your Substreams needs to implement a `map` that has an output type of `proto:substreams.database.v1.DatabaseChanges`.
+1. Your Substreams needs to implement a `map` that has an output type of `proto:sf.substreams.database.v1.DatabaseChanges`.
 By convention, we name the `map` module `db_out`. The [substreams-data-change](https://github.com/streamingfast/substreams-database-change) crate contains Rust bindings and helpers to implement it. Some project implementing `db_out` module for reference:
 
     * [substreams-eth-block-meta](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) (some helpers found in [db_out.rs](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6))
