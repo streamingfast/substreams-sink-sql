@@ -33,7 +33,7 @@ main() {
   $sink run \
     ${pg_dsn} \
     "${SUBSTREAMS_ENDPOINT:-"mainnet.eth.streamingfast.io:443"}" \
-    "${SUBSTREAMS_MANIFEST:-"https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.3.0/substreams-eth-block-meta-v0.3.0.spkg"}" \
+    "${SUBSTREAMS_MANIFEST:-"https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.4.0/substreams-eth-block-meta-v0.4.0.spkg"}" \
     "${SUBSTREAMS_MODULE:-"db_out"}" \
     "$@"
 }
