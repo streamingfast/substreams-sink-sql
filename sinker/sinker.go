@@ -21,7 +21,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const BLOCK_PROGRESS = 1000
+const (
+	BLOCK_PROGRESS      = 1000
+	LIVE_BLOCK_PROGRESS = 1
+)
 
 type Config struct {
 	DBLoader         *db.Loader
@@ -32,7 +35,8 @@ type Config struct {
 	OutputModuleHash manifest.ModuleHash
 	ClientConfig     *client.SubstreamsClientConfig
 
-	UndoBufferSize int
+	UndoBufferSize     int
+	LiveBlockTimeDelta time.Duration
 }
 
 type PostgresSinker struct {
@@ -45,7 +49,8 @@ type PostgresSinker struct {
 	OutputModuleHash manifest.ModuleHash
 	ClientConfig     *client.SubstreamsClientConfig
 
-	UndoBufferSize int
+	UndoBufferSize  int
+	LivenessTracker *sink.LivenessChecker
 
 	sink       *sink.Sinker
 	lastCursor *sink.Cursor
@@ -72,7 +77,8 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 		OutputModuleHash: config.OutputModuleHash,
 		ClientConfig:     config.ClientConfig,
 
-		UndoBufferSize: config.UndoBufferSize,
+		UndoBufferSize:  config.UndoBufferSize,
+		LivenessTracker: sink.NewLivenessChecker(config.LiveBlockTimeDelta),
 	}
 
 	s.OnTerminating(func(err error) {
@@ -228,7 +234,7 @@ func (s *PostgresSinker) handleBlockScopeData(ctx context.Context, cursor *sink.
 
 	s.lastCursor = cursor
 
-	if cursor.Block.Num()%BLOCK_PROGRESS == 0 {
+	if cursor.Block.Num()%s.batchBlockModulo(data) == 0 {
 		flushStart := time.Now()
 		if err := s.DBLoader.Flush(ctx, hex.EncodeToString(s.OutputModuleHash), cursor); err != nil {
 			return fmt.Errorf("failed to flush: %w", err)
@@ -241,4 +247,11 @@ func (s *PostgresSinker) handleBlockScopeData(ctx context.Context, cursor *sink.
 	}
 
 	return nil
+}
+
+func (s *PostgresSinker) batchBlockModulo(blockData *pbsubstreams.BlockScopedData) uint64 {
+	if s.LivenessTracker.IsLive(blockData) {
+		return LIVE_BLOCK_PROGRESS
+	}
+	return BLOCK_PROGRESS
 }
