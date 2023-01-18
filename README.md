@@ -82,7 +82,7 @@ schema should contain a cursors table with columns `id`, `cursor`, `block_num`.
 
     ```shell
     substreams-sink-postgres run \
-        "psql://psql_user:psql_password@psql_host/psql_database&sslmode=disable" \
+        "psql://psql_user:psql_password@psql_host/psql_database?sslmode=disable" \
         "mainnet.eth.streamingfast.io:443" \
         "substreams.yaml" \
         db_out
