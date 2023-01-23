@@ -6,8 +6,6 @@ on:
       - "v*"
     branches:
       - "*"
-  workflow_dispatch:
-    inputs: []
 
 env:
   REGISTRY: ghcr.io
