@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/substreams-sink-postgres/db"
 )
@@ -12,9 +11,7 @@ import (
 var SinkSetupCmd = Command(sinkSetupE,
 	"setup <psql_dsn> <schema_file>",
 	"Setup the database with the schema and create default cursor table if it does not exist",
-	RangeArgs(2, 2),
-	Flags(func(flags *pflag.FlagSet) {}),
-	AfterAllHook(func(_ *cobra.Command) {}),
+	ExactArgs(2),
 )
 
 func sinkSetupE(cmd *cobra.Command, args []string) error {
@@ -33,5 +30,6 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("setup: %w", err)
 	}
 
+	zlog.Info("setup completed successfully")
 	return nil
 }

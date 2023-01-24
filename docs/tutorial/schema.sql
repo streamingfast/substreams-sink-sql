@@ -1,4 +1,4 @@
-create table block_data
+create table block_meta
 (
     id          text not null constraint block_meta_pk primary key,
     version      integer,

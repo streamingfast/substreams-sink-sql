@@ -24,7 +24,9 @@ main() {
 
   if [[ "$clean" == "true" || "$bootstrap" == "true" ]]; then
     echo "Creating tables"
-    PGPASSWORD="insecure-change-me-in-prod" psql -h localhost -U dev-node -d dev-node -c '\i schema.sql'
+    $sink
+
+    # PGPASSWORD="insecure-change-me-in-prod" psql -h localhost -U dev-node -d dev-node -c '\i schema.sql'
   fi
 
   pg_dsn="${PG_DSN:-"psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"}"
@@ -33,7 +35,7 @@ main() {
   $sink run \
     ${pg_dsn} \
     "${SUBSTREAMS_ENDPOINT:-"mainnet.eth.streamingfast.io:443"}" \
-    "${SUBSTREAMS_MANIFEST:-"https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.4.0/substreams-eth-block-meta-v0.4.0.spkg"}" \
+    "${SUBSTREAMS_MANIFEST:-"../docs/tutorial/substreams.yaml"}" \
     "${SUBSTREAMS_MODULE:-"db_out"}" \
     "$@"
 }

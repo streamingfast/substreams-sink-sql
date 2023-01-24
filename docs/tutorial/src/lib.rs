@@ -1,12 +1,14 @@
-mod pb;
 mod block_timestamp;
+mod pb;
 
+use self::block_timestamp::BlockTimestamp;
 use pb::block_meta::BlockMeta;
-use self::{block_timestamp::BlockTimestamp};
-use substreams::{Hex};
-use substreams_ethereum::{pb as ethpb};
+use substreams::store::{
+    self, DeltaProto, StoreNew, StoreSetIfNotExists, StoreSetIfNotExistsProto,
+};
+use substreams::Hex;
 use substreams_database_change::pb::database::{table_change::Operation, DatabaseChanges};
-use substreams::{store::{self, DeltaProto, StoreSetIfNotExistsProto, StoreNew ,StoreSetIfNotExists}};
+use substreams_ethereum::pb as ethpb;
 
 #[substreams::handlers::store]
 fn store_block_meta_start(blk: ethpb::eth::v2::Block, s: StoreSetIfNotExistsProto<BlockMeta>) {
@@ -17,7 +19,9 @@ fn store_block_meta_start(blk: ethpb::eth::v2::Block, s: StoreSetIfNotExistsProt
 }
 
 #[substreams::handlers::map]
-fn db_out(block_meta_start: store::Deltas<DeltaProto<BlockMeta>>) -> Result<DatabaseChanges, substreams::errors::Error> {
+fn db_out(
+    block_meta_start: store::Deltas<DeltaProto<BlockMeta>>,
+) -> Result<DatabaseChanges, substreams::errors::Error> {
     let mut database_changes: DatabaseChanges = Default::default();
     transform_block_meta_to_database_changes(&mut database_changes, block_meta_start);
     Ok(database_changes)
@@ -77,7 +81,7 @@ fn push_create(
     value: BlockMeta,
 ) {
     changes
-        .push_change("block_data", key, ordinal, Operation::Create)
+        .push_change("block_meta", key, ordinal, Operation::Create)
         .change("at", (None, timestamp))
         .change("number", (None, value.number))
         .change("hash", (None, Hex(value.hash)))
@@ -93,7 +97,7 @@ fn push_update(
     new_value: BlockMeta,
 ) {
     changes
-        .push_change("block_data", key, ordinal, Operation::Update)
+        .push_change("block_meta", key, ordinal, Operation::Update)
         .change("number", (old_value.number, new_value.number))
         .change("hash", (Hex(old_value.hash), Hex(new_value.hash)))
         .change(
