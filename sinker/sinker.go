@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	BLOCK_PROGRESS      = 1000
-	LIVE_BLOCK_PROGRESS = 1
+	DEFAULT_BLOCK_PROGRESS = 1000
+	LIVE_BLOCK_PROGRESS    = 1
 )
 
 type Config struct {
@@ -37,6 +37,7 @@ type Config struct {
 
 	UndoBufferSize     int
 	LiveBlockTimeDelta time.Duration
+	FlushInterval      int
 }
 
 type PostgresSinker struct {
@@ -51,6 +52,7 @@ type PostgresSinker struct {
 
 	UndoBufferSize  int
 	LivenessTracker *sink.LivenessChecker
+	FlushInterval   int
 
 	sink       *sink.Sinker
 	lastCursor *sink.Cursor
@@ -79,6 +81,7 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 
 		UndoBufferSize:  config.UndoBufferSize,
 		LivenessTracker: sink.NewLivenessChecker(config.LiveBlockTimeDelta),
+		FlushInterval:   config.FlushInterval,
 	}
 
 	s.OnTerminating(func(err error) {
@@ -253,5 +256,10 @@ func (s *PostgresSinker) batchBlockModulo(blockData *pbsubstreams.BlockScopedDat
 	if s.LivenessTracker.IsLive(blockData) {
 		return LIVE_BLOCK_PROGRESS
 	}
-	return BLOCK_PROGRESS
+
+	if s.FlushInterval > 0 {
+		return uint64(s.FlushInterval)
+	}
+
+	return DEFAULT_BLOCK_PROGRESS
 }

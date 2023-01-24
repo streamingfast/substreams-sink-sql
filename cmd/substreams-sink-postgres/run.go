@@ -26,6 +26,7 @@ var SinkRunCmd = Command(sinkRunE,
 	Flags(func(flags *pflag.FlagSet) {
 		flags.BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
 		flags.BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
+		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
 		flags.Int("undo-buffer-size", 0, "Number of blocks to keep buffered to handle fork reorganizations")
 		flags.Int("live-block-time-delta", 300, "Consider chain live if block time is within this number of seconds of current time. Default: 300 (5 minutes)")
 	}),
@@ -132,6 +133,7 @@ create table cursors
 		OutputModule:       module,
 		OutputModuleName:   outputModuleName,
 		OutputModuleHash:   outputModuleHash,
+		FlushInterval:      viper.GetInt("run-flush-interval"),
 		UndoBufferSize:     viper.GetInt("run-undo-buffer-size"),
 		LiveBlockTimeDelta: liveBlockTimeDelta,
 		ClientConfig: client.NewSubstreamsClientConfig(
