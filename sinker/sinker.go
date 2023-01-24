@@ -38,6 +38,9 @@ type Config struct {
 	UndoBufferSize     int
 	LiveBlockTimeDelta time.Duration
 	FlushInterval      int
+
+	SubstreamsDevelopmentMode bool
+	IrreversibleOnly          bool
 }
 
 type PostgresSinker struct {
@@ -53,6 +56,9 @@ type PostgresSinker struct {
 	UndoBufferSize  int
 	LivenessTracker *sink.LivenessChecker
 	FlushInterval   int
+
+	SubstreamsDevelopmentMode bool
+	IrreversibleOnly          bool
 
 	sink       *sink.Sinker
 	lastCursor *sink.Cursor
@@ -82,6 +88,9 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 		UndoBufferSize:  config.UndoBufferSize,
 		LivenessTracker: sink.NewLivenessChecker(config.LiveBlockTimeDelta),
 		FlushInterval:   config.FlushInterval,
+
+		SubstreamsDevelopmentMode: config.SubstreamsDevelopmentMode,
+		IrreversibleOnly:          config.IrreversibleOnly,
 	}
 
 	s.OnTerminating(func(err error) {
@@ -144,18 +153,29 @@ func (s *PostgresSinker) Run(ctx context.Context) error {
 		sinkOptions = append(sinkOptions, sink.WithBlockDataBuffer(s.UndoBufferSize))
 	}
 
+	mode := sink.SubstreamsModeProduction
+	if s.SubstreamsDevelopmentMode {
+		mode = sink.SubstreamsModeDevelopment
+	}
+
+	steps := []pbsubstreams.ForkStep{
+		pbsubstreams.ForkStep_STEP_NEW,
+		pbsubstreams.ForkStep_STEP_UNDO,
+	}
+	if s.IrreversibleOnly {
+		steps = []pbsubstreams.ForkStep{
+			pbsubstreams.ForkStep_STEP_IRREVERSIBLE,
+		}
+	}
+
 	s.sink, err = sink.New(
-		sink.SubstreamsModeProduction,
+		mode,
 		s.Pkg.Modules,
 		s.OutputModule,
 		s.OutputModuleHash,
 		s.handleBlockScopeData,
 		s.ClientConfig,
-		[]pbsubstreams.ForkStep{
-			pbsubstreams.ForkStep_STEP_NEW,
-			pbsubstreams.ForkStep_STEP_UNDO,
-			pbsubstreams.ForkStep_STEP_IRREVERSIBLE,
-		},
+		steps,
 		s.logger,
 		s.tracer,
 		sinkOptions...,

@@ -29,6 +29,8 @@ var SinkRunCmd = Command(sinkRunE,
 		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
 		flags.Int("undo-buffer-size", 0, "Number of blocks to keep buffered to handle fork reorganizations")
 		flags.Int("live-block-time-delta", 300, "Consider chain live if block time is within this number of seconds of current time. Default: 300 (5 minutes)")
+		flags.Bool("development-mode", false, "Enable development mode.")
+		flags.Bool("irreversible-only", false, "Get only irreversible blocks.")
 	}),
 	AfterAllHook(func(_ *cobra.Command) {
 		sinker.RegisterMetrics()
@@ -142,6 +144,8 @@ create table cursors
 			viper.GetBool("run-insecure"),
 			viper.GetBool("run-plaintext"),
 		),
+		SubstreamsDevelopmentMode: viper.GetBool("run-development-mode"),
+		IrreversibleOnly:          viper.GetBool("run-irreversible-only"),
 	}
 
 	postgresSinker, err := sinker.New(
