@@ -31,4 +31,4 @@ modules:
       - store: store_block_meta_start
         mode: deltas
     output:
-      type: proto:sf.substreams.database.v1.DatabaseChanges
+      type: proto:sf.substreams.sink.database.v1.DatabaseChanges
