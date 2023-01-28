@@ -12,25 +12,19 @@ import (
 type Stats struct {
 	*shutter.Shutter
 
-	dbFlushRate     *dmetrics.AvgRatePromCounter
-	dataMsgRate     *dmetrics.AvgRatePromCounter
-	progressMsgRate *dmetrics.AvgRatePromCounter
-	blockRate       *dmetrics.AvgRatePromCounter
-	flusehdEntries  *dmetrics.ValueFromMetric
-	lastBlock       bstream.BlockRef
-	logger          *zap.Logger
+	dbFlushRate    *dmetrics.AvgRatePromCounter
+	flusehdEntries *dmetrics.ValueFromMetric
+	lastBlock      bstream.BlockRef
+	logger         *zap.Logger
 }
 
 func NewStats(logger *zap.Logger) *Stats {
 	return &Stats{
 		Shutter: shutter.New(),
 
-		dbFlushRate:     dmetrics.MustNewAvgRateFromPromCounter(FlushCount, 1*time.Second, 30*time.Second, "flush"),
-		dataMsgRate:     dmetrics.MustNewAvgRateFromPromCounter(DataMessageCount, 1*time.Second, 30*time.Second, "msg"),
-		progressMsgRate: dmetrics.MustNewAvgRateFromPromCounter(ProgressMessageCount, 1*time.Second, 30*time.Second, "msg"),
-		blockRate:       dmetrics.MustNewAvgRateFromPromCounter(BlockCount, 1*time.Second, 30*time.Second, "blocks"),
-		flusehdEntries:  dmetrics.NewValueFromMetric(FlushedEntriesCount, "entries"),
-		logger:          logger,
+		dbFlushRate:    dmetrics.MustNewAvgRateFromPromCounter(FlushCount, 1*time.Second, 30*time.Second, "flush"),
+		flusehdEntries: dmetrics.NewValueFromMetric(FlushedEntriesCount, "entries"),
+		logger:         logger,
 	}
 }
 
@@ -56,9 +50,6 @@ func (s *Stats) Start(each time.Duration) {
 				// them so the development logs looks nicer.
 				fields := []zap.Field{
 					zap.Stringer("db_flush_rate", s.dbFlushRate),
-					zap.Stringer("data_msg_rate", s.dataMsgRate),
-					zap.Stringer("progress_msg_rate", s.progressMsgRate),
-					zap.Stringer("block_rate", s.blockRate),
 					zap.Uint64("flushed_entries", s.flusehdEntries.ValueUint()),
 				}
 
@@ -68,7 +59,7 @@ func (s *Stats) Start(each time.Duration) {
 					fields = append(fields, zap.Stringer("last_block", s.lastBlock))
 				}
 
-				s.logger.Info("substreams sink stats", fields...)
+				s.logger.Info("substreams postgres sink stats", fields...)
 			case <-s.Terminating():
 				return
 			}
