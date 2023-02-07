@@ -6,7 +6,7 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
 
 1. Install `substreams-sink-postgres` by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-postgres/releases). Extract `substreams-sink-postgres` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable.
 
-    > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-postgres@latest`.
+    > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-postgres/cmd/substreams-sink-postgres@latest`.
 
 1. Start Docker Compose:
 
