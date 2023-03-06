@@ -53,6 +53,8 @@ To be accepted by `substreams-sink-postgres`, your module output's type must be 
 
 By convention, we name the `map` module that emits [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) output `db_out`.
 
+> Note that using prior versions (0.2.0, 0.1.*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
+
 ### PostgreSQL DSN
 
 The connection string is provided using a simple string format respecting the URL specification. The DSN format is:
