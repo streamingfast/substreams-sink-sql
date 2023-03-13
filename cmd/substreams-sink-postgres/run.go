@@ -28,9 +28,11 @@ var SinkRunCmd = Command(sinkRunE,
 		flags.BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
 		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
 		flags.Int("undo-buffer-size", 12, "Number of blocks to keep buffered to handle fork reorganizations")
-		flags.Int("live-block-time-delta", 300, "Consider chain live if block time is within this number of seconds of current time. Default: 300 (5 minutes)")
-		flags.Bool("development-mode", false, "Enable development mode.")
-		flags.Bool("irreversible-only", false, "Get only irreversible blocks.")
+		flags.Duration("live-block-time-delta", 300*time.Second, "Consider chain live if block time is within this number of seconds of current time")
+		flags.Bool("development-mode", false, "Enable development mode, use it for testing purpose only, should not be used for production workload")
+		flags.Bool("irreversible-only", false, "Get only irreversible blocks")
+		flags.Bool("infinite-retry", false, "Default behavior is to retry 15 times spanning approximatively 5m before exiting with an error, activating this flag will retry forever")
+
 	}),
 	AfterAllHook(func(_ *cobra.Command) {
 		sinker.RegisterMetrics()
@@ -123,11 +125,6 @@ create table cursors
 
 	apiToken := readAPIToken()
 
-	liveBlockTimeDelta, err := time.ParseDuration(fmt.Sprintf("%ds", viper.GetInt("run-live-block-time-delta")))
-	if err != nil {
-		return fmt.Errorf("parsing live-block-time-delta: %w", err)
-	}
-
 	config := &sinker.Config{
 		DBLoader:           dbLoader,
 		BlockRange:         blockRange,
@@ -137,7 +134,7 @@ create table cursors
 		OutputModuleHash:   outputModuleHash,
 		FlushInterval:      viper.GetInt("run-flush-interval"),
 		UndoBufferSize:     viper.GetInt("run-undo-buffer-size"),
-		LiveBlockTimeDelta: liveBlockTimeDelta,
+		LiveBlockTimeDelta: viper.GetDuration("run-live-block-time-delta"),
 		ClientConfig: client.NewSubstreamsClientConfig(
 			endpoint,
 			apiToken,
@@ -146,6 +143,7 @@ create table cursors
 		),
 		SubstreamsDevelopmentMode: viper.GetBool("run-development-mode"),
 		IrreversibleOnly:          viper.GetBool("run-irreversible-only"),
+		InfiniteRetry:             viper.GetBool("run-infinite-retry"),
 	}
 
 	postgresSinker, err := sinker.New(

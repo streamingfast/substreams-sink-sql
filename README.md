@@ -36,6 +36,8 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
     cd ../..
     ```
 
+    Once the compilation has completed, let launch the `sink` process.
+
     > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
 
     ```shell

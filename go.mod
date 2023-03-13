@@ -4,7 +4,6 @@ go 1.18
 
 require (
 	github.com/drone/envsubst v1.0.3
-	github.com/golang/protobuf v1.5.2
 	github.com/jimsmart/schema v0.2.0
 	github.com/lib/pq v1.10.6
 	github.com/spf13/cobra v1.4.0
@@ -13,7 +12,7 @@ require (
 	github.com/streamingfast/derr v0.0.0-20220526184630-695c21740145
 	github.com/streamingfast/logging v0.0.0-20220813175024-b4fbb0e893df
 	github.com/streamingfast/substreams v0.0.22-0.20221124192438-6ef4954ac865
-	github.com/streamingfast/substreams-sink v0.0.0-20230124233801-eba20616e1fe
+	github.com/streamingfast/substreams-sink v0.0.0-20230228155421-eb5cdf2ed678
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.23.0
 	google.golang.org/protobuf v1.28.1
@@ -29,6 +28,7 @@ require (
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
@@ -90,7 +90,7 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20221117104246-5660c4ba5e8c
+	github.com/streamingfast/bstream v0.0.2-0.20230202150636-acd638a62663
 	github.com/streamingfast/cli v0.0.4-0.20220630165922-bc58c6666fc8
 	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20221031174241-978a7951c117 // indirect

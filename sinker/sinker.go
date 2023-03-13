@@ -41,6 +41,8 @@ type Config struct {
 
 	SubstreamsDevelopmentMode bool
 	IrreversibleOnly          bool
+
+	InfiniteRetry bool
 }
 
 type PostgresSinker struct {
@@ -56,6 +58,8 @@ type PostgresSinker struct {
 	UndoBufferSize  int
 	LivenessTracker *sink.LivenessChecker
 	FlushInterval   int
+
+	InfiniteRetry bool
 
 	SubstreamsDevelopmentMode bool
 	IrreversibleOnly          bool
@@ -88,6 +92,8 @@ func New(config *Config, logger *zap.Logger, tracer logging.Tracer) (*PostgresSi
 		UndoBufferSize:  config.UndoBufferSize,
 		LivenessTracker: sink.NewLivenessChecker(config.LiveBlockTimeDelta),
 		FlushInterval:   config.FlushInterval,
+
+		InfiniteRetry: config.InfiniteRetry,
 
 		SubstreamsDevelopmentMode: config.SubstreamsDevelopmentMode,
 		IrreversibleOnly:          config.IrreversibleOnly,
@@ -151,6 +157,10 @@ func (s *PostgresSinker) Run(ctx context.Context) error {
 	var sinkOptions []sink.Option
 	if s.UndoBufferSize > 0 {
 		sinkOptions = append(sinkOptions, sink.WithBlockDataBuffer(s.UndoBufferSize))
+	}
+
+	if s.InfiniteRetry {
+		sinkOptions = append(sinkOptions, sink.WithInfiniteRetry())
 	}
 
 	mode := sink.SubstreamsModeProduction
