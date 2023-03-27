@@ -12,6 +12,7 @@ services:
       POSTGRES_PASSWORD: insecure-change-me-in-prod
       POSTGRES_DB: dev-node
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+      POSTGRES_HOST_AUTH_METHOD: md5
     volumes:
       - ./devel/data/postgres:/var/lib/postgresql/data
     healthcheck:
