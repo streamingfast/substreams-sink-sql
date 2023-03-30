@@ -144,7 +144,7 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 
 		escapedValue, err := EscapeString(normalizedValue, "value")
 		if err != nil {
-			return nil, nil, fmt.Errorf("escpaping sql value from table %s for column %q, value %q: %w", tableName, columnName, normalizedValue, err)
+			return nil, nil, fmt.Errorf("escpaping sql value from table %s for column %q, normalized value %q: %w", tableName, columnName, normalizedValue, err)
 		}
 
 		values = append(values, escapedValue)
@@ -176,7 +176,7 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 			v := time.Unix(int64(i), 0).Format(time.RFC3339)
 			return fmt.Sprintf("'%s'", v), nil
 		}
-		return "", fmt.Errorf("unsupported type %s", valueType)
+		return "", fmt.Errorf("unsupported struct type %s", valueType)
 	default:
 		return "", fmt.Errorf("unsupported type %s", valueType)
 	}

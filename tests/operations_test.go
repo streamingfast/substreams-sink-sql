@@ -1,67 +1,10 @@
 package tests
 
 import (
-	"fmt"
 	"github.com/streamingfast/substreams-sink-postgres/db"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"os/exec"
 	"testing"
 )
-
-func TestEscapeStringIntegration(t *testing.T) {
-	t.Skip()
-
-	var tests = []struct {
-		name          string
-		values        []string
-		escapedValues []string
-		wantErr       assert.ErrorAssertionFunc
-	}{
-		{
-			name:          "proper",
-			values:        []string{"parent-hash", "tableValue"},
-			escapedValues: []string{"parent-hash", "tableValue"},
-		},
-		{
-			name:          "reserved column name",
-			values:        []string{"from", "tableValue"},
-			escapedValues: []string{"\"from\"", "tableValue"},
-		},
-		{
-			name:          "escape character",
-			values:        []string{"parent-hash", "table\nValue"},
-			escapedValues: []string{"parent-hash", "table\nValue"},
-		},
-		{
-			name:          "single quote",
-			values:        []string{"parent's-hash", "ta'ble'Value"},
-			escapedValues: []string{"parent\\'s-hash", "ta\\'ble\\'Value"},
-		},
-		{
-			name:          "double quote",
-			values:        []string{"pa\"rent\"-hash", "table\"Value\""},
-			escapedValues: []string{"pa\\\"rent\\\"-hash", "table\\\"Value\\\""},
-		},
-	}
-
-	for _, test := range tests {
-		cmd, err := exec.Command("substreams-sink-postgres", "run",
-			"psql://postgres:password@localhost:5432/block_sink_meta?sslmode=disable",
-			"mainnet.eth.streamingfast.io:443",
-			"./../docs/tutorial/substreams.yaml",
-			"db_out",
-		).Output()
-		//cmd, err := exec.Command("pwd").Output()
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println(string(cmd), test)
-		//		sqlStatement := `
-		//
-		//`
-	}
-}
 
 func TestEscapeString(t *testing.T) {
 	var tests = []struct {
