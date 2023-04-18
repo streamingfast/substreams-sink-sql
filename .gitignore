@@ -4,3 +4,4 @@
 .DS_Store
 .release_notes.md
 dist/
+devel/data*

@@ -1,3 +1,0 @@
-# The directory must exist for 'docker compose up' to work on a clean checkout, so ignore all expect ignore file
-*
-!.gitignore

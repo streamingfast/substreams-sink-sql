@@ -10,6 +10,6 @@ func RegisterMetrics() {
 
 var metrics = dmetrics.NewSet()
 
-var FlushedEntriesCount = metrics.NewCounter("substreams_sink_postgres_flushed_entries_count", "The number of flushed entries")
 var FlushCount = metrics.NewCounter("substreams_sink_postgres_store_flush_count", "The amount of flush that happened so far")
-var FlushDuration = metrics.NewCounter("substreams_sink_postgres_store_flush_duration", "The amount of time spent flushing cache to db")
+var FlushedEntriesCount = metrics.NewGauge("substreams_sink_postgres_flushed_entries_count", "The number of flushed entries so far")
+var FlushDuration = metrics.NewCounter("substreams_sink_postgres_store_flush_duration", "The amount of time spent flushing cache to db (in nanoseconds)")

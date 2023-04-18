@@ -9,38 +9,32 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
-	"github.com/streamingfast/derr"
 	"github.com/streamingfast/shutter"
+	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/db"
 	"github.com/streamingfast/substreams-sink-postgres/sinker"
-	"github.com/streamingfast/substreams/client"
-	"github.com/streamingfast/substreams/manifest"
 	"go.uber.org/zap"
 )
 
-var SinkRunCmd = Command(sinkRunE,
+var sinkRunCmd = Command(sinkRunE,
 	"run <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
-	"Runs  extractor code",
+	"Runs Postgres sink process",
 	RangeArgs(4, 5),
 	Flags(func(flags *pflag.FlagSet) {
-		flags.BoolP("insecure", "k", false, "Skip certificate validation on GRPC connection")
-		flags.BoolP("plaintext", "p", false, "Establish GRPC connection in plaintext")
-		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
-		flags.Int("undo-buffer-size", 12, "Number of blocks to keep buffered to handle fork reorganizations")
-		flags.Duration("live-block-time-delta", 300*time.Second, "Consider chain live if block time is within this number of seconds of current time")
-		flags.Bool("development-mode", false, "Enable development mode, use it for testing purpose only, should not be used for production workload")
-		flags.Bool("irreversible-only", false, "Get only irreversible blocks")
-		flags.Bool("infinite-retry", false, "Default behavior is to retry 15 times spanning approximatively 5m before exiting with an error, activating this flag will retry forever")
+		sink.AddFlagsToSet(flags)
 
+		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
 	}),
-	AfterAllHook(func(_ *cobra.Command) {
-		sinker.RegisterMetrics()
-	}),
+	OnCommandErrorLogAndExit(zlog),
 )
 
 func sinkRunE(cmd *cobra.Command, args []string) error {
 	app := shutter.New()
+
+	sink.RegisterMetrics()
+	sinker.RegisterMetrics()
 
 	ctx, cancelApp := context.WithCancel(cmd.Context())
 	app.OnTerminating(func(_ error) {
@@ -56,15 +50,8 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		blockRange = args[4]
 	}
 
-	zlog.Info("sink from psql",
-		zap.String("dsn", psqlDSN),
-		zap.String("endpoint", endpoint),
-		zap.String("manifest_path", manifestPath),
-		zap.String("output_module_name", outputModuleName),
-		zap.String("block_range", blockRange),
-	)
-
-	dbLoader, err := db.NewLoader(psqlDSN, zlog, tracer)
+	flushInterval := viper.GetDuration("run-flush-interval")
+	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}
@@ -74,118 +61,68 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		if errors.As(err, &e) {
 			fmt.Println("Error validating the cursors table: ", e.Error())
 			fmt.Println("You can use the following sql schema to create a cursors table")
-			fmt.Println(`
-create table cursors
-(
-	id         bigserial not null constraint cursor_pk primary key,
-	cursors    text,
-	block_num  bigint,
-	block_id   text
-);
-			`)
+			fmt.Println(Dedent(`
+				create table cursors
+				(
+					id         bigserial not null constraint cursor_pk primary key,
+					cursors    text,
+					block_num  bigint,
+					block_id   text
+				);
+			`))
 			return fmt.Errorf("invalid cursors table")
 		}
 		return fmt.Errorf("load psql table: %w", err)
 	}
 
-	zlog.Info("reading substreams manifest", zap.String("manifest_path", manifestPath))
-	pkg, err := manifest.NewReader(manifestPath).Read()
-	if err != nil {
-		return fmt.Errorf("read manifest: %w", err)
-	}
-
-	graph, err := manifest.NewModuleGraph(pkg.Modules.Modules)
-	if err != nil {
-		return fmt.Errorf("create substreams moduel graph: %w", err)
-	}
-
-	zlog.Info("validating output store", zap.String("output_store", outputModuleName))
-	module, err := graph.Module(outputModuleName)
-	if err != nil {
-		return fmt.Errorf("get output module %q: %w", outputModuleName, err)
-	}
-	if module.GetKindMap() == nil {
-		return fmt.Errorf("ouput module %q is *not* of  type 'Mapper'", outputModuleName)
-	}
-
-	if module.Output.Type != "proto:sf.substreams.sink.database.v1.DatabaseChanges" {
-		return fmt.Errorf("postgresql sync only supports maps with output type 'proto:sf.substreams.sink.database.v1.DatabaseChanges'")
-	}
-	hashes := manifest.NewModuleHashes()
-	outputModuleHash := hashes.HashModule(pkg.Modules, module, graph)
-
-	resolvedStartBlock, resolvedStopBlock, err := readBlockRange(module, blockRange)
-	if err != nil {
-		return fmt.Errorf("resolve block range: %w", err)
-	}
-	zlog.Info("resolved block range",
-		zap.Int64("start_block", resolvedStartBlock),
-		zap.Uint64("stop_block", resolvedStopBlock),
-	)
-
-	apiToken := readAPIToken()
-
-	config := &sinker.Config{
-		DBLoader:           dbLoader,
-		BlockRange:         blockRange,
-		Pkg:                pkg,
-		OutputModule:       module,
-		OutputModuleName:   outputModuleName,
-		OutputModuleHash:   outputModuleHash,
-		FlushInterval:      viper.GetInt("run-flush-interval"),
-		UndoBufferSize:     viper.GetInt("run-undo-buffer-size"),
-		LiveBlockTimeDelta: viper.GetDuration("run-live-block-time-delta"),
-		ClientConfig: client.NewSubstreamsClientConfig(
-			endpoint,
-			apiToken,
-			viper.GetBool("run-insecure"),
-			viper.GetBool("run-plaintext"),
-		),
-		SubstreamsDevelopmentMode: viper.GetBool("run-development-mode"),
-		IrreversibleOnly:          viper.GetBool("run-irreversible-only"),
-		InfiniteRetry:             viper.GetBool("run-infinite-retry"),
-	}
-
-	postgresSinker, err := sinker.New(
-		config,
+	sink, err := sink.NewFromViper(
+		cmd,
+		"sf.substreams.sink.database.v1.DatabaseChanges",
+		endpoint, manifestPath, outputModuleName, blockRange,
 		zlog,
 		tracer,
 	)
 	if err != nil {
 		return fmt.Errorf("unable to setup sinker: %w", err)
 	}
-	postgresSinker.OnTerminating(app.Shutdown)
 
+	postgresSinker, err := sinker.New(sink, dbLoader, zlog, tracer)
+	if err != nil {
+		return fmt.Errorf("unable to setup postgres sinker: %w", err)
+	}
+
+	postgresSinker.OnTerminating(app.Shutdown)
 	app.OnTerminating(func(err error) {
-		zlog.Info("application terminating shutting down sinker")
 		postgresSinker.Shutdown(err)
 	})
 
 	go func() {
-		if err := postgresSinker.Start(ctx); err != nil {
-			zlog.Error("sinker failed", zap.Error(err))
-			postgresSinker.Shutdown(err)
-		}
+		postgresSinker.Run(ctx)
 	}()
 
-	signalHandler := derr.SetupSignalHandler(0 * time.Second)
 	zlog.Info("ready, waiting for signal to quit")
+
+	signalHandler, isSignaled, _ := cli.SetupSignalHandler(0*time.Second, zlog)
 	select {
 	case <-signalHandler:
-		zlog.Info("received termination signal, quitting application")
 		go app.Shutdown(nil)
+		break
 	case <-app.Terminating():
-		NoError(app.Err(), "application shutdown unexpectedly, quitting")
+		zlog.Info("run terminating", zap.Bool("from_signal", isSignaled.Load()), zap.Bool("with_error", app.Err() != nil))
+		break
 	}
 
-	zlog.Info("waiting for app termination")
+	zlog.Info("waiting for run termination")
 	select {
 	case <-app.Terminated():
-	case <-ctx.Done():
 	case <-time.After(30 * time.Second):
-		zlog.Error("application did not terminated within 30s, forcing exit")
+		zlog.Warn("application did not terminate within 30s")
 	}
 
-	zlog.Info("app terminated")
+	if err := app.Err(); err != nil {
+		return err
+	}
+
+	zlog.Info("run terminated gracefully")
 	return nil
 }

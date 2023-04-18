@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/jimsmart/schema"
 	"github.com/streamingfast/logging"
@@ -24,15 +25,17 @@ type Loader struct {
 	database         string
 	schema           string
 	entries          map[string]map[string]*Operation
-	EntriesCount     uint64
+	entriesCount     uint64
 	tables           map[string]map[string]reflect.Type
 	tablePrimaryKeys map[string]string
+
+	flushInterval time.Duration
 
 	logger *zap.Logger
 	tracer logging.Tracer
 }
 
-func NewLoader(psqlDsn string, logger *zap.Logger, tracer logging.Tracer) (*Loader, error) {
+func NewLoader(psqlDsn string, flushInterval time.Duration, logger *zap.Logger, tracer logging.Tracer) (*Loader, error) {
 	dsn, err := parseDSN(psqlDsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
@@ -43,6 +46,14 @@ func NewLoader(psqlDsn string, logger *zap.Logger, tracer logging.Tracer) (*Load
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
 
+	logger.Debug("created new DB loader",
+		zap.Duration("flush_interval", flushInterval),
+		zap.String("database", dsn.database),
+		zap.String("schema", dsn.schema),
+		zap.String("host", dsn.host),
+		zap.Int64("port", dsn.port),
+	)
+
 	return &Loader{
 		DB:               db,
 		database:         dsn.database,
@@ -50,9 +61,18 @@ func NewLoader(psqlDsn string, logger *zap.Logger, tracer logging.Tracer) (*Load
 		entries:          map[string]map[string]*Operation{},
 		tables:           map[string]map[string]reflect.Type{},
 		tablePrimaryKeys: map[string]string{},
+		flushInterval:    flushInterval,
 		logger:           logger,
 		tracer:           tracer,
 	}, nil
+}
+
+func (l *Loader) EntriesCount() uint64 {
+	return l.entriesCount
+}
+
+func (l *Loader) FlushInterval() time.Duration {
+	return l.flushInterval
 }
 
 func (l *Loader) LoadTables() error {
@@ -168,8 +188,7 @@ func (l *Loader) HasTable(tableName string) bool {
 }
 
 func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
-	//TODO implement me
-	encoder.AddUint64("entries_count", l.EntriesCount)
+	encoder.AddUint64("entries_count", l.entriesCount)
 	return nil
 }
 

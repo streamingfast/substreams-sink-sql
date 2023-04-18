@@ -33,7 +33,7 @@ func (l *Loader) Insert(tableName string, primaryKey string, data map[string]str
 	// it gets created
 	data[l.tablePrimaryKeys[tableName]] = primaryKey
 	l.entries[tableName][primaryKey] = l.newInsertOperation(tableName, primaryKey, data)
-	l.EntriesCount++
+	l.entriesCount++
 	return nil
 }
 
@@ -65,7 +65,7 @@ func (l *Loader) Update(tableName string, primaryKey string, data map[string]str
 		l.entries[tableName][primaryKey] = op
 		return nil
 	} else {
-		l.EntriesCount++
+		l.entriesCount++
 	}
 
 	if l.tracer.Enabled() {
@@ -96,7 +96,7 @@ func (l *Loader) Delete(tableName string, primaryKey string) error {
 			l.logger.Debug("primary key entry never existed for table", zap.String("primary_key", primaryKey), zap.String("table_name", tableName))
 		}
 
-		l.EntriesCount++
+		l.entriesCount++
 	}
 
 	if l.tracer.Enabled() {
