@@ -13,7 +13,8 @@ builds:
       - CC=o64-clang
       - CXX=o64-clang++
     flags:
-      - -trimpath -mod=readonly
+      - -trimpath
+      - -mod=readonly
     ldflags:
       - -s -w -X main.version={{.Version}}
 
@@ -28,7 +29,8 @@ builds:
       - CC=oa64-clang
       - CXX=oa64-clang++
     flags:
-      - -trimpath -mod=readonly
+      - -trimpath
+      - -mod=readonly
     ldflags:
       - -s -w -X main.version={{.Version}}
 
@@ -43,7 +45,8 @@ builds:
       - CC=x86_64-linux-gnu-gcc
       - CXX=x86_64-linux-gnu-g++
     flags:
-      - -trimpath -mod=readonly
+      - -trimpath
+      - -mod=readonly
     ldflags:
       - -s -w -X main.version={{.Version}}
 
