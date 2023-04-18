@@ -1,2 +1,5 @@
+.envrc
+.env.release
 .idea
 .DS_Store
+.release_notes.md
