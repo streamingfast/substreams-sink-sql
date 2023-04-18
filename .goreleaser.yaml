@@ -3,8 +3,8 @@ env_files:
 
 builds:
   - id: darwin-amd64
-    main: ./cmd//Users/maoueh/work/sf
-    binary: /Users/maoueh/work/sf
+    main: ./cmd/substreams-sink-postgres
+    binary: substreams-sink-postgres
     goos:
       - darwin
     goarch:
@@ -18,8 +18,8 @@ builds:
       - -s -w -X main.version={{.Version}}
 
   - id: darwin-arm64
-    main: ./cmd//Users/maoueh/work/sf
-    binary: /Users/maoueh/work/sf
+    main: ./cmd/substreams-sink-postgres
+    binary: substreams-sink-postgres
     goos:
       - darwin
     goarch:
@@ -33,8 +33,8 @@ builds:
       - -s -w -X main.version={{.Version}}
 
   - id: linux-amd64
-    main: ./cmd//Users/maoueh/work/sf
-    binary: /Users/maoueh/work/sf
+    main: ./cmd/substreams-sink-postgres
+    binary: substreams-sink-postgres
     goos:
       - linux
     goarch:
@@ -48,7 +48,7 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - id: /Users/maoueh/work/sf
+  - id: substreams-sink-postgres
     builds:
       - darwin-amd64
       - darwin-arm64
@@ -56,8 +56,8 @@ archives:
     name_template: >-
       {{ .ProjectName }}_
       {{- tolower .Os }}_
-      {{- if eq .Arch &#34;amd64&#34; }}x86_64
-      {{- else if eq .Arch &#34;386&#34; }}i386
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
       {{- else }}{{ tolower .Arch }}{{ end }}
     format: tar.gz
     files:
@@ -84,15 +84,15 @@ release:
   target_commitish: '{{ .Commit }}'
 
 brews:
-  - name: /Users/maoueh/work/sf
+  - name: substreams-sink-postgres
     ids:
-    - /Users/maoueh/work/sf
+    - substreams-sink-postgres
     tap:
       owner: streamingfast
       name: homebrew-tap
     commit_author:
       name: goreleaserbot
       email: goreleaser@streamingfast.io
-    homepage: "https://github.com/streamingfast//Users/maoueh/work/sf"
-    description: "StreamingFast CLI for '/Users/maoueh/work/sf'"
+    homepage: "https://github.com/streamingfast/substreams-sink-postgres"
+    description: "StreamingFast CLI for 'substreams-sink-postgres'"
     license: "Apache-2.0"
