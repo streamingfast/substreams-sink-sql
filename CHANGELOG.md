@@ -17,9 +17,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added `--irreversible-only` to only deal with final (irreversible) blocks.
 
-### Fixed
-
-- Fixed foldouts in Dutch translation
-
-[unreleased]: https://github.com/olivierlacan/keep-a-changelog/compare/HEAD
-
