@@ -11,7 +11,7 @@ require (
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20221209193439-bff11742bf4c
 	github.com/streamingfast/substreams v1.0.3-0.20230413172658-137b8e69b6de
-	github.com/streamingfast/substreams-sink v0.1.1-0.20230420161857-72fa2fe5072f
+	github.com/streamingfast/substreams-sink v0.2.0
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.23.0
 	google.golang.org/protobuf v1.29.1
