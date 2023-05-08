@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.0.1
+
+### Added
+
+- Added proper escaping for table & column names to allow keyword column names to use keywords as column names such as `to` and `from` etc.
+
 ## v2.0.0
 
 ### Highlights
@@ -28,6 +34,7 @@ If you were using environment variable to configure the binary, note that the en
 - **Deprecated** The flag `--irreversible-only` is deprecated, use `--final-blocks-only` instead.
 
 ### Added
+
 
 - Added command `substreams-sink-postgres tools --dsn <dsn> cursor read` to read the current cursors stored in your database.
 

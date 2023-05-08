@@ -53,7 +53,7 @@ func TestEscapeString(t *testing.T) {
 		}, {
 			stringIn:       "table\nvaluesValue",
 			escapeType:     "value",
-			stringExpected: "'table\\\nvaluesValue'",
+			stringExpected: "'table\\\\\nvaluesValue'",
 		},
 	}
 
