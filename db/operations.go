@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type TypeGetter func(tableName string, columnName string) (reflect.Type, error)
@@ -24,16 +25,6 @@ const (
 
 var reservedKeywords = map[string]bool{
 	"ALL": true, "ANALYSE": true, "ANALYZE": true, "AND": true, "ANY": true, "ARRAY": true, "AS": true, "ASC": true, "ASYMMETRIC": true, "AUTHORIZATION": true, "BINARY": true, "BOTH": true, "CASE": true, "CAST": true, "CHECK": true, "COLLATE": true, "COLLATION": true, "COLUMN": true, "CONCURRENTLY": true, "CONSTRAINT": true, "CREATE": true, "CROSS": true, "CURRENT_CATALOG": true, "CURRENT_DATE": true, "CURRENT_ROLE": true, "CURRENT_SCHEMA": true, "CURRENT_TIME": true, "CURRENT_TIMESTAMP": true, "CURRENT_USER": true, "DEFAULT": true, "DEFERRABLE": true, "DESC": true, "DISTINCT": true, "DO": true, "ELSE": true, "END": true, "EXCEPT": true, "FALSE": true, "FETCH": true, "FOR": true, "FOREIGN": true, "FREEZE": true, "FROM": true, "FULL": true, "GRANT": true, "GROUP": true, "HAVING": true, "ILIKE": true, "IN": true, "INITIALLY": true, "INNER": true, "INTERSECT": true, "INTO": true, "IS": true, "ISNULL": true, "JOIN": true, "LATERAL": true, "LEADING": true, "LEFT": true, "LIKE": true, "LIMIT": true, "LOCALTIME": true, "LOCALTIMESTAMP": true, "NATURAL": true, "NOT": true, "NOTNULL": true, "NULL": true, "OFFSET": true, "ON": true, "ONLY": true, "OR": true, "ORDER": true, "OUTER": true, "OVERLAPS": true, "PLACING": true, "PRIMARY": true, "REFERENCES": true, "RETURNING": true, "RIGHT": true, "SELECT": true, "SESSION_USER": true, "SIMILAR": true, "SOME": true, "SYMMETRIC": true, "TABLE": true, "TABLESAMPLE": true, "THEN": true, "TO": true, "TRAILING": true, "TRUE": true, "UNION": true, "UNIQUE": true, "USER": true, "USING": true, "VARIADIC": true, "VERBOSE": true, "WHEN": true, "WHERE": true, "WINDOW": true, "WITH": true,
-}
-
-var badCharacters = map[string]bool{
-	"/":  true,
-	"\\": true,
-	"_":  true,
-	"%":  true,
-	"\n": true,
-	"\t": true,
-	"\r": true,
 }
 
 type Operation struct {
@@ -125,7 +116,7 @@ func (o *Operation) query(typeGetter TypeGetter) (string, error) {
 
 func prepareColValues(tableName string, colValues map[string]string, typeGetter TypeGetter) (columns []string, values []string, err error) {
 	for columnName, value := range colValues {
-		escapedColumn, err := EscapeString(columnName, "column")
+		escapedColumn, err := escapeString(columnName, "column")
 		if err != nil {
 			return nil, nil, fmt.Errorf("escaping column from table %s for column %q: %w", tableName, columnName, err)
 		}
@@ -142,7 +133,7 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", tableName, columnName, value, err)
 		}
 
-		escapedValue, err := EscapeString(normalizedValue, "value")
+		escapedValue, err := escapeString(normalizedValue, "value")
 		if err != nil {
 			return nil, nil, fmt.Errorf("escpaping sql value from table %s for column %q, normalized value %q: %w", tableName, columnName, normalizedValue, err)
 		}
@@ -182,22 +173,57 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	}
 }
 
-func EscapeString(valueToEscape string, escapeType string) (string, error) {
+func escapeString(valueToEscape string, escapeType string) (string, error) {
 
-	for badCharacter := range badCharacters {
-		valueToEscape = strings.ReplaceAll(valueToEscape, badCharacter, fmt.Sprintf("\\%s", badCharacter))
-	}
-
-	valueToEscape = strings.ReplaceAll(valueToEscape, "\"", "\\\"")
-	valueToEscape = strings.ReplaceAll(valueToEscape, "'", "\\'")
-
+	escaped := replaceAllBadChars(valueToEscape)
 	if escapeType == "column" {
 		if reservedKeywords[strings.ToUpper(valueToEscape)] {
-			valueToEscape = fmt.Sprintf("\"%s\"", valueToEscape)
+			escaped = fmt.Sprintf(`\\\\"%s\\\\"`, escaped)
 		}
-		return valueToEscape, nil
+		return escaped, nil
 	}
 
-	valueToEscape = fmt.Sprintf("'%s'", valueToEscape)
-	return valueToEscape, nil
+	escaped = fmt.Sprintf(`\\\\'%s\\\\'`, escaped)
+	return escaped, nil
+}
+
+func replaceAllBadChars(s string) string {
+	var replacements = []struct {
+		from string
+		to   string
+	}{
+		{`/`, `\\\\/`},
+		{`\\`, `\\\\\\`},
+		{`%`, `\\\\%`},
+		{`_`, `\\\\_`},
+		{`\n`, `\\\\\n`},
+		{`\r`, `\\\\\r`},
+		{`\t`, `\\\\\t`},
+		{`'`, `\\\\'`},
+		{`"`, `\\\\"`},
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+
+	i := 0
+	for i < len(s) {
+		replaced := false
+		for _, repl := range replacements {
+			if strings.HasPrefix(s[i:], repl.from) {
+				b.WriteString(repl.to)
+				i += len(repl.from)
+				replaced = true
+				break
+			}
+		}
+
+		if !replaced {
+			r, w := utf8.DecodeRuneInString(s[i:])
+			b.WriteRune(r)
+			i += w
+		}
+	}
+
+	return b.String()
 }
