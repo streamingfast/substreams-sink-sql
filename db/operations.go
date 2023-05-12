@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 type TypeGetter func(tableName string, columnName string) (reflect.Type, error)
@@ -116,10 +115,7 @@ func (o *Operation) query(typeGetter TypeGetter) (string, error) {
 
 func prepareColValues(tableName string, colValues map[string]string, typeGetter TypeGetter) (columns []string, values []string, err error) {
 	for columnName, value := range colValues {
-		escapedColumn, err := escapeString(columnName, "column")
-		if err != nil {
-			return nil, nil, fmt.Errorf("escaping column from table %s for column %q: %w", tableName, columnName, err)
-		}
+		escapedColumn := escapeString(columnName, "column")
 
 		columns = append(columns, escapedColumn)
 
@@ -133,10 +129,7 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", tableName, columnName, value, err)
 		}
 
-		escapedValue, err := escapeString(normalizedValue, "value")
-		if err != nil {
-			return nil, nil, fmt.Errorf("escpaping sql value from table %s for column %q, normalized value %q: %w", tableName, columnName, normalizedValue, err)
-		}
+		escapedValue := escapeString(normalizedValue, "value")
 
 		values = append(values, escapedValue)
 	}
@@ -173,57 +166,27 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	}
 }
 
-func escapeString(valueToEscape string, escapeType string) (string, error) {
+var charsToEscape = []string{"\\", "\n", "\r", "\t", `'`, `"`, "\b", "\f", "%", "_"}
 
-	escaped := replaceAllBadChars(valueToEscape)
+func escapeString(valueToEscape string, escapeType string) string {
+	escaped := valueToEscape
+
 	if escapeType == "column" {
+		if strings.Contains(valueToEscape, `"`) {
+			escaped = strings.ReplaceAll(valueToEscape, `"`, `""`)
+		}
+		escaped = fmt.Sprintf(`"%s"`, escaped)
+
 		if reservedKeywords[strings.ToUpper(valueToEscape)] {
-			escaped = fmt.Sprintf(`\\\\"%s\\\\"`, escaped)
+			escaped = fmt.Sprintf(`"%s"`, valueToEscape)
 		}
-		return escaped, nil
+		return escaped
 	}
 
-	escaped = fmt.Sprintf(`\\\\'%s\\\\'`, escaped)
-	return escaped, nil
-}
-
-func replaceAllBadChars(s string) string {
-	var replacements = []struct {
-		from string
-		to   string
-	}{
-		{`/`, `\\\\/`},
-		{`\\`, `\\\\\\`},
-		{`%`, `\\\\%`},
-		{`_`, `\\\\_`},
-		{`\n`, `\\\\\n`},
-		{`\r`, `\\\\\r`},
-		{`\t`, `\\\\\t`},
-		{`'`, `\\\\'`},
-		{`"`, `\\\\"`},
+	if strings.Contains(valueToEscape, `'`) {
+		escaped = strings.ReplaceAll(valueToEscape, `'`, `''`)
 	}
+	escaped = fmt.Sprintf(`'%s'`, escaped)
 
-	var b strings.Builder
-	b.Grow(len(s))
-
-	i := 0
-	for i < len(s) {
-		replaced := false
-		for _, repl := range replacements {
-			if strings.HasPrefix(s[i:], repl.from) {
-				b.WriteString(repl.to)
-				i += len(repl.from)
-				replaced = true
-				break
-			}
-		}
-
-		if !replaced {
-			r, w := utf8.DecodeRuneInString(s[i:])
-			b.WriteRune(r)
-			i += w
-		}
-	}
-
-	return b.String()
+	return escaped
 }
