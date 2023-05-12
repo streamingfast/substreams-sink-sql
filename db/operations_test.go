@@ -121,11 +121,7 @@ func TestEscapeValues(t *testing.T) {
 				fmt.Printf("%s:  %s\n\n", str, col)
 			}
 
-			deleteStatement := `delete from "test";`
-			_, err = tx.ExecContext(ctx, deleteStatement)
-			require.NoError(tt, err)
-
-			err = tx.Commit()
+			err = tx.Rollback()
 			require.NoError(tt, err)
 		})
 	}
