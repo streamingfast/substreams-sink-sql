@@ -43,7 +43,6 @@ func TestEscapeColumns(t *testing.T) {
 		fmt.Sprintf(`create table "test" (%s)`, strings.Join(slices.Map(colInputs, func(str string) string {
 			return fmt.Sprintf("%s text", escapeString(str, "column"))
 		}), ","))
-	fmt.Println(createStatement)
 
 	_, err = tx.ExecContext(ctx, createStatement)
 	require.NoError(t, err)
@@ -108,18 +107,20 @@ func TestEscapeValues(t *testing.T) {
 			_, err = tx.ExecContext(ctx, insertStatement)
 			require.NoError(tt, err)
 
-			fmt.Println(insertStatement)
+			checkStatement := `select "col" from "test";`
+			row := tx.QueryRowContext(ctx, checkStatement)
+			var value string
+			err = row.Scan(&value)
+			require.NoError(tt, err)
+			require.Equal(tt, str, value, "Inserted value is not equal to the expected value")
 
 			selectStatement := `select * from "test";`
-			rows, err := tx.QueryContext(ctx, selectStatement)
+			_, err = tx.QueryContext(ctx, selectStatement)
 			require.NoError(tt, err)
 
-			for rows.Next() {
-				var col string
-				err = rows.Scan(&col)
-				require.NoError(tt, err)
-				fmt.Printf("%s:  %s\n\n", str, col)
-			}
+			deleteStatement := `delete from "test";`
+			_, err = tx.ExecContext(ctx, deleteStatement)
+			require.NoError(tt, err)
 
 			err = tx.Rollback()
 			require.NoError(tt, err)

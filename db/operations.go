@@ -166,8 +166,6 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	}
 }
 
-var charsToEscape = []string{"\\", "\n", "\r", "\t", `'`, `"`, "\b", "\f", "%", "_"}
-
 func escapeString(valueToEscape string, escapeType string) string {
 	escaped := valueToEscape
 
