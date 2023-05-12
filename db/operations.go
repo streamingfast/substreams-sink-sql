@@ -175,12 +175,7 @@ func escapeString(valueToEscape string, escapeType string) string {
 		if strings.Contains(valueToEscape, `"`) {
 			escaped = strings.ReplaceAll(valueToEscape, `"`, `""`)
 		}
-		escaped = fmt.Sprintf(`"%s"`, escaped)
-
-		if reservedKeywords[strings.ToUpper(valueToEscape)] {
-			escaped = fmt.Sprintf(`"%s"`, valueToEscape)
-		}
-		return escaped
+		return `"` + escaped + `"`
 	}
 
 	if strings.Contains(valueToEscape, `'`) {
