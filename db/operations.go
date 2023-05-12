@@ -181,7 +181,6 @@ func escapeString(valueToEscape string, escapeType string) string {
 	if strings.Contains(valueToEscape, `'`) {
 		escaped = strings.ReplaceAll(valueToEscape, `'`, `''`)
 	}
-	escaped = fmt.Sprintf(`'%s'`, escaped)
 
-	return escaped
+	return `'` + escaped + `'`
 }
