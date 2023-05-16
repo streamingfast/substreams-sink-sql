@@ -79,42 +79,63 @@ func (o *Operation) mergeData(newData map[string]string) error {
 }
 
 func (o *Operation) query(typeGetter TypeGetter) (string, error) {
-	if o.opType == OperationTypeDelete {
-		return fmt.Sprintf("DELETE FROM %s.%s WHERE %s = %s", o.schemaName, o.tableName, o.primaryKeyColumnName, o.primaryKey), nil
+	var columns, values []string
+	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
+		var err error
+		columns, values, err = prepareColValues(o.tableName, o.data, typeGetter)
+		if err != nil {
+			return "", fmt.Errorf("preparing column & values: %w", err)
+		}
 	}
 
-	columns, values, err := prepareColValues(o.tableName, o.data, typeGetter)
-	if err != nil {
-		return "", fmt.Errorf("preparing column-values: %w", err)
-	}
-	if o.opType == OperationTypeInsert {
+	switch o.opType {
+	case OperationTypeInsert:
 		return fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES (%s)",
 			o.schemaName,
 			o.tableName,
 			strings.Join(columns, ","),
 			strings.Join(values, ","),
 		), nil
+
+	case OperationTypeUpdate:
+		updates := make([]string, len(columns))
+		for i := 0; i < len(columns); i++ {
+			updates[i] = fmt.Sprintf("%s=%s", columns[i], values[i])
+		}
+
+		updatesString := strings.Join(updates, ", ")
+		return fmt.Sprintf("UPDATE %s.%s SET %s WHERE %s = %s",
+			escapeIdentifier(o.schemaName),
+			escapeIdentifier(o.tableName),
+			updatesString,
+			escapeIdentifier(o.primaryKeyColumnName),
+			escapeStringValue(o.primaryKey),
+		), nil
+
+	case OperationTypeDelete:
+		return fmt.Sprintf("DELETE FROM %s.%s WHERE %s = %s",
+			escapeIdentifier(o.schemaName),
+			escapeIdentifier(o.tableName),
+			escapeIdentifier(o.primaryKeyColumnName),
+			escapeStringValue(o.primaryKey),
+		), nil
+
+	default:
+		panic(fmt.Errorf("unknown operation type %q", o.opType))
 	}
 
-	var updates []string
-	for i := 0; i < len(columns); i++ {
-		// FIXME: merely using %s for key can lead to SQL injection. I
-		// know, you should trust the Substreams you're putting in
-		// front, but still.
-		update := fmt.Sprintf("%s=%s", columns[i], values[i])
-		updates = append(updates, update)
-	}
-
-	updatesString := strings.Join(updates, ", ")
-	return fmt.Sprintf("UPDATE %s.%s SET %s WHERE %s = '%s'", o.schemaName, o.tableName, updatesString, o.primaryKeyColumnName, o.primaryKey), nil
 }
 
 func prepareColValues(tableName string, colValues map[string]string, typeGetter TypeGetter) (columns []string, values []string, err error) {
+	if len(colValues) == 0 {
+		return
+	}
+
+	columns = make([]string, len(colValues))
+	values = make([]string, len(colValues))
+
+	i := 0
 	for columnName, value := range colValues {
-		escapedColumn := escapeIdentifier(columnName)
-
-		columns = append(columns, escapedColumn)
-
 		valueType, err := typeGetter(tableName, columnName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get column type %s.%s: %w", tableName, columnName, err)
@@ -125,27 +146,32 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", tableName, columnName, value, err)
 		}
 
-		escapedValue := escapeStringValue(normalizedValue)
+		columns[i] = escapeIdentifier(columnName)
+		values[i] = normalizedValue
 
-		values = append(values, escapedValue)
+		i++
 	}
 	return
 }
 
 // Format based on type, value returned unescaped
 func normalizeValueType(value string, valueType reflect.Type) (string, error) {
-
 	switch valueType.Kind() {
 	case reflect.String:
-		return value, nil
+		return escapeStringValue(value), nil
+
 	case reflect.Bool:
 		return fmt.Sprintf("'%s'", value), nil
+
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return value, nil
+
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return value, nil
+
 	case reflect.Float32, reflect.Float64:
 		return value, nil
+
 	case reflect.Struct:
 		if valueType == reflect.TypeOf(time.Time{}) {
 			i, err := strconv.Atoi(value)
@@ -157,6 +183,7 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 			return fmt.Sprintf("'%s'", v), nil
 		}
 		return "", fmt.Errorf("unsupported struct type %s", valueType)
+
 	default:
 		return "", fmt.Errorf("unsupported type %s", valueType)
 	}

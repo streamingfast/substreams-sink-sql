@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/bobg/go-generics/v2/slices"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,6 +126,43 @@ func TestEscapeValues(t *testing.T) {
 
 			err = tx.Rollback()
 			require.NoError(tt, err)
+		})
+	}
+}
+
+func Test_prepareColValues(t *testing.T) {
+	boolTypeGetter := func(tableName string, columnName string) (reflect.Type, error) { return reflect.TypeOf(true), nil }
+
+	type args struct {
+		tableName  string
+		colValues  map[string]string
+		typeGetter TypeGetter
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantColumns []string
+		wantValues  []string
+		assertion   require.ErrorAssertionFunc
+	}{
+		{
+			"bool true",
+			args{
+				"test",
+				map[string]string{"col": "true"},
+				boolTypeGetter,
+			},
+			[]string{`"col"`},
+			[]string{`'true'`},
+			require.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotColumns, gotValues, err := prepareColValues(tt.args.tableName, tt.args.colValues, tt.args.typeGetter)
+			tt.assertion(t, err)
+			assert.Equal(t, tt.wantColumns, gotColumns)
+			assert.Equal(t, tt.wantValues, gotValues)
 		})
 	}
 }
