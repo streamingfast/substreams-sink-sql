@@ -22,10 +22,6 @@ const (
 	OperationTypeDelete OperationType = "DELETE"
 )
 
-var reservedKeywords = map[string]bool{
-	"ALL": true, "ANALYSE": true, "ANALYZE": true, "AND": true, "ANY": true, "ARRAY": true, "AS": true, "ASC": true, "ASYMMETRIC": true, "AUTHORIZATION": true, "BINARY": true, "BOTH": true, "CASE": true, "CAST": true, "CHECK": true, "COLLATE": true, "COLLATION": true, "COLUMN": true, "CONCURRENTLY": true, "CONSTRAINT": true, "CREATE": true, "CROSS": true, "CURRENT_CATALOG": true, "CURRENT_DATE": true, "CURRENT_ROLE": true, "CURRENT_SCHEMA": true, "CURRENT_TIME": true, "CURRENT_TIMESTAMP": true, "CURRENT_USER": true, "DEFAULT": true, "DEFERRABLE": true, "DESC": true, "DISTINCT": true, "DO": true, "ELSE": true, "END": true, "EXCEPT": true, "FALSE": true, "FETCH": true, "FOR": true, "FOREIGN": true, "FREEZE": true, "FROM": true, "FULL": true, "GRANT": true, "GROUP": true, "HAVING": true, "ILIKE": true, "IN": true, "INITIALLY": true, "INNER": true, "INTERSECT": true, "INTO": true, "IS": true, "ISNULL": true, "JOIN": true, "LATERAL": true, "LEADING": true, "LEFT": true, "LIKE": true, "LIMIT": true, "LOCALTIME": true, "LOCALTIMESTAMP": true, "NATURAL": true, "NOT": true, "NOTNULL": true, "NULL": true, "OFFSET": true, "ON": true, "ONLY": true, "OR": true, "ORDER": true, "OUTER": true, "OVERLAPS": true, "PLACING": true, "PRIMARY": true, "REFERENCES": true, "RETURNING": true, "RIGHT": true, "SELECT": true, "SESSION_USER": true, "SIMILAR": true, "SOME": true, "SYMMETRIC": true, "TABLE": true, "TABLESAMPLE": true, "THEN": true, "TO": true, "TRAILING": true, "TRUE": true, "UNION": true, "UNIQUE": true, "USER": true, "USING": true, "VARIADIC": true, "VERBOSE": true, "WHEN": true, "WHERE": true, "WINDOW": true, "WITH": true,
-}
-
 type Operation struct {
 	schemaName           string
 	tableName            string
@@ -115,7 +111,7 @@ func (o *Operation) query(typeGetter TypeGetter) (string, error) {
 
 func prepareColValues(tableName string, colValues map[string]string, typeGetter TypeGetter) (columns []string, values []string, err error) {
 	for columnName, value := range colValues {
-		escapedColumn := escapeString(columnName, "column")
+		escapedColumn := escapeIdentifier(columnName)
 
 		columns = append(columns, escapedColumn)
 
@@ -129,7 +125,7 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", tableName, columnName, value, err)
 		}
 
-		escapedValue := escapeString(normalizedValue, "value")
+		escapedValue := escapeStringValue(normalizedValue)
 
 		values = append(values, escapedValue)
 	}
@@ -166,19 +162,19 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	}
 }
 
-func escapeString(valueToEscape string, escapeType string) string {
-	escaped := valueToEscape
-
-	if escapeType == "column" {
-		if strings.Contains(valueToEscape, `"`) {
-			escaped = strings.ReplaceAll(valueToEscape, `"`, `""`)
-		}
-		return `"` + escaped + `"`
+func escapeIdentifier(valueToEscape string) string {
+	if strings.Contains(valueToEscape, `"`) {
+		valueToEscape = strings.ReplaceAll(valueToEscape, `"`, `""`)
 	}
 
+	return `"` + valueToEscape + `"`
+
+}
+
+func escapeStringValue(valueToEscape string) string {
 	if strings.Contains(valueToEscape, `'`) {
-		escaped = strings.ReplaceAll(valueToEscape, `'`, `''`)
+		valueToEscape = strings.ReplaceAll(valueToEscape, `'`, `''`)
 	}
 
-	return `'` + escaped + `'`
+	return `'` + valueToEscape + `'`
 }

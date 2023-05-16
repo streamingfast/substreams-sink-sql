@@ -3,11 +3,12 @@ package db
 import (
 	"context"
 	"fmt"
-	"github.com/bobg/go-generics/v2/slices"
-	"github.com/stretchr/testify/require"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/bobg/go-generics/v2/slices"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEscapeColumns(t *testing.T) {
@@ -39,12 +40,19 @@ func TestEscapeColumns(t *testing.T) {
 		`withsinglequote'after`,
 	}
 
-	createStatement :=
-		fmt.Sprintf(`create table "test" (%s)`, strings.Join(slices.Map(colInputs, func(str string) string {
-			return fmt.Sprintf("%s text", escapeString(str, "column"))
-		}), ","))
+	columnDefs := strings.Join(slices.Map(colInputs, func(str string) string {
+		return fmt.Sprintf("%s text", escapeIdentifier(str))
+	}), ",")
 
+	createStatement := fmt.Sprintf(`create table "test" (%s)`, columnDefs)
 	_, err = tx.ExecContext(ctx, createStatement)
+	require.NoError(t, err)
+
+	columns := strings.Join(slices.Map(colInputs, escapeIdentifier), ",")
+	values := strings.Join(slices.Map(colInputs, func(str string) string { return `'any'` }), ",")
+	insertStatement := fmt.Sprintf(`insert into "test" (%s) values (%s)`, columns, values)
+
+	_, err = tx.ExecContext(ctx, insertStatement)
 	require.NoError(t, err)
 
 	err = tx.Rollback()
@@ -103,7 +111,7 @@ func TestEscapeValues(t *testing.T) {
 			tx, err := dbLoader.DB.Begin()
 			require.NoError(t, err)
 
-			insertStatement := fmt.Sprintf(`insert into "test" ("col") values (%s);`, escapeString(str, "value"))
+			insertStatement := fmt.Sprintf(`insert into "test" ("col") values (%s);`, escapeStringValue(str))
 			_, err = tx.ExecContext(ctx, insertStatement)
 			require.NoError(tt, err)
 
@@ -113,14 +121,6 @@ func TestEscapeValues(t *testing.T) {
 			err = row.Scan(&value)
 			require.NoError(tt, err)
 			require.Equal(tt, str, value, "Inserted value is not equal to the expected value")
-
-			selectStatement := `select * from "test";`
-			_, err = tx.QueryContext(ctx, selectStatement)
-			require.NoError(tt, err)
-
-			deleteStatement := `delete from "test";`
-			_, err = tx.ExecContext(ctx, deleteStatement)
-			require.NoError(tt, err)
 
 			err = tx.Rollback()
 			require.NoError(tt, err)
