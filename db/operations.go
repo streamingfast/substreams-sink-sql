@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -154,6 +155,8 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 	return
 }
 
+var integerRegex = regexp.MustCompile(`^\d+$`)
+
 // Format based on type, value returned unescaped
 func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
@@ -174,18 +177,22 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 
 	case reflect.Struct:
 		if valueType == reflect.TypeOf(time.Time{}) {
-			i, err := strconv.Atoi(value)
-			if err != nil {
-				return "", fmt.Errorf("could not convert %s to int: %w", value, err)
+			if integerRegex.MatchString(value) {
+				i, err := strconv.Atoi(value)
+				if err != nil {
+					return "", fmt.Errorf("could not convert %s to int: %w", value, err)
+				}
+
+				return escapeStringValue(time.Unix(int64(i), 0).Format(time.RFC3339)), nil
 			}
 
-			v := time.Unix(int64(i), 0).Format(time.RFC3339)
-			return fmt.Sprintf("'%s'", v), nil
+			// It's a plain string, escape it and pass it to the database
+			return escapeStringValue(value), nil
 		}
 		return "", fmt.Errorf("unsupported struct type %s", valueType)
 
 	default:
-		return "", fmt.Errorf("unsupported type %s", valueType)
+		return "", fmt.Errorf("unsupported type %q", valueType)
 	}
 }
 
