@@ -28,7 +28,7 @@ main() {
 
   if [[ "$clean" == "true" || "$bootstrap" == "true" ]]; then
     echo "Creating tables"
-    $sink setup "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" "schema.sql"
+    $sink setup "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" "../../docs/tutorial/schema.sql"
   fi
 
   $sink run \

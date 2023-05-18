@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v2.1.0
+
+### Changed
+
+* Column's schema type that are not known by the `sql` library we know will now be transferred as-is to the database.
+
+  There is a lot of column's for which the `sql` library we use have to Go representation for by default. This is the case for example for the `numeric` column's type. Previously, this would be reported directly as an error, Now, we pass the received value from your Substreams unmodified to the database engine. It will be your responsibility to send the data in the right format accepted by the database. We send the value as-is, without escaping and without sanitization, so this is a risk if you don't control the Substreams.
 
 ### Added
 

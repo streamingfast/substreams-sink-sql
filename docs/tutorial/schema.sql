@@ -1,12 +1,11 @@
 create table block_meta
 (
     id          text not null constraint block_meta_pk primary key,
-    version      integer,
-    at        text,
-    number        text,
+    at          timestamp,
+    number      bigint,
     hash        text,
-    parent_hash        text,
-    timestamp        text
+    parent_hash text,
+    timestamp   timestamp
 );
 
 create table cursors

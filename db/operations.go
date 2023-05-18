@@ -156,6 +156,7 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 }
 
 var integerRegex = regexp.MustCompile(`^\d+$`)
+var reflectTypeTime = reflect.TypeOf(time.Time{})
 
 // Format based on type, value returned unescaped
 func normalizeValueType(value string, valueType reflect.Type) (string, error) {
@@ -176,7 +177,7 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 		return value, nil
 
 	case reflect.Struct:
-		if valueType == reflect.TypeOf(time.Time{}) {
+		if valueType == reflectTypeTime {
 			if integerRegex.MatchString(value) {
 				i, err := strconv.Atoi(value)
 				if err != nil {
@@ -189,10 +190,17 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 			// It's a plain string, escape it and pass it to the database
 			return escapeStringValue(value), nil
 		}
+
 		return "", fmt.Errorf("unsupported struct type %s", valueType)
 
 	default:
-		return "", fmt.Errorf("unsupported type %q", valueType)
+		// It's a column's type the schema parsing don't know how to represents as
+		// a Go type. In that case, we pass it unmodified to the database engine. It
+		// will be the responsibility of the one sending the data to correctly represent
+		// it in the way accepted by the database.
+		//
+		// In most cases, it going to just work.
+		return value, nil
 	}
 }
 
@@ -202,7 +210,6 @@ func escapeIdentifier(valueToEscape string) string {
 	}
 
 	return `"` + valueToEscape + `"`
-
 }
 
 func escapeStringValue(valueToEscape string) string {
