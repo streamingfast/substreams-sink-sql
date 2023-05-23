@@ -136,7 +136,20 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseCha
 			)
 		}
 
-		primaryKey := change.Pk
+		var primaryKey map[string]string
+		switch u := change.PrimaryKey.(type) {
+		case *pbddatabase.TableChange_Pk:
+			{
+				primaryKey, _ = s.loader.GetPrimaryKey(change.Table, u.Pk)
+			}
+		case *pbddatabase.TableChange_CompositePk:
+			{
+				primaryKey = u.CompositePk.Keys
+			}
+		default:
+			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
+		}
+
 		changes := map[string]string{}
 		for _, field := range change.Fields {
 			changes[field.Name] = field.NewValue

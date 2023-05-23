@@ -124,12 +124,7 @@ func (l *Loader) LoadTables() error {
 			return fmt.Errorf("get primary key: %w", err)
 		}
 
-		primaryKeyColumnName := "id"
-		if len(key) > 0 {
-			primaryKeyColumnName = key[0]
-		}
-
-		l.tables[tableName], err = NewTableInfo(schemaName, tableName, primaryKeyColumnName, columnByName)
+		l.tables[tableName], err = NewTableInfo(schemaName, tableName, key, columnByName)
 		if err != nil {
 			return fmt.Errorf("invalid table: %w", err)
 		}

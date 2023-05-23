@@ -26,7 +26,7 @@ const (
 type Operation struct {
 	table      *TableInfo
 	opType     OperationType
-	primaryKey string
+	primaryKey map[string]string
 	data       map[string]string
 }
 
@@ -34,7 +34,7 @@ func (o *Operation) String() string {
 	return fmt.Sprintf("%s/%s (%s)", o.table.identifier, o.primaryKey, strings.ToLower(string(o.opType)))
 }
 
-func (l *Loader) newInsertOperation(table *TableInfo, primaryKey string, data map[string]string) *Operation {
+func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeInsert,
@@ -43,7 +43,7 @@ func (l *Loader) newInsertOperation(table *TableInfo, primaryKey string, data ma
 	}
 }
 
-func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey string, data map[string]string) *Operation {
+func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeUpdate,
@@ -52,7 +52,7 @@ func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey string, data ma
 	}
 }
 
-func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey string) *Operation {
+func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string) *Operation {
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeDelete,
@@ -95,23 +95,31 @@ func (o *Operation) query() (string, error) {
 			updates[i] = fmt.Sprintf("%s=%s", columns[i], values[i])
 		}
 
-		return fmt.Sprintf("UPDATE %s SET %s WHERE %s = %s",
+		primaryKeySelector := getPrimaryKeyWhereClause(o.primaryKey)
+		return fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 			o.table.identifier,
 			strings.Join(updates, ", "),
-			o.table.primaryColumn.escapedName,
-			escapeStringValue(o.primaryKey),
+			primaryKeySelector,
 		), nil
 
 	case OperationTypeDelete:
-		return fmt.Sprintf("DELETE FROM %s WHERE %s = %s",
+		primaryKeyWhereClause := getPrimaryKeyWhereClause(o.primaryKey)
+		return fmt.Sprintf("DELETE FROM %s WHERE %s",
 			o.table.identifier,
-			o.table.primaryColumn.escapedName,
-			escapeStringValue(o.primaryKey),
+			primaryKeyWhereClause,
 		), nil
 
 	default:
 		panic(fmt.Errorf("unknown operation type %q", o.opType))
 	}
+}
+
+func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
+	reg := []string{}
+	for key, value := range primaryKey {
+		reg = append(reg, fmt.Sprintf("%s = %s", escapeIdentifier(key), escapeStringValue(value)))
+	}
+	return fmt.Sprint(strings.Join(reg[:], " AND "))
 }
 
 func prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
@@ -148,9 +156,8 @@ var reflectTypeTime = reflect.TypeOf(time.Time{})
 // Format based on type, value returned unescaped
 func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
-	case reflect.String:
+	case reflect.String, reflect.Slice:
 		return escapeStringValue(value), nil
-
 	case reflect.Bool:
 		return fmt.Sprintf("'%s'", value), nil
 
