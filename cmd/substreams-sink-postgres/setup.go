@@ -29,7 +29,7 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 	schemaFile := args[1]
 	ignoreDuplicateTableErrors := sflags.MustGetBool(cmd, "ignore-duplicate-table-errors")
 
-	dbLoader, err := db.NewLoader(psqlDSN, 0, zlog, tracer)
+	dbLoader, err := db.NewLoader(psqlDSN, 0, db.OnModuleHashMismatchError, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}

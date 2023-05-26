@@ -28,12 +28,11 @@ type PostgresSinker struct {
 	logger *zap.Logger
 	tracer logging.Tracer
 
-	stats      *Stats
-	lastCursor *sink.Cursor
+	stats *Stats
 }
 
 func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer logging.Tracer) (*PostgresSinker, error) {
-	s := &PostgresSinker{
+	return &PostgresSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
 
@@ -42,15 +41,7 @@ func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer loggin
 		tracer: tracer,
 
 		stats: NewStats(logger),
-	}
-
-	s.OnTerminating(func(err error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		s.writeLastCursor(ctx, err)
-	})
-
-	return s, nil
+	}, nil
 }
 
 func (s *PostgresSinker) Run(ctx context.Context) {
@@ -58,6 +49,16 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
+	}
+
+	// We write an empty cursor right away in the database because the flush logic
+	// only performs an `update` operation so an initial cursor is required in the database
+	// for the flush to work correctly.
+	if errors.Is(err, db.ErrCursorNotFound) {
+		if err := s.loader.InsertCursor(ctx, s.OutputModuleHash(), sink.NewBlankCursor()); err != nil {
+			s.Shutdown(fmt.Errorf("unable to write initial empty cursor: %w", err))
+			return
+		}
 	}
 
 	s.Sinker.OnTerminating(s.Shutdown)
@@ -81,14 +82,6 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 	s.Sinker.Run(ctx, cursor, s)
 }
 
-func (s *PostgresSinker) writeLastCursor(ctx context.Context, err error) {
-	if s.lastCursor == nil || err != nil {
-		return
-	}
-
-	_ = s.loader.InsertCursor(ctx, s.OutputModuleHash(), s.lastCursor)
-}
-
 func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
@@ -104,8 +97,6 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 	if err := s.applyDatabaseChanges(dbChanges); err != nil {
 		return fmt.Errorf("apply database changes: %w", err)
 	}
-
-	s.lastCursor = cursor
 
 	if cursor.Block().Num()%s.batchBlockModulo(data, isLive) == 0 {
 		flushStart := time.Now()

@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (l *Loader) Flush(ctx context.Context, moduleHash string, cursor *sink.Cursor) (err error) {
+func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sink.Cursor) (err error) {
 	startAt := time.Now()
 
 	tx, err := l.DB.BeginTx(ctx, nil)
@@ -47,13 +47,11 @@ func (l *Loader) Flush(ctx context.Context, moduleHash string, cursor *sink.Curs
 		}
 
 		entryCount += len(entries)
-
 	}
 
 	entryCount += 1
-	cursorQuery := l.UpdateCursorQuery(moduleHash, cursor)
-	if _, err := tx.ExecContext(ctx, cursorQuery); err != nil {
-		return fmt.Errorf("executing query %q: %w", cursorQuery, err)
+	if err := l.UpdateCursor(ctx, tx, outputModuleHash, cursor); err != nil {
+		return fmt.Errorf("update cursor: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

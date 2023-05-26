@@ -76,7 +76,7 @@ func toolsReadCursorE(cmd *cobra.Command, _ []string) error {
 	}
 
 	for id, cursor := range out {
-		fmt.Printf("Module %s: Block %s [%s]\n", id, cursor.Block(), cursor)
+		fmt.Printf("Module %s: Block %s [%s]\n", id, cursor.Block(), cursorToShortString(cursor))
 	}
 
 	return nil
@@ -94,7 +94,7 @@ func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
 	cursor, err := sink.NewCursor(opaqueCursor)
 	cli.NoError(err, "The <cursor> is invalid")
 
-	err = loader.UpdateCursor(cmd.Context(), moduleHash, cursor)
+	err = loader.UpdateCursor(cmd.Context(), nil, moduleHash, cursor)
 	if err != nil {
 		if errors.Is(err, db.ErrCursorNotFound) {
 			err = loader.InsertCursor(cmd.Context(), moduleHash, cursor)
@@ -109,7 +109,7 @@ func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
 	fmt.Printf("- Head Block %s\n", cursor.HeadBlock)
 	fmt.Printf("- LIB Block %s\n", cursor.LIB)
 	fmt.Printf("- Step %q\n", cursor.Step)
-
+	fmt.Printf("- Cursor %q\n", cursorToShortString(cursor))
 	return nil
 }
 
@@ -145,7 +145,7 @@ func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
 
 func toolsCreateLoader(enforceCursorTable bool) *db.Loader {
 	dsn := viper.GetString("tools-global-dsn")
-	loader, err := db.NewLoader(dsn, 0, zlog, tracer)
+	loader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchIgnore, zlog, tracer)
 	cli.NoError(err, "Unable to instantiate database manager from DSN %q", dsn)
 
 	if err := loader.LoadTables(); err != nil {
@@ -161,4 +161,13 @@ func toolsCreateLoader(enforceCursorTable bool) *db.Loader {
 	}
 
 	return loader
+}
+
+func cursorToShortString(in *sink.Cursor) string {
+	cursor := in.String()
+	if len(cursor) > 12 {
+		cursor = cursor[0:6] + "..." + cursor[len(cursor)-6:]
+	}
+
+	return cursor
 }

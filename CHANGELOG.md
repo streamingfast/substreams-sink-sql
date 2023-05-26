@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.2.0
+
+### Highlights
+
+In the release, we change a big how cursor is associated to the `<module>`'s hash in the database and how it's stored.
+
+Prior this version, when loading the cursor back from the database on restart, we were retrieving the cursor associated to the `<module>`'s hash received by `substreams-sink-postgres run`. The consequence of that is that if you change the `.spkg` version you were sinking with, on restart we would find no cursor since the module's hash of this new `.spkg` would have changed and which you mean a full sync back would be happening because we would start without a cursor.
+
+This silent behavior is problematic because it could seen like the cursor was lost somehow while actually, we just picked up a new one from scratch because the `.spkg` changed.
+
+This release brings in a new flag `substreams-sink-postgres run --on-module-hash-mistmatch=error` (default value shown) where it would control how we should react to a changes in the module's hash since last run.
+
+- If `error` is used (default), it will exit with an error explaining the problem and how to fix it.
+- If `warn` is used, it does the same as 'ignore' but it will log a warning message when it happens.
+- If `ignore` is set, we pick the cursor at the highest block number and use it as the starting point. Subsequent updates to the cursor will overwrite the module hash in the database.
+
+There is a possibility that multiple cursors exists in your database, hence why we pick the one with the highest block. If it's the case, you will be warned that multiple cursors exists. You can run `substreams-sink-postgres tools cursor cleanup <manifest> <module> --dsn=<dsn>` which will delete now useless cursors.
+
+The `ignore` value can be used to change to a new `.spkg` while retaining the previous data in the database, the database schema will start to be different after a certain point where the new `.spkg` became active.
+
+#### Cursor Bug Fix
+
+It appeared that the cursor was not saved properly until the first graceful shutdown of `substreams-sink-postgres`. Furthermore, the on exit save was actually wrong because it was saving the cursor without flushing accumulated data which is wrong.
+
+This bug has been introduced in v2.0.0 by mistake which means if we synced your a new database with v2.0.0+, there is a good chance your are actually missing some data in your database. If you are unusure, we recommence you synchronize your database from scratch. Re-using the same `.spkg` should index data at very high speed because you will be reading from previously cached output, so the bottleneck should be network and the database write performance.
+
+### Added
+
+* Added `substreams-sink-postgres run --on-module-hash-mistmatch=error` to control how a change in module's hash should be handled.
+
+### Changed
+
+* Changed behavior of how cursor are retrieved on restart.
+
+### Fixed
+
+* Fixed `cursor` not being saved correctly until the binary exits.
+
+* Fixed wrong handling of updating the cursor, we were not checking if a row was updated when doing the flush operation.
+
+* Fixed a bug where it was possible if the sink was terminating to write a cursor for data not yet flushed. This was happening if the `substreams-sink-postgres run` was stopped before we ever written a cursor, which normally happens each 1000 blocks. We don't expect anybody to have been hit by this but if you are unsure, you should check data for the 1000 first blocks of you sink (for example from 11 000 000 to 11 001 000 if your module start block was 11 000 000).
+
 ## v2.1.0
 
 ### Changed

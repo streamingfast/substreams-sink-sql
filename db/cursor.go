@@ -5,23 +5,25 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/lithammer/dedent"
 	sink "github.com/streamingfast/substreams-sink"
 	"go.uber.org/zap"
 )
 
 var ErrCursorNotFound = errors.New("cursor not found")
 
+type cursorRow struct {
+	ID       string
+	Cursor   string
+	BlockNum uint64
+	BlockID  string
+}
+
 // GetAllCursors returns an unordered map given for each module's hash recorded
 // the active cursor for it.
 func (l *Loader) GetAllCursors(ctx context.Context) (out map[string]*sink.Cursor, err error) {
-	type cursorRow struct {
-		ID       string
-		Cursor   string
-		BlockNum uint64
-		BlockID  string
-	}
-
 	rows, err := l.DB.QueryContext(ctx, "SELECT id, cursor, block_num, block_id from cursors")
 	if err != nil {
 		return nil, fmt.Errorf("query all cursors: %w", err)
@@ -43,31 +45,50 @@ func (l *Loader) GetAllCursors(ctx context.Context) (out map[string]*sink.Cursor
 	return out, nil
 }
 
-func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (*sink.Cursor, error) {
-	type cursorRow struct {
-		ID       string
-		Cursor   string
-		BlockNum uint64
-		BlockID  string
-	}
-
-	query := fmt.Sprintf("SELECT id, cursor, block_num, block_id from cursors WHERE id = '%s'", outputModuleHash)
-	row := l.DB.QueryRowContext(ctx, query)
-
-	c := &cursorRow{}
-	if err := row.Scan(&c.ID, &c.Cursor, &c.BlockNum, &c.BlockID); err != nil {
-		if err == sql.ErrNoRows {
-			return sink.NewBlankCursor(), ErrCursorNotFound
-		}
-		return nil, fmt.Errorf("getting cursor %q:  %w", outputModuleHash, err)
-	}
-
-	cursor, err := sink.NewCursor(c.Cursor)
+func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (cursor *sink.Cursor, err error) {
+	cursors, err := l.GetAllCursors(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("database corrupted: stored cursor %q is not decodable", c.Cursor)
+		return nil, fmt.Errorf("get cursor: %w", err)
 	}
 
-	return cursor, nil
+	if len(cursors) == 0 {
+		return sink.NewBlankCursor(), ErrCursorNotFound
+	}
+
+	activeCursor, found := cursors[outputModuleHash]
+	if found {
+		return activeCursor, err
+	}
+
+	// It's not found at this point, look for one with highest block, we will report
+	// (maybe) a warning if the module hash is different, which is the case here.
+	actualOutputModuleHash, activeCursor := cursorAtHighestBlock(cursors)
+
+	switch l.moduleMismatchMode {
+	case OnModuleHashMismatchIgnore:
+		return activeCursor, err
+
+	case OnModuleHashMismatchWarn:
+		l.logger.Warn(fmt.Sprintf("cursor module hash mismatch, continuing anyway using cursor at block %s, this warning can be made silent by using --on-module-hash-mistmatch=ignore", activeCursor.Block()), zap.String("expected_module_hash", outputModuleHash), zap.String("actual_module_hash", actualOutputModuleHash))
+		return activeCursor, err
+
+	case OnModuleHashMismatchError:
+		return nil, fmt.Errorf("cursor module hash mismatch, refusing to continue: expected %s got %s", outputModuleHash, actualOutputModuleHash)
+
+	default:
+		panic(fmt.Errorf("unknown module mismatch mode %q", l.moduleMismatchMode))
+	}
+}
+
+func cursorAtHighestBlock(in map[string]*sink.Cursor) (hash string, highest *sink.Cursor) {
+	for moduleHash, cursor := range in {
+		if highest == nil || cursor.Block().Num() > highest.Block().Num() {
+			highest = cursor
+			hash = moduleHash
+		}
+	}
+
+	return
 }
 
 func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cursor) error {
@@ -81,28 +102,24 @@ func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cu
 
 // UpdateCursor updates the active cursor. If no cursor is active and no update occurred, returns
 // ErrCursorNotFound. If the update was not successful on the database, returns an error.
-func (l *Loader) UpdateCursor(ctx context.Context, moduleHash string, c *sink.Cursor) error {
-	_, err := l.runModifiyCursorQuery(ctx, "update", l.UpdateCursorQuery(moduleHash, c))
+func (l *Loader) UpdateCursor(ctx context.Context, tx *sql.Tx, moduleHash string, c *sink.Cursor) error {
+	_, err := l.runModifiyQuery(ctx, tx, "update", query(`
+		UPDATE cursors set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';
+	`, c, c.Block().Num(), c.Block().ID(), moduleHash))
 	return err
-}
-
-func (l *Loader) UpdateCursorQuery(moduleHash string, c *sink.Cursor) string {
-	zap.Inline(c)
-
-	return fmt.Sprintf("UPDATE cursors set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s'", c, c.Block().Num(), c.Block().ID(), moduleHash)
 }
 
 // DeleteCursor deletes the active cursor for the given 'moduleHash'. If no cursor is active and
 // no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
 func (l *Loader) DeleteCursor(ctx context.Context, moduleHash string) error {
-	_, err := l.runModifiyCursorQuery(ctx, "delete", fmt.Sprintf("DELETE FROM cursors WHERE id = '%s'", moduleHash))
+	_, err := l.runModifiyQuery(ctx, nil, "delete", fmt.Sprintf("DELETE FROM cursors WHERE id = '%s'", moduleHash))
 	return err
 }
 
 // DeleteAllCursors deletes the active cursor for the given 'moduleHash'. If no cursor is active and
 // no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
 func (l *Loader) DeleteAllCursors(ctx context.Context) (deletedCount int64, err error) {
-	deletedCount, err = l.runModifiyCursorQuery(ctx, "delete", "DELETE FROM cursors")
+	deletedCount, err = l.runModifiyQuery(ctx, nil, "delete", "DELETE FROM cursors")
 	if err != nil && errors.Is(err, ErrCursorNotFound) {
 		return 0, nil
 	}
@@ -110,8 +127,22 @@ func (l *Loader) DeleteAllCursors(ctx context.Context) (deletedCount int64, err 
 	return deletedCount, nil
 }
 
-func (l *Loader) runModifiyCursorQuery(ctx context.Context, action string, query string) (rowsAffected int64, err error) {
-	result, err := l.DB.ExecContext(ctx, query)
+type sqlExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// runModifiyQuery runs the logic to execute a query that is supposed to modify the database in some form affecting
+// at least 1 row.
+//
+// If `tx` is nil, we use `l.DB` as the execution context, so an operations happening outside
+// a transaction. Otherwise, tx is the execution context.
+func (l *Loader) runModifiyQuery(ctx context.Context, tx *sql.Tx, action string, query string) (rowsAffected int64, err error) {
+	var executor sqlExecutor = l.DB
+	if tx != nil {
+		executor = tx
+	}
+
+	result, err := executor.ExecContext(ctx, query)
 	if err != nil {
 		return 0, fmt.Errorf("%s cursor: %w", action, err)
 	}
@@ -126,4 +157,8 @@ func (l *Loader) runModifiyCursorQuery(ctx context.Context, action string, query
 	}
 
 	return rowsAffected, nil
+}
+
+func query(in string, args ...any) string {
+	return fmt.Sprintf(strings.TrimSpace(dedent.Dedent(in)), args...)
 }

@@ -22,12 +22,13 @@ type CursorError struct {
 type Loader struct {
 	*sql.DB
 
-	database         string
-	schema           string
-	entries          map[string]map[string]*Operation
-	entriesCount     uint64
-	tables           map[string]map[string]reflect.Type
-	tablePrimaryKeys map[string]string
+	database           string
+	schema             string
+	entries            map[string]map[string]*Operation
+	entriesCount       uint64
+	tables             map[string]map[string]reflect.Type
+	tablePrimaryKeys   map[string]string
+	moduleMismatchMode OnModuleHashMismatch
 
 	flushInterval time.Duration
 
@@ -35,7 +36,13 @@ type Loader struct {
 	tracer logging.Tracer
 }
 
-func NewLoader(psqlDsn string, flushInterval time.Duration, logger *zap.Logger, tracer logging.Tracer) (*Loader, error) {
+func NewLoader(
+	psqlDsn string,
+	flushInterval time.Duration,
+	moduleMismatchMode OnModuleHashMismatch,
+	logger *zap.Logger,
+	tracer logging.Tracer,
+) (*Loader, error) {
 	dsn, err := parseDSN(psqlDsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
@@ -52,18 +59,20 @@ func NewLoader(psqlDsn string, flushInterval time.Duration, logger *zap.Logger, 
 		zap.String("schema", dsn.schema),
 		zap.String("host", dsn.host),
 		zap.Int64("port", dsn.port),
+		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
 	)
 
 	return &Loader{
-		DB:               db,
-		database:         dsn.database,
-		schema:           dsn.schema,
-		entries:          map[string]map[string]*Operation{},
-		tables:           map[string]map[string]reflect.Type{},
-		tablePrimaryKeys: map[string]string{},
-		flushInterval:    flushInterval,
-		logger:           logger,
-		tracer:           tracer,
+		DB:                 db,
+		database:           dsn.database,
+		schema:             dsn.schema,
+		entries:            map[string]map[string]*Operation{},
+		tables:             map[string]map[string]reflect.Type{},
+		tablePrimaryKeys:   map[string]string{},
+		flushInterval:      flushInterval,
+		moduleMismatchMode: moduleMismatchMode,
+		logger:             logger,
+		tracer:             tracer,
 	}, nil
 }
 
@@ -120,7 +129,7 @@ func (l *Loader) LoadTables() error {
 	return nil
 }
 
-func (l *Loader) validateCursorTables(columns []*sql.ColumnType) error {
+func (l *Loader) validateCursorTables(columns []*sql.ColumnType) (err error) {
 	if len(columns) != 4 {
 		return &CursorError{fmt.Errorf("table requires 4 columns ('id', 'cursor', 'block_num', 'block_id')")}
 	}

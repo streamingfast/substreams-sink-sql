@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
+	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/db"
@@ -26,6 +26,15 @@ var sinkRunCmd = Command(sinkRunE,
 		sink.AddFlagsToSet(flags)
 
 		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
+		flags.String("on-module-hash-mistmatch", "error", FlagDescription(`
+			What to do when the module hash in the manifest does not match the one in the database, can be 'error', 'warn' or 'ignore'
+
+			- If 'error' is used (default), it will exit with an error explaining the problem and how to fix it.
+			- If 'warn' is used, it does the same as 'ignore' but it will log a warning message when it happens.
+			- If 'ignore' is set, we pick the cursor at the highest block number and use it as the starting point. Subsequent
+			updates to the cursor will overwrite the module hash in the database.
+		`),
+		)
 	}),
 	OnCommandErrorLogAndExit(zlog),
 )
@@ -50,8 +59,11 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		blockRange = args[4]
 	}
 
-	flushInterval := viper.GetDuration("run-flush-interval")
-	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, zlog, tracer)
+	flushInterval := sflags.MustGetDuration(cmd, "flush-interval")
+	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, "on-module-hash-mistmatch"))
+	cli.NoError(err, "invalid mistmatch mode")
+
+	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, moduleMismatchMode, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}
