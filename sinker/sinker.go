@@ -45,7 +45,7 @@ func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer loggin
 }
 
 func (s *PostgresSinker) Run(ctx context.Context) {
-	cursor, err := s.loader.GetCursor(ctx, s.OutputModuleHash())
+	cursor, mistmatchDetected, err := s.loader.GetCursor(ctx, s.OutputModuleHash())
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
@@ -57,6 +57,11 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 	if errors.Is(err, db.ErrCursorNotFound) {
 		if err := s.loader.InsertCursor(ctx, s.OutputModuleHash(), sink.NewBlankCursor()); err != nil {
 			s.Shutdown(fmt.Errorf("unable to write initial empty cursor: %w", err))
+			return
+		}
+	} else if mistmatchDetected {
+		if err := s.loader.InsertCursor(ctx, s.OutputModuleHash(), cursor); err != nil {
+			s.Shutdown(fmt.Errorf("unable to write new cursor after module mistmatch: %w", err))
 			return
 		}
 	}
@@ -101,7 +106,7 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 	if cursor.Block().Num()%s.batchBlockModulo(data, isLive) == 0 {
 		flushStart := time.Now()
 		if err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor); err != nil {
-			return fmt.Errorf("failed to flush: %w", err)
+			return fmt.Errorf("failed to flush at block %s: %w", cursor.Block(), err)
 		}
 
 		flushDuration := time.Since(flushStart)

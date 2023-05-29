@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Highlights
 
+#### Cursor Bug Fix
+
+It appeared that the cursor was not saved properly until the first graceful shutdown of `substreams-sink-postgres`. Furthermore, the on exit save was actually wrong because it was saving the cursor without flushing accumulated data which is wrong (e.g. that we had N blocks in memory unflushed and a cursor, and we were saving this cursor to the database without having flushed the in memory logic).
+
+This bug has been introduced in v2.0.0 by mistake which means if we synced a new database with v2.0.0+, there is a good chance your are actually missing some data in your database. It's highly recommended that you re-synchronize your database from scratch.
+
+> **Note** If your are using the same `.spkg` that you are using right now, database ingestion from scratch should go at very high speed because you will be reading from previously cached output, so the bottleneck should be network and the database write performance.
+
+#### Behavior on `.spkg` update
+
 In the release, we change a big how cursor is associated to the `<module>`'s hash in the database and how it's stored.
 
 Prior this version, when loading the cursor back from the database on restart, we were retrieving the cursor associated to the `<module>`'s hash received by `substreams-sink-postgres run`. The consequence of that is that if you change the `.spkg` version you were sinking with, on restart we would find no cursor since the module's hash of this new `.spkg` would have changed and which you mean a full sync back would be happening because we would start without a cursor.
@@ -24,12 +34,6 @@ This release brings in a new flag `substreams-sink-postgres run --on-module-hash
 There is a possibility that multiple cursors exists in your database, hence why we pick the one with the highest block. If it's the case, you will be warned that multiple cursors exists. You can run `substreams-sink-postgres tools cursor cleanup <manifest> <module> --dsn=<dsn>` which will delete now useless cursors.
 
 The `ignore` value can be used to change to a new `.spkg` while retaining the previous data in the database, the database schema will start to be different after a certain point where the new `.spkg` became active.
-
-#### Cursor Bug Fix
-
-It appeared that the cursor was not saved properly until the first graceful shutdown of `substreams-sink-postgres`. Furthermore, the on exit save was actually wrong because it was saving the cursor without flushing accumulated data which is wrong.
-
-This bug has been introduced in v2.0.0 by mistake which means if we synced your a new database with v2.0.0+, there is a good chance your are actually missing some data in your database. If you are unusure, we recommence you synchronize your database from scratch. Re-using the same `.spkg` should index data at very high speed because you will be reading from previously cached output, so the bottleneck should be network and the database write performance.
 
 ### Added
 
