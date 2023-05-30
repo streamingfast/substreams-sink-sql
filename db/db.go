@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -22,15 +21,15 @@ type CursorError struct {
 type Loader struct {
 	*sql.DB
 
-	database           string
-	schema             string
-	entries            map[string]map[string]*Operation
-	entriesCount       uint64
-	tables             map[string]map[string]reflect.Type
-	tablePrimaryKeys   map[string]string
-	moduleMismatchMode OnModuleHashMismatch
+	database     string
+	schema       string
+	entries      map[string]map[string]*Operation
+	entriesCount uint64
+	tables       map[string]*TableInfo
+	cursorTable  *TableInfo
 
-	flushInterval time.Duration
+	flushInterval      time.Duration
+	moduleMismatchMode OnModuleHashMismatch
 
 	logger *zap.Logger
 	tracer logging.Tracer
@@ -67,8 +66,7 @@ func NewLoader(
 		database:           dsn.database,
 		schema:             dsn.schema,
 		entries:            map[string]map[string]*Operation{},
-		tables:             map[string]map[string]reflect.Type{},
-		tablePrimaryKeys:   map[string]string{},
+		tables:             map[string]*TableInfo{},
 		flushInterval:      flushInterval,
 		moduleMismatchMode: moduleMismatchMode,
 		logger:             logger,
@@ -89,6 +87,7 @@ func (l *Loader) LoadTables() error {
 	if err != nil {
 		return fmt.Errorf("retrieving table and schema: %w", err)
 	}
+
 	seenCursorTable := false
 	for schemaTableName, columns := range schemaTables {
 		schemaName := schemaTableName[0]
@@ -97,35 +96,50 @@ func (l *Loader) LoadTables() error {
 			zap.String("schema_name", schemaName),
 			zap.String("table_name", tableName),
 		)
+
 		if schemaName != l.schema {
 			continue
 		}
+
 		if tableName == "cursors" {
 			if err := l.validateCursorTables(columns); err != nil {
 				return fmt.Errorf("invalid cursors table: %w", err)
 			}
+
 			seenCursorTable = true
 		}
 
-		m := map[string]reflect.Type{}
+		columnByName := make(map[string]*ColumnInfo, len(columns))
 		for _, f := range columns {
-			m[f.Name()] = f.ScanType()
+			columnByName[f.Name()] = &ColumnInfo{
+				name:             f.Name(),
+				escapedName:      escapeIdentifier(f.Name()),
+				databaseTypeName: f.DatabaseTypeName(),
+				scanType:         f.ScanType(),
+			}
 		}
-		l.tables[tableName] = m
 
 		key, err := schema.PrimaryKey(l.DB, schemaName, tableName)
 		if err != nil {
 			return fmt.Errorf("get primary key: %w", err)
 		}
+
+		primaryKeyColumnName := "id"
 		if len(key) > 0 {
-			l.tablePrimaryKeys[tableName] = key[0]
-		} else {
-			l.tablePrimaryKeys[tableName] = "id"
+			primaryKeyColumnName = key[0]
+		}
+
+		l.tables[tableName], err = NewTableInfo(schemaName, tableName, primaryKeyColumnName, columnByName)
+		if err != nil {
+			return fmt.Errorf("invalid table: %w", err)
 		}
 	}
+
 	if !seenCursorTable {
-		return &CursorError{fmt.Errorf("cursors table is not found")}
+		return &CursorError{fmt.Errorf(`%s."cursors" table is not found`, escapeIdentifier(l.schema))}
 	}
+	l.cursorTable = l.tables["cursors"]
+
 	return nil
 }
 
@@ -175,14 +189,18 @@ func (l *Loader) GetIdentifier() string {
 }
 
 func (l *Loader) GetAvailableTablesInSchema() string {
-	tables := make([]string, len(l.tablePrimaryKeys))
+	tables := make([]string, len(l.tables))
 	i := 0
-	for table := range l.tablePrimaryKeys {
+	for table := range l.tables {
 		tables[i] = table
 		i++
 	}
 
 	return strings.Join(tables, ", ")
+}
+
+func (l *Loader) GetDatabase() string {
+	return l.database
 }
 
 func (l *Loader) GetSchema() string {

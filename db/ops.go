@@ -13,6 +13,11 @@ func (l *Loader) Insert(tableName string, primaryKey string, data map[string]str
 		l.logger.Debug("processing insert operation", zap.String("table_name", tableName), zap.String("primary_key", primaryKey), zap.Int("field_count", len(data)))
 	}
 
+	table, found := l.tables[tableName]
+	if !found {
+		return fmt.Errorf("unknown table %q", tableName)
+	}
+
 	if _, found := l.entries[tableName]; !found {
 		if l.tracer.Enabled() {
 			l.logger.Debug("adding tracking of table never seen before", zap.String("table_name", tableName))
@@ -29,10 +34,9 @@ func (l *Loader) Insert(tableName string, primaryKey string, data map[string]str
 		l.logger.Debug("primary key entry never existed for table, adding insert operation", zap.String("primary_key", primaryKey), zap.String("table_name", tableName))
 	}
 
-	// we need to make sure to add the primary key in the data so that
-	// it gets created
-	data[l.tablePrimaryKeys[tableName]] = primaryKey
-	l.entries[tableName][primaryKey] = l.newInsertOperation(tableName, primaryKey, data)
+	// we need to make sure to add the primary key in the data so that it gets created
+	data[table.primaryColumn.name] = primaryKey
+	l.entries[tableName][primaryKey] = l.newInsertOperation(table, primaryKey, data)
 	l.entriesCount++
 	return nil
 }
@@ -42,6 +46,11 @@ func (l *Loader) Insert(tableName string, primaryKey string, data map[string]str
 func (l *Loader) Update(tableName string, primaryKey string, data map[string]string) error {
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing update operation", zap.String("table_name", tableName), zap.String("primary_key", primaryKey), zap.Int("field_count", len(data)))
+	}
+
+	table, found := l.tables[tableName]
+	if !found {
+		return fmt.Errorf("unknown table %q", tableName)
 	}
 
 	if _, found := l.entries[tableName]; !found {
@@ -72,7 +81,7 @@ func (l *Loader) Update(tableName string, primaryKey string, data map[string]str
 		l.logger.Debug("primary key entry never existed for table, adding update operation", zap.String("primary_key", primaryKey), zap.String("table_name", tableName))
 	}
 
-	l.entries[tableName][primaryKey] = l.newUpdateOperation(tableName, primaryKey, data)
+	l.entries[tableName][primaryKey] = l.newUpdateOperation(table, primaryKey, data)
 	return nil
 }
 
@@ -81,6 +90,11 @@ func (l *Loader) Update(tableName string, primaryKey string, data map[string]str
 func (l *Loader) Delete(tableName string, primaryKey string) error {
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing delete operation", zap.String("table_name", tableName), zap.String("primary_key", primaryKey))
+	}
+
+	table, found := l.tables[tableName]
+	if !found {
+		return fmt.Errorf("unknown table %q", tableName)
 	}
 
 	if _, found := l.entries[tableName]; !found {
@@ -103,6 +117,6 @@ func (l *Loader) Delete(tableName string, primaryKey string) error {
 		l.logger.Debug("adding deleting operation", zap.String("primary_key", primaryKey), zap.String("table_name", tableName))
 	}
 
-	l.entries[tableName][primaryKey] = l.newDeleteOperation(tableName, primaryKey)
+	l.entries[tableName][primaryKey] = l.newDeleteOperation(table, primaryKey)
 	return nil
 }

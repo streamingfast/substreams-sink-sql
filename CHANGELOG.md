@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.2.1
+
+### Changed
+
+* Reduced the amount of allocations and escaping performed which should increase ingestion speed, this will be more visible for Substreams where a lot of entities and columns are processed.
+
+### Fixed
+
+* The `schema` is correctly respected now for the the `cursors` table.
+
 ## v2.2.0
 
 ### Highlights

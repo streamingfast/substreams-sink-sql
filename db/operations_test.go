@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -131,12 +130,9 @@ func TestEscapeValues(t *testing.T) {
 }
 
 func Test_prepareColValues(t *testing.T) {
-	boolTypeGetter := func(tableName string, columnName string) (reflect.Type, error) { return reflect.TypeOf(true), nil }
-
 	type args struct {
-		tableName  string
-		colValues  map[string]string
-		typeGetter TypeGetter
+		table     *TableInfo
+		colValues map[string]string
 	}
 	tests := []struct {
 		name        string
@@ -148,9 +144,8 @@ func Test_prepareColValues(t *testing.T) {
 		{
 			"bool true",
 			args{
-				"test",
+				newTable(t, "schema", "name", "id", NewColumnInfo("col", "bool", true)),
 				map[string]string{"col": "true"},
-				boolTypeGetter,
 			},
 			[]string{`"col"`},
 			[]string{`'true'`},
@@ -159,10 +154,23 @@ func Test_prepareColValues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotColumns, gotValues, err := prepareColValues(tt.args.tableName, tt.args.colValues, tt.args.typeGetter)
+			gotColumns, gotValues, err := prepareColValues(tt.args.table, tt.args.colValues)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.wantColumns, gotColumns)
 			assert.Equal(t, tt.wantValues, gotValues)
 		})
 	}
+}
+
+func newTable(t *testing.T, schema, name, primaryColumn string, columnInfos ...*ColumnInfo) *TableInfo {
+	columns := make(map[string]*ColumnInfo)
+	columns[primaryColumn] = NewColumnInfo(primaryColumn, "text", "")
+	for _, columnInfo := range columnInfos {
+		columns[columnInfo.name] = columnInfo
+	}
+
+	table, err := NewTableInfo("public", "data", "id", columns)
+	require.NoError(t, err)
+
+	return table
 }

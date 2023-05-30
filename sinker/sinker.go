@@ -83,7 +83,12 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 
 	s.stats.Start(logEach, cursor)
 
-	s.logger.Info("starting postgres sink", zap.Duration("stats_refresh_each", logEach), zap.Stringer("restarting_at", cursor.Block()))
+	s.logger.Info("starting postgres sink",
+		zap.Duration("stats_refresh_each", logEach),
+		zap.Stringer("restarting_at", cursor.Block()),
+		zap.String("database", s.loader.GetDatabase()),
+		zap.String("schema", s.loader.GetSchema()),
+	)
 	s.Sinker.Run(ctx, cursor, s)
 }
 

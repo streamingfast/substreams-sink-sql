@@ -71,7 +71,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	if err := dbLoader.LoadTables(); err != nil {
 		var e *db.CursorError
 		if errors.As(err, &e) {
-			fmt.Println("Error validating the cursors table: ", e.Error())
+			fmt.Printf("Error validating the cursors table: %s\n", e)
 			fmt.Println("You can use the following sql schema to create a cursors table")
 			fmt.Println(Dedent(`
 				create table cursors

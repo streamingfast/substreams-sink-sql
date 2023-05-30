@@ -24,7 +24,7 @@ type cursorRow struct {
 // GetAllCursors returns an unordered map given for each module's hash recorded
 // the active cursor for it.
 func (l *Loader) GetAllCursors(ctx context.Context) (out map[string]*sink.Cursor, err error) {
-	rows, err := l.DB.QueryContext(ctx, "SELECT id, cursor, block_num, block_id from cursors")
+	rows, err := l.DB.QueryContext(ctx, fmt.Sprintf("SELECT id, cursor, block_num, block_id from %s", l.cursorTable.identifier))
 	if err != nil {
 		return nil, fmt.Errorf("query all cursors: %w", err)
 	}
@@ -101,7 +101,13 @@ func cursorAtHighestBlock(in map[string]*sink.Cursor) (hash string, highest *sin
 }
 
 func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cursor) error {
-	query := fmt.Sprintf("INSERT INTO cursors (id, cursor, block_num, block_id) values ('%s', '%s', %d, '%s')", moduleHash, c, c.Block().Num(), c.Block().ID())
+	query := fmt.Sprintf("INSERT INTO %s (id, cursor, block_num, block_id) values ('%s', '%s', %d, '%s')",
+		l.cursorTable.identifier,
+		moduleHash,
+		c,
+		c.Block().Num(),
+		c.Block().ID(),
+	)
 	if _, err := l.DB.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("insert cursor: %w", err)
 	}
@@ -113,22 +119,22 @@ func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cu
 // ErrCursorNotFound. If the update was not successful on the database, returns an error.
 func (l *Loader) UpdateCursor(ctx context.Context, tx *sql.Tx, moduleHash string, c *sink.Cursor) error {
 	_, err := l.runModifiyQuery(ctx, tx, "update", query(`
-		UPDATE cursors set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';
-	`, c, c.Block().Num(), c.Block().ID(), moduleHash))
+		UPDATE %s set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';
+	`, l.cursorTable.identifier, c, c.Block().Num(), c.Block().ID(), moduleHash))
 	return err
 }
 
 // DeleteCursor deletes the active cursor for the given 'moduleHash'. If no cursor is active and
 // no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
 func (l *Loader) DeleteCursor(ctx context.Context, moduleHash string) error {
-	_, err := l.runModifiyQuery(ctx, nil, "delete", fmt.Sprintf("DELETE FROM cursors WHERE id = '%s'", moduleHash))
+	_, err := l.runModifiyQuery(ctx, nil, "delete", fmt.Sprintf("DELETE FROM %s WHERE id = '%s'", l.cursorTable.identifier, moduleHash))
 	return err
 }
 
 // DeleteAllCursors deletes the active cursor for the given 'moduleHash'. If no cursor is active and
 // no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
 func (l *Loader) DeleteAllCursors(ctx context.Context) (deletedCount int64, err error) {
-	deletedCount, err = l.runModifiyQuery(ctx, nil, "delete", "DELETE FROM cursors")
+	deletedCount, err = l.runModifiyQuery(ctx, nil, "delete", fmt.Sprintf("DELETE FROM %s", l.cursorTable.identifier))
 	if err != nil && errors.Is(err, ErrCursorNotFound) {
 		return 0, nil
 	}

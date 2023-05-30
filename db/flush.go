@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	sink "github.com/streamingfast/substreams-sink"
@@ -32,7 +31,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 		}
 
 		for _, entry := range entries {
-			query, err := entry.query(l.getType)
+			query, err := entry.query()
 			if err != nil {
 				return fmt.Errorf("failed to get query: %w", err)
 			}
@@ -67,11 +66,4 @@ func (l *Loader) reset() {
 	for tableName := range l.entries {
 		l.entries[tableName] = map[string]*Operation{}
 	}
-}
-
-func (l *Loader) getType(tableName string, columnName string) (reflect.Type, error) {
-	if t, found := l.tables[tableName][columnName]; found {
-		return t, nil
-	}
-	return nil, fmt.Errorf("cannot find type of column %q for table %q", columnName, tableName)
 }

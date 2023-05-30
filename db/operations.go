@@ -24,47 +24,39 @@ const (
 )
 
 type Operation struct {
-	schemaName           string
-	tableName            string
-	primaryKeyColumnName string
-	opType               OperationType
-	primaryKey           string
-	data                 map[string]string
+	table      *TableInfo
+	opType     OperationType
+	primaryKey string
+	data       map[string]string
 }
 
 func (o *Operation) String() string {
-	return fmt.Sprintf("%s.%s/%s (%s)", o.schemaName, o.tableName, o.primaryKey, strings.ToLower(string(o.opType)))
+	return fmt.Sprintf("%s/%s (%s)", o.table.identifier, o.primaryKey, strings.ToLower(string(o.opType)))
 }
 
-func (l *Loader) newInsertOperation(tableName string, primaryKey string, data map[string]string) *Operation {
+func (l *Loader) newInsertOperation(table *TableInfo, primaryKey string, data map[string]string) *Operation {
 	return &Operation{
-		schemaName:           l.schema,
-		tableName:            tableName,
-		opType:               OperationTypeInsert,
-		primaryKeyColumnName: l.tablePrimaryKeys[tableName],
-		primaryKey:           primaryKey,
-		data:                 data,
+		table:      table,
+		opType:     OperationTypeInsert,
+		primaryKey: primaryKey,
+		data:       data,
 	}
 }
 
-func (l *Loader) newUpdateOperation(tableName string, primaryKey string, data map[string]string) *Operation {
+func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey string, data map[string]string) *Operation {
 	return &Operation{
-		schemaName:           l.schema,
-		tableName:            tableName,
-		opType:               OperationTypeUpdate,
-		primaryKeyColumnName: l.tablePrimaryKeys[tableName],
-		primaryKey:           primaryKey,
-		data:                 data,
+		table:      table,
+		opType:     OperationTypeUpdate,
+		primaryKey: primaryKey,
+		data:       data,
 	}
 }
 
-func (l *Loader) newDeleteOperation(tableName string, primaryKey string) *Operation {
+func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey string) *Operation {
 	return &Operation{
-		schemaName:           l.schema,
-		tableName:            tableName,
-		opType:               OperationTypeDelete,
-		primaryKeyColumnName: l.tablePrimaryKeys[tableName],
-		primaryKey:           primaryKey,
+		table:      table,
+		opType:     OperationTypeDelete,
+		primaryKey: primaryKey,
 	}
 }
 
@@ -79,11 +71,11 @@ func (o *Operation) mergeData(newData map[string]string) error {
 	return nil
 }
 
-func (o *Operation) query(typeGetter TypeGetter) (string, error) {
+func (o *Operation) query() (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
-		columns, values, err = prepareColValues(o.tableName, o.data, typeGetter)
+		columns, values, err = prepareColValues(o.table, o.data)
 		if err != nil {
 			return "", fmt.Errorf("preparing column & values: %w", err)
 		}
@@ -91,9 +83,8 @@ func (o *Operation) query(typeGetter TypeGetter) (string, error) {
 
 	switch o.opType {
 	case OperationTypeInsert:
-		return fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES (%s)",
-			o.schemaName,
-			o.tableName,
+		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+			o.table.identifier,
 			strings.Join(columns, ","),
 			strings.Join(values, ","),
 		), nil
@@ -104,30 +95,26 @@ func (o *Operation) query(typeGetter TypeGetter) (string, error) {
 			updates[i] = fmt.Sprintf("%s=%s", columns[i], values[i])
 		}
 
-		updatesString := strings.Join(updates, ", ")
-		return fmt.Sprintf("UPDATE %s.%s SET %s WHERE %s = %s",
-			escapeIdentifier(o.schemaName),
-			escapeIdentifier(o.tableName),
-			updatesString,
-			escapeIdentifier(o.primaryKeyColumnName),
+		return fmt.Sprintf("UPDATE %s SET %s WHERE %s = %s",
+			o.table.identifier,
+			strings.Join(updates, ", "),
+			o.table.primaryColumn.escapedName,
 			escapeStringValue(o.primaryKey),
 		), nil
 
 	case OperationTypeDelete:
-		return fmt.Sprintf("DELETE FROM %s.%s WHERE %s = %s",
-			escapeIdentifier(o.schemaName),
-			escapeIdentifier(o.tableName),
-			escapeIdentifier(o.primaryKeyColumnName),
+		return fmt.Sprintf("DELETE FROM %s WHERE %s = %s",
+			o.table.identifier,
+			o.table.primaryColumn.escapedName,
 			escapeStringValue(o.primaryKey),
 		), nil
 
 	default:
 		panic(fmt.Errorf("unknown operation type %q", o.opType))
 	}
-
 }
 
-func prepareColValues(tableName string, colValues map[string]string, typeGetter TypeGetter) (columns []string, values []string, err error) {
+func prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
 	if len(colValues) == 0 {
 		return
 	}
@@ -137,17 +124,17 @@ func prepareColValues(tableName string, colValues map[string]string, typeGetter 
 
 	i := 0
 	for columnName, value := range colValues {
-		valueType, err := typeGetter(tableName, columnName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("get column type %s.%s: %w", tableName, columnName, err)
+		columnInfo, found := table.columnsByName[columnName]
+		if !found {
+			return nil, nil, fmt.Errorf("cannot find column %q for table %q", columnName, table.identifier)
 		}
 
-		normalizedValue, err := normalizeValueType(value, valueType)
+		normalizedValue, err := normalizeValueType(value, columnInfo.scanType)
 		if err != nil {
-			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", tableName, columnName, value, err)
+			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", table.identifier, columnName, value, err)
 		}
 
-		columns[i] = escapeIdentifier(columnName)
+		columns[i] = columnInfo.escapedName
 		values[i] = normalizedValue
 
 		i++
