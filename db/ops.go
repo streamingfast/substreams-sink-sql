@@ -55,17 +55,17 @@ func createRowUniqueID(m map[string]string) string {
 		}
 	}
 	i := 0
-	keys := make([]*string, len(m))
+	keys := make([]string, len(m))
 	for k := range m {
-		keys[i] = &k
+		keys[i] = k
 		i++
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		return *keys[i] < *keys[j]
+		return keys[i] < keys[j]
 	})
 	values := make([]string, len(keys))
 	for i, key := range keys {
-		values[i] = m[*key]
+		values[i] = m[key]
 	}
 	return strings.Join(values, "/")
 }
