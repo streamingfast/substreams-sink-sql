@@ -22,7 +22,7 @@ type TableInfo struct {
 	name          string
 	nameEscaped   string
 	columnsByName map[string]*ColumnInfo
-	primaryColumn []*ColumnInfo
+	primaryColumns []*ColumnInfo
 
 	// Identifier is equivalent to 'escape(<schema>).escape(<name>)' but pre-computed
 	// for usage when computing queries.
@@ -32,14 +32,14 @@ type TableInfo struct {
 func NewTableInfo(schema, name string, pkList []string, columnsByName map[string]*ColumnInfo) (*TableInfo, error) {
 	schemaEscaped := escapeIdentifier(schema)
 	nameEscaped := escapeIdentifier(name)
-	var primaryColumns []*ColumnInfo
+	primaryColumns := make([]*ColumnInfo, len(pkList))
 
-	for _, primaryKeyColumnName := range(pkList) {
+	for i, primaryKeyColumnName := range(pkList) {
 		primaryColumn, found := columnsByName[primaryKeyColumnName]
 		if !found {
 			return nil, fmt.Errorf("primary key column %q not found", primaryKeyColumnName)
 		}
-		primaryColumns = append(primaryColumns, primaryColumn)
+		primaryColumns[i] = primaryColumn
 
 	}
 
@@ -49,7 +49,7 @@ func NewTableInfo(schema, name string, pkList []string, columnsByName map[string
 		name:          name,
 		nameEscaped:   nameEscaped,
 		identifier:    schemaEscaped + "." + nameEscaped,
-		primaryColumn: primaryColumns,
+		primaryColumns: primaryColumns,
 		columnsByName: columnsByName,
 	}, nil
 }

@@ -136,16 +136,16 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseCha
 			)
 		}
 
-		var primaryKey map[string]string
+		var primaryKeys map[string]string
 		switch u := change.PrimaryKey.(type) {
 		case *pbddatabase.TableChange_Pk:
-			{
-				primaryKey, _ = s.loader.GetPrimaryKey(change.Table, u.Pk)
+			var err error
+			primaryKeys, err = s.loader.GetPrimaryKey(change.Table, u.Pk)
+			if err != nil {
+				return err
 			}
 		case *pbddatabase.TableChange_CompositePk:
-			{
-				primaryKey = u.CompositePk.Keys
-			}
+			primaryKeys = u.CompositePk.Keys
 		default:
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
 		}
@@ -157,17 +157,17 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseCha
 
 		switch change.Operation {
 		case pbddatabase.TableChange_CREATE:
-			err := s.loader.Insert(change.Table, primaryKey, changes)
+			err := s.loader.Insert(change.Table, primaryKeys, changes)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
 		case pbddatabase.TableChange_UPDATE:
-			err := s.loader.Update(change.Table, primaryKey, changes)
+			err := s.loader.Update(change.Table, primaryKeys, changes)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
 		case pbddatabase.TableChange_DELETE:
-			err := s.loader.Delete(change.Table, primaryKey)
+			err := s.loader.Delete(change.Table, primaryKeys)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)
 			}

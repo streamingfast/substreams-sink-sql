@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## Unreleased
+
+### Added
+
+* Added `Composite keys` support following the update in `substreams-database-change`
+
+  The code was updated to use `oneOf` primary keys (pk and composite) to keep backward compatibility. Therefore, substreams using older versions of `DatabaseChange` can still use newer versions of `postgres-sink` without problems. 
+
+
 ## v2.2.1
 
 ### Changed

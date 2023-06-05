@@ -115,11 +115,18 @@ func (o *Operation) query() (string, error) {
 }
 
 func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
-	reg := []string{}
+	if len(primaryKey) == 1 {
+		// key is already escaped when primary key
+		for key, value := range primaryKey {
+			return key + " = " + escapeStringValue(value)
+		}
+	}
+	reg := make([]string, 0, len(primaryKey))
+	// composite keys aren't escaped
 	for key, value := range primaryKey {
 		reg = append(reg, fmt.Sprintf("%s = %s", escapeIdentifier(key), escapeStringValue(value)))
 	}
-	return fmt.Sprint(strings.Join(reg[:], " AND "))
+	return strings.Join(reg[:], " AND ")
 }
 
 func prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {

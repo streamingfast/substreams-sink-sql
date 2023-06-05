@@ -2,6 +2,8 @@ package db
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -9,7 +11,7 @@ import (
 // Insert a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]string) error {
-	uniqueID := createKeyValuePairs(primaryKey)
+	uniqueID := createRowUniqueID(primaryKey)
 
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing insert operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID), zap.Int("field_count", len(data)))
@@ -38,7 +40,7 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 
 	// we need to make sure to add the primary key in the data so that
 	// it gets created
-	for _, primary := range l.tables[tableName].primaryColumn {
+	for _, primary := range l.tables[tableName].primaryColumns {
 		data[primary.name] = primaryKey[primary.name]
 	}
 	l.entries[tableName][uniqueID] = l.newInsertOperation(table, primaryKey, data)
@@ -46,18 +48,36 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 	return nil
 }
 
-func createKeyValuePairs(m map[string]string) string {
-	return fmt.Sprint(m)
+func createRowUniqueID(m map[string]string) string {
+	if len(m) == 1 {
+		for _, v := range m {
+			return v
+		}
+	}
+	i := 0
+	keys := make([]*string, len(m))
+	for k := range m {
+		keys[i] = &k
+		i++
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return *keys[i] < *keys[j]
+	})
+	values := make([]string, len(keys))
+	for i, key := range keys {
+		values[i] = m[*key]
+	}
+	return strings.Join(values, "/")
 }
 
 func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, error) {
-	primaryKeyColumns := l.tables[tableName].primaryColumn
+	primaryKeyColumns := l.tables[tableName].primaryColumns
 	if len(primaryKeyColumns) > 1 {
 		return nil, fmt.Errorf("table %q has composite primary key", tableName)
 	}
-	primaryKey := map[string]string{}
+	primaryKey := make(map[string]string, len(primaryKeyColumns))
 	for _, column := range primaryKeyColumns {
-		primaryKey[column.name] = pk
+		primaryKey[column.escapedName] = pk
 	}
 
 	return primaryKey, nil
@@ -67,7 +87,7 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 // check before with HasTable()
 func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string) error {
 
-	uniqueID := createKeyValuePairs(primaryKey)
+	uniqueID := createRowUniqueID(primaryKey)
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing update operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID), zap.Int("field_count", len(data)))
 	}
@@ -112,7 +132,7 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 // Delete a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
-	uniqueID := createKeyValuePairs(primaryKey)
+	uniqueID := createRowUniqueID(primaryKey)
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing delete operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID))
 	}
