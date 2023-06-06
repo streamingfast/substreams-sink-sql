@@ -169,7 +169,7 @@ func newTable(t *testing.T, schema, name, primaryColumn string, columnInfos ...*
 		columns[columnInfo.name] = columnInfo
 	}
 
-	table, err := NewTableInfo("public", "data", "id", columns)
+	table, err := NewTableInfo("public", "data", []string{"id"}, columns)
 	require.NoError(t, err)
 
 	return table
