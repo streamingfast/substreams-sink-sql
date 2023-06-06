@@ -163,7 +163,7 @@ var reflectTypeTime = reflect.TypeOf(time.Time{})
 // Format based on type, value returned unescaped
 func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
-	case reflect.String, reflect.Slice:
+	case reflect.String:
 		return escapeStringValue(value), nil
 	case reflect.Bool:
 		return fmt.Sprintf("'%s'", value), nil
