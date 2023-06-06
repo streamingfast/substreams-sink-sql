@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The code was updated to use `oneOf` primary keys (pk and composite) to keep backward compatibility. Therefore, substreams using older versions of `DatabaseChange` can still use newer versions of `postgres-sink` without problems. 
 
+* Added escape to value in case the postgres data type is `BYTES`. We now escape the byte array.
+
 
 ## v2.2.1
 
