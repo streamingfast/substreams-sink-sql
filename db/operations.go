@@ -165,6 +165,10 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
 	case reflect.String:
 		return escapeStringValue(value), nil
+	// BYTES in Postgres must be escaped, we receive a Vec<u8> from substreams
+	case reflect.Slice:
+		return escapeStringValue(value), nil
+
 	case reflect.Bool:
 		return fmt.Sprintf("'%s'", value), nil
 
