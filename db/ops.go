@@ -38,11 +38,11 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		l.logger.Debug("primary key entry never existed for table, adding insert operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	// we need to make sure to add the primary key in the data so that
-	// it gets created
+	// We need to make sure to add the primary key(s) in the data so that those column get created correctly
 	for _, primary := range l.tables[tableName].primaryColumns {
 		data[primary.name] = primaryKey[primary.name]
 	}
+
 	l.entries[tableName][uniqueID] = l.newInsertOperation(table, primaryKey, data)
 	l.entriesCount++
 	return nil
@@ -54,30 +54,35 @@ func createRowUniqueID(m map[string]string) string {
 			return v
 		}
 	}
+
 	i := 0
 	keys := make([]string, len(m))
 	for k := range m {
 		keys[i] = k
 		i++
 	}
+
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i] < keys[j]
 	})
+
 	values := make([]string, len(keys))
 	for i, key := range keys {
 		values[i] = m[key]
 	}
+
 	return strings.Join(values, "/")
 }
 
 func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, error) {
 	primaryKeyColumns := l.tables[tableName].primaryColumns
 	if len(primaryKeyColumns) > 1 {
-		return nil, fmt.Errorf("table %q has composite primary key", tableName)
+		return nil, fmt.Errorf("your Substreams sent a primary key but your database definition for table %q is using a composite primary key", tableName)
 	}
+
 	primaryKey := make(map[string]string, len(primaryKeyColumns))
 	for _, column := range primaryKeyColumns {
-		primaryKey[column.escapedName] = pk
+		primaryKey[column.name] = pk
 	}
 
 	return primaryKey, nil

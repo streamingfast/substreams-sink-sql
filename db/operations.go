@@ -31,7 +31,7 @@ type Operation struct {
 }
 
 func (o *Operation) String() string {
-	return fmt.Sprintf("%s/%s (%s)", o.table.identifier, o.primaryKey, strings.ToLower(string(o.opType)))
+	return fmt.Sprintf("%s/%s (%s)", o.table.identifier, createRowUniqueID(o.primaryKey), strings.ToLower(string(o.opType)))
 }
 
 func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
@@ -115,17 +115,18 @@ func (o *Operation) query() (string, error) {
 }
 
 func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
+	// Avoid any allocation if there is a single primary key
 	if len(primaryKey) == 1 {
-		// key is already escaped when primary key
 		for key, value := range primaryKey {
-			return key + " = " + escapeStringValue(value)
+			return escapeIdentifier(key) + " = " + escapeStringValue(value)
 		}
 	}
+
 	reg := make([]string, 0, len(primaryKey))
-	// composite keys aren't escaped
 	for key, value := range primaryKey {
-		reg = append(reg, fmt.Sprintf("%s = %s", escapeIdentifier(key), escapeStringValue(value)))
+		reg = append(reg, escapeIdentifier(key)+" = "+escapeStringValue(value))
 	}
+
 	return strings.Join(reg[:], " AND ")
 }
 
@@ -165,6 +166,7 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
 	case reflect.String:
 		return escapeStringValue(value), nil
+
 	// BYTES in Postgres must be escaped, we receive a Vec<u8> from substreams
 	case reflect.Slice:
 		return escapeStringValue(value), nil
