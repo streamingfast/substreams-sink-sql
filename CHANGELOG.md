@@ -5,14 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
-## Unreleased
+## v2.3.0
 
 ### Added
 
 * Added `Composite keys` support following the update in `substreams-database-change`
 
-  The code was updated to use `oneOf` primary keys (pk and composite) to keep backward compatibility. Therefore, substreams using older versions of `DatabaseChange` can still use newer versions of `postgres-sink` without problems. 
+  The code was updated to use `oneOf` primary keys (pk and composite) to keep backward compatibility. Therefore, Substreams using older versions of `DatabaseChange` can still use newer versions of `postgres-sink` without problems. To use composite key, define your schema to use Postgres composite keys, update to latest version of `substreams-database-changes` and update your code to send a `CompositePrimaryKey` key object for the `primary_key` field of the `TableChange` message.
 
 * Added escape to value in case the postgres data type is `BYTES`. We now escape the byte array.
 

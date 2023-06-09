@@ -19,7 +19,7 @@ main() {
   fi
 
   pushd "$ROOT" &> /dev/null
-    go install -ldflags "-X main.Version=$version -X main.Commit=$commit -X main.IsDirty=$dirty" ./cmd/substreams-sink-postgres
+    go install -ldflags "-X main.Version=$version" ./cmd/substreams-sink-postgres
   popd &> /dev/null
 
   if [[ $KILL_AFTER != "" ]]; then
