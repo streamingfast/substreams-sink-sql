@@ -89,7 +89,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 
 	sink, err := sink.NewFromViper(
 		cmd,
-		"sf.substreams.sink.database.v1.DatabaseChanges",
+		"sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges",
 		endpoint, manifestPath, outputModuleName, blockRange,
 		zlog,
 		tracer,

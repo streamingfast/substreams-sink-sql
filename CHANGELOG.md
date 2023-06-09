@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Added escape to value in case the postgres data type is `BYTES`. We now escape the byte array.
 
+### Fixed
+
+* Added back support for old Substreams Database Change Protobuf package id `sf.substreams.database.v1.DatabaseChanges`.
 
 ## v2.2.1
 

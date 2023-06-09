@@ -13,6 +13,7 @@ import (
 	pbddatabase "github.com/streamingfast/substreams-sink-postgres/pb/substreams/sink/database/v1"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -100,7 +101,15 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 	}
 
 	dbChanges := &pbddatabase.DatabaseChanges{}
-	if err := output.GetMapOutput().UnmarshalTo(dbChanges); err != nil {
+	mapOutput := output.GetMapOutput()
+	if !mapOutput.MessageIs(dbChanges) && mapOutput.TypeUrl != "type.googleapis.com/sf.substreams.database.v1.DatabaseChanges" {
+		return fmt.Errorf("mismatched message type: trying to unmarshal unknown type %q", mapOutput.MessageName())
+	}
+
+	// We do not use UnmarshalTo here because we need to parse an older proto type and
+	// UnmarshalTo enforces the type check. So we check manually the `TypeUrl` above and we use
+	// `Unmarshal` instead which only deals with the bytes value.
+	if err := proto.Unmarshal(mapOutput.Value, dbChanges); err != nil {
 		return fmt.Errorf("unmarshal database changes: %w", err)
 	}
 
