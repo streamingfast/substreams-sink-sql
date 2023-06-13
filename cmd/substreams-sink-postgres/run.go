@@ -73,15 +73,9 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		if errors.As(err, &e) {
 			fmt.Printf("Error validating the cursors table: %s\n", e)
 			fmt.Println("You can use the following sql schema to create a cursors table")
-			fmt.Println(Dedent(`
-				create table cursors
-				(
-					id         bigserial not null constraint cursor_pk primary key,
-					cursors    text,
-					block_num  bigint,
-					block_id   text
-				);
-			`))
+			fmt.Println()
+			fmt.Println(dbLoader.GetCreateCursorsTableSQL())
+			fmt.Println()
 			return fmt.Errorf("invalid cursors table")
 		}
 		return fmt.Errorf("load psql table: %w", err)

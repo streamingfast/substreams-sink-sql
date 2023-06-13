@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jimsmart/schema"
+	"github.com/streamingfast/cli"
 	"github.com/streamingfast/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -234,19 +235,23 @@ func (l *Loader) Setup(ctx context.Context, schemaFile string) error {
 }
 
 func (l *Loader) setupCursorTable(ctx context.Context) error {
-	_, err := l.ExecContext(ctx, `
-		create table if not exists cursors
-		(
-			id         text not null constraint cursor_pk primary key,
-			cursor     text,
-			block_num  bigint,
-			block_id   text
-		);
-	`)
+	_, err := l.ExecContext(ctx, l.GetCreateCursorsTableSQL())
 
 	if err != nil {
 		return fmt.Errorf("creating cursor table: %w", err)
 	}
 
 	return nil
+}
+
+func (l *Loader) GetCreateCursorsTableSQL() string {
+	return fmt.Sprintf(cli.Dedent(`
+		create table if not exists %s.%s
+		(
+			id         text not null constraint cursor_pk primary key,
+			cursor     text,
+			block_num  bigint,
+			block_id   text
+		);
+	`), escapeIdentifier(l.schema), escapeIdentifier("cursors"))
 }
