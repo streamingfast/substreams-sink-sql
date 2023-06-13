@@ -9,8 +9,8 @@ import (
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
+	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	"github.com/streamingfast/substreams-sink-postgres/db"
-	pbddatabase "github.com/streamingfast/substreams-sink-postgres/pb/substreams/sink/database/v1"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -100,7 +100,7 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
 	}
 
-	dbChanges := &pbddatabase.DatabaseChanges{}
+	dbChanges := &pbdatabase.DatabaseChanges{}
 	mapOutput := output.GetMapOutput()
 	if !mapOutput.MessageIs(dbChanges) && mapOutput.TypeUrl != "type.googleapis.com/sf.substreams.database.v1.DatabaseChanges" {
 		return fmt.Errorf("mismatched message type: trying to unmarshal unknown type %q", mapOutput.MessageName())
@@ -134,7 +134,7 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 	return nil
 }
 
-func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseChanges) error {
+func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
@@ -147,13 +147,13 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseCha
 
 		var primaryKeys map[string]string
 		switch u := change.PrimaryKey.(type) {
-		case *pbddatabase.TableChange_Pk:
+		case *pbdatabase.TableChange_Pk:
 			var err error
 			primaryKeys, err = s.loader.GetPrimaryKey(change.Table, u.Pk)
 			if err != nil {
 				return err
 			}
-		case *pbddatabase.TableChange_CompositePk:
+		case *pbdatabase.TableChange_CompositePk:
 			primaryKeys = u.CompositePk.Keys
 		default:
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
@@ -165,17 +165,17 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbddatabase.DatabaseCha
 		}
 
 		switch change.Operation {
-		case pbddatabase.TableChange_CREATE:
+		case pbdatabase.TableChange_CREATE:
 			err := s.loader.Insert(change.Table, primaryKeys, changes)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
-		case pbddatabase.TableChange_UPDATE:
+		case pbdatabase.TableChange_UPDATE:
 			err := s.loader.Update(change.Table, primaryKeys, changes)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
-		case pbddatabase.TableChange_DELETE:
+		case pbdatabase.TableChange_DELETE:
 			err := s.loader.Delete(change.Table, primaryKeys)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)

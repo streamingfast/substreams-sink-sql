@@ -5,7 +5,6 @@ go 1.18
 require (
 	github.com/bobg/go-generics/v2 v2.1.1
 	github.com/drone/envsubst v1.0.3
-	github.com/golang/protobuf v1.5.2
 	github.com/jimsmart/schema v0.2.0
 	github.com/lib/pq v1.10.6
 	github.com/spf13/cobra v1.6.1
@@ -14,9 +13,10 @@ require (
 	github.com/streamingfast/logging v0.0.0-20221209193439-bff11742bf4c
 	github.com/streamingfast/substreams v1.1.3-0.20230517210915-91fa4e7a11ef
 	github.com/streamingfast/substreams-sink v0.2.6
+	github.com/streamingfast/substreams-sink-database-changes v1.1.3
 	github.com/stretchr/testify v1.8.1
 	go.uber.org/zap v1.23.0
-	google.golang.org/protobuf v1.29.1
+	google.golang.org/protobuf v1.30.0
 )
 
 require (
@@ -30,6 +30,7 @@ require (
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
