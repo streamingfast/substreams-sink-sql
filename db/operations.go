@@ -165,6 +165,8 @@ var reflectTypeTime = reflect.TypeOf(time.Time{})
 func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
 	case reflect.String:
+		// replace unicode null character with empty string
+		value = strings.ReplaceAll(value, "\u0000", "")
 		return escapeStringValue(value), nil
 
 	// BYTES in Postgres must be escaped, we receive a Vec<u8> from substreams
