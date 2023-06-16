@@ -25,12 +25,17 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	}()
 
 	var entryCount int
-	for tableName, entries := range l.entries {
+	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
+		tableName := entriesPair.Key
+		entries := entriesPair.Value
+
 		if l.tracer.Enabled() {
-			l.logger.Debug("flushing table entries", zap.String("table_name", tableName), zap.Int("entry_count", len(entries)))
+			l.logger.Debug("flushing table entries", zap.String("table_name", tableName), zap.Int("entry_count", entries.Len()))
 		}
 
-		for _, entry := range entries {
+		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
+			entry := entryPair.Value
+
 			query, err := entry.query()
 			if err != nil {
 				return fmt.Errorf("failed to get query: %w", err)
@@ -45,7 +50,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 			}
 		}
 
-		entryCount += len(entries)
+		entryCount += entries.Len()
 	}
 
 	entryCount += 1
@@ -58,12 +63,12 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	}
 	l.reset()
 
-	l.logger.Debug("flushed table(s) entries", zap.Int("table_count", len(l.entries)), zap.Int("entry_count", entryCount), zap.Duration("took", time.Since(startAt)))
+	l.logger.Debug("flushed table(s) entries", zap.Int("table_count", l.entries.Len()), zap.Int("entry_count", entryCount), zap.Duration("took", time.Since(startAt)))
 	return nil
 }
 
 func (l *Loader) reset() {
-	for tableName := range l.entries {
-		l.entries[tableName] = map[string]*Operation{}
+	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
+		l.entries.Set(entriesPair.Key, NewOrderedMap[string, *Operation]())
 	}
 }

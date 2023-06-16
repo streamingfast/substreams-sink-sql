@@ -22,15 +22,17 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		return fmt.Errorf("unknown table %q", tableName)
 	}
 
-	if _, found := l.entries[tableName]; !found {
+	entry, found := l.entries.Get(tableName)
+	if !found {
 		if l.tracer.Enabled() {
 			l.logger.Debug("adding tracking of table never seen before", zap.String("table_name", tableName))
 		}
 
-		l.entries[tableName] = map[string]*Operation{}
+		entry = NewOrderedMap[string, *Operation]()
+		l.entries.Set(tableName, entry)
 	}
 
-	if _, found := l.entries[tableName][uniqueID]; found {
+	if _, found := entry.Get(uniqueID); found {
 		return fmt.Errorf("attempting to insert in table %q a primary key %q, that is already scheduled for insertion, insert should only be called once for a given primary key", tableName, primaryKey)
 	}
 
@@ -43,7 +45,7 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		data[primary.name] = primaryKey[primary.name]
 	}
 
-	l.entries[tableName][uniqueID] = l.newInsertOperation(table, primaryKey, data)
+	entry.Set(uniqueID, l.newInsertOperation(table, primaryKey, data))
 	l.entriesCount++
 	return nil
 }
@@ -102,15 +104,17 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 		return fmt.Errorf("unknown table %q", tableName)
 	}
 
-	if _, found := l.entries[tableName]; !found {
+	entry, found := l.entries.Get(tableName)
+	if !found {
 		if l.tracer.Enabled() {
 			l.logger.Debug("adding tracking of table never seen before", zap.String("table_name", tableName))
 		}
 
-		l.entries[tableName] = map[string]*Operation{}
+		entry = NewOrderedMap[string, *Operation]()
+		l.entries.Set(tableName, entry)
 	}
 
-	if op, found := l.entries[tableName][uniqueID]; found {
+	if op, found := entry.Get(uniqueID); found {
 		if op.opType == OperationTypeDelete {
 			return fmt.Errorf("attempting to update an object with primary key %q, that schedule to be deleted", primaryKey)
 		}
@@ -120,7 +124,7 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 		}
 
 		op.mergeData(data)
-		l.entries[tableName][uniqueID] = op
+		entry.Set(uniqueID, op)
 		return nil
 	} else {
 		l.entriesCount++
@@ -130,7 +134,7 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 		l.logger.Debug("primary key entry never existed for table, adding update operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	l.entries[tableName][uniqueID] = l.newUpdateOperation(table, primaryKey, data)
+	entry.Set(uniqueID, l.newUpdateOperation(table, primaryKey, data))
 	return nil
 }
 
@@ -147,15 +151,17 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
 		return fmt.Errorf("unknown table %q", tableName)
 	}
 
-	if _, found := l.entries[tableName]; !found {
+	entry, found := l.entries.Get(tableName)
+	if !found {
 		if l.tracer.Enabled() {
 			l.logger.Debug("adding tracking of table never seen before", zap.String("table_name", tableName))
 		}
 
-		l.entries[tableName] = map[string]*Operation{}
+		entry = NewOrderedMap[string, *Operation]()
+		l.entries.Set(tableName, entry)
 	}
 
-	if _, found := l.entries[tableName][uniqueID]; !found {
+	if _, found := entry.Get(uniqueID); !found {
 		if l.tracer.Enabled() {
 			l.logger.Debug("primary key entry never existed for table", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 		}
@@ -167,6 +173,6 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
 		l.logger.Debug("adding deleting operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	l.entries[tableName][uniqueID] = l.newDeleteOperation(table, primaryKey)
+	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey))
 	return nil
 }

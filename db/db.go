@@ -11,9 +11,19 @@ import (
 	"github.com/jimsmart/schema"
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/logging"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+// Make the typing a bit easier
+type OrderedMap[K comparable, V any] struct {
+	*orderedmap.OrderedMap[K, V]
+}
+
+func NewOrderedMap[K comparable, V any]() *OrderedMap[K, V] {
+	return &OrderedMap[K, V]{OrderedMap: orderedmap.New[K, V]()}
+}
 
 type CursorError struct {
 	error
@@ -24,7 +34,7 @@ type Loader struct {
 
 	database     string
 	schema       string
-	entries      map[string]map[string]*Operation
+	entries      *OrderedMap[string, *OrderedMap[string, *Operation]]
 	entriesCount uint64
 	tables       map[string]*TableInfo
 	cursorTable  *TableInfo
@@ -66,7 +76,7 @@ func NewLoader(
 		DB:                 db,
 		database:           dsn.database,
 		schema:             dsn.schema,
-		entries:            map[string]map[string]*Operation{},
+		entries:            NewOrderedMap[string, *OrderedMap[string, *Operation]](),
 		tables:             map[string]*TableInfo{},
 		flushInterval:      flushInterval,
 		moduleMismatchMode: moduleMismatchMode,
