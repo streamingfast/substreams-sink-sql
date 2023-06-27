@@ -21,6 +21,7 @@ func main() {
 		sinkRunCmd,
 		sinkSetupCmd,
 		sinkToolsCmd,
+		sinkFirstLoadCmd,
 
 		ConfigureViper("SINK_POSTGRES"),
 		ConfigureVersion(version),
