@@ -194,13 +194,19 @@ func (l *Loader) GetIdentifier() string {
 	return fmt.Sprintf("%s/%s", l.database, l.schema)
 }
 
-func (l *Loader) GetAvailableTablesInSchema() string {
+
+func (l *Loader) GetAvailableTablesInSchemaList() []string {
 	tables := make([]string, len(l.tables))
 	i := 0
 	for table := range l.tables {
 		tables[i] = table
 		i++
 	}
+	return tables
+}
+
+func (l *Loader) GetAvailableTablesInSchema() string {
+	tables := l.GetAvailableTablesInSchemaList()
 
 	return strings.Join(tables, ", ")
 }
