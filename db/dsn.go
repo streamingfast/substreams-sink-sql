@@ -23,7 +23,15 @@ type DSN struct {
 	options  []string
 }
 
-func parseDSN(dsn string) (*DSN, error) {
+func (c *DSN) DSN() string {
+	out := fmt.Sprintf("host=%s port=%d user=%s dbname=%s %s", c.host, c.port, c.username, c.database, strings.Join(c.options, " "))
+	if c.password != "" {
+		out = out + " password=" + c.password
+	}
+	return out
+}
+
+func ParseDSN(dsn string) (*DSN, error) {
 	expanded, err := envsubst.Eval(dsn, os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("variables expansion failed: %w", err)

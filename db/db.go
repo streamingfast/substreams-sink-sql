@@ -53,7 +53,7 @@ func NewLoader(
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*Loader, error) {
-	dsn, err := parseDSN(psqlDsn)
+	dsn, err := ParseDSN(psqlDsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
