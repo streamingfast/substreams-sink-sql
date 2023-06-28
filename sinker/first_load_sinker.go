@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,14 +69,15 @@ func NewFirstLoad(
 		stats: NewStats(logger),
 	}
 
-	baseOutputStore, err := dstore.NewJSONLStore(destFolder)
+	csvOutputStore, err := dstore.NewStore(destFolder, "csv", "", false)
 	if err != nil {
 		return nil, err
 	}
 	tables := s.loader.GetAvailableTablesInSchemaList()
 
 	for _, table := range tables {
-		fb, err := getBundler(table, s.Sinker.BlockRange().StartBlock(), s.stopBlock, bundleSize, bufferSize, baseOutputStore, workingDir, logger)
+		columns := s.loader.GetColumnsForTable(table)
+		fb, err := getBundler(table, s.Sinker.BlockRange().StartBlock(), s.stopBlock, bundleSize, bufferSize, csvOutputStore, workingDir, logger, columns)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +136,6 @@ func (s *FirstLoadSinker) Run(ctx context.Context) {
 		zap.String("database", s.loader.GetDatabase()),
 		zap.String("schema", s.loader.GetSchema()),
 	)
-
 
 	uploadContext := context.Background()
 	for _, fb := range s.fileBundlers {
@@ -196,49 +198,41 @@ func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Datab
 			)
 		}
 
-		var primaryKeys map[string]string
+		var fields map[string]string
 		switch u := change.PrimaryKey.(type) {
 		case *pbdatabase.TableChange_Pk:
 			var err error
-			primaryKeys, err = s.loader.GetPrimaryKey(change.Table, u.Pk)
+			fields, err = s.loader.GetPrimaryKey(change.Table, u.Pk)
 			if err != nil {
 				return err
 			}
 		case *pbdatabase.TableChange_CompositePk:
-			primaryKeys = u.CompositePk.Keys
+			fields = u.CompositePk.Keys
 		default:
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
 		}
-		var data []byte
-
-		switch change.Operation {
-		case pbdatabase.TableChange_CREATE:
-			// TODO take into account the order of the fields
-			// add primary keys to changes
-			for _, value := range primaryKeys {
-				data = append(data, []byte(value)...)
-				data = append(data, byte(','))
-			}
-			// add fields
-			for _, field := range change.Fields {
-				data = append(data, field.NewValue...)
-				data = append(data, byte(','))
-			}
-			// add endline
-			data = append(data, byte('\n'))
-		case pbdatabase.TableChange_UPDATE:
-		case pbdatabase.TableChange_DELETE:
-		default:
-			return fmt.Errorf("Currently, we only support append only databases")
-		}
-
 		table := change.Table
 		entityBundler, ok := s.fileBundlers[table]
 		if !ok {
 			return fmt.Errorf("cannot get bundler writer for table %s", table)
 		}
-		entityBundler.Writer().Write(data)
-
+		switch change.Operation {
+		case pbdatabase.TableChange_CREATE:
+			// add fields
+			for _, field := range change.Fields {
+				fields[field.Name] = field.NewValue
+			}
+			data, _ := bundler.CSVEncode(fields)
+			if !entityBundler.HeaderWritten {
+				entityBundler.Writer().Write(entityBundler.Header)
+				entityBundler.HeaderWritten = true
+			}
+			entityBundler.Writer().Write(data)
+		case pbdatabase.TableChange_UPDATE:
+		case pbdatabase.TableChange_DELETE:
+		default:
+			return fmt.Errorf("Currently, we only support append only databases")
+		}
 	}
 
 	return nil
@@ -313,12 +307,12 @@ func (s *FirstLoadSinker) batchBlockModulo(blockData *pbsubstreamsrpc.BlockScope
 	return HISTORICAL_BLOCK_FLUSH_EACH
 }
 
-func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint64, baseOutputStore dstore.Store, workingDir string, logger *zap.Logger) (*bundler.Bundler, error) {
+func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint64, baseOutputStore dstore.Store, workingDir string, logger *zap.Logger, columns []string) (*bundler.Bundler, error) {
 	// Should be CSV
 	boundaryWriter := writer.NewBufferedIO(
 		bufferSize,
 		filepath.Join(workingDir, table),
-		writer.FileTypeJSONL,
+		writer.FileTypeCSV,
 		logger.With(zap.String("table_name", table)),
 	)
 	subStore, err := baseOutputStore.SubStore(table)
@@ -326,7 +320,10 @@ func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint
 		return nil, err
 	}
 
-	fb, err := bundler.New(bundleSize, stopBlock, boundaryWriter, subStore, logger)
+	sort.Strings(columns)
+
+	header := []byte(strings.Join(columns, ",") + "\n")
+	fb, err := bundler.New(bundleSize, stopBlock, boundaryWriter, subStore, logger, header)
 	if err != nil {
 		return nil, err
 	}

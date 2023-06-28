@@ -205,6 +205,17 @@ func (l *Loader) GetAvailableTablesInSchemaList() []string {
 	return tables
 }
 
+func (l *Loader) GetColumnsForTable(name string) []string {
+	columns := []string{}
+	for column := range l.tables[name].columnsByName {
+		// check if column is empty
+		if len(column) > 0 {
+			columns = append(columns, column)
+		}
+	}
+	return columns
+}
+
 func (l *Loader) GetAvailableTablesInSchema() string {
 	tables := l.GetAvailableTablesInSchemaList()
 

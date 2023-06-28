@@ -11,6 +11,7 @@ type FileType string
 
 const (
 	FileTypeJSONL FileType = "jsonl"
+	FileTypeCSV FileType = "csv"
 )
 
 type baseWriter struct {

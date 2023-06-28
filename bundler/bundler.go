@@ -20,12 +20,15 @@ import (
 type Bundler struct {
 	*shutter.Shutter
 
-	blockCount     uint64
-	encoder        Encoder
+	blockCount uint64
+	// encoder        Encoder
 	stats          *boundaryStats
 	boundaryWriter writer.Writer
 	outputStore    dstore.Store
 	fileType       writer.FileType
+	Header         []byte
+	HeaderWritten  bool
+
 	activeBoundary *bstream.Range
 	stopBlock      uint64
 	uploadQueue    *dhammer.Nailer
@@ -40,6 +43,7 @@ func New(
 	boundaryWriter writer.Writer,
 	outputStore dstore.Store,
 	zlogger *zap.Logger,
+	header []byte,
 ) (*Bundler, error) {
 
 	b := &Bundler{
@@ -50,16 +54,20 @@ func New(
 		stopBlock:      stopBlock,
 		stats:          newStats(),
 		zlogger:        zlogger,
+		Header:         header,
+		HeaderWritten:  false,
 	}
 
 	b.uploadQueue = dhammer.NewNailer(5, b.uploadBoundary, dhammer.NailerLogger(zlogger))
 
-	switch boundaryWriter.Type() {
-	case writer.FileTypeJSONL:
-		b.encoder = JSONLEncode
-	default:
-		return nil, fmt.Errorf("invalid file type %q", boundaryWriter.Type())
-	}
+	// switch boundaryWriter.Type() {
+	// case writer.FileTypeJSONL:
+	// 	b.encoder = JSONLEncode
+	// case writer.FileTypeCSV:
+	// 	b.encoder = JSONLEncode
+	// default:
+	// 	return nil, fmt.Errorf("invalid file type %q", boundaryWriter.Type())
+	// }
 	return b, nil
 }
 
@@ -166,10 +174,13 @@ func (b *Bundler) stop(ctx context.Context) error {
 	b.zlogger.Debug("queuing boundary upload",
 		zap.Stringer("boundary", b.activeBoundary),
 	)
-	b.uploadQueue.In <- &boundaryFile{
-		name: b.activeBoundary.String(),
-		file: file,
+	if b.boundaryWriter.IsWritten(){
+		b.uploadQueue.In <- &boundaryFile{
+			name: b.activeBoundary.String(),
+			file: file,
+		}
 	}
+	b.HeaderWritten = false
 
 	b.activeBoundary = nil
 

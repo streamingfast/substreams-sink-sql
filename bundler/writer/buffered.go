@@ -18,6 +18,8 @@ var _ Writer = (*BufferedIO)(nil)
 type BufferedIO struct {
 	baseWriter
 
+	written bool
+
 	bufferMazSize uint64
 	workingDir    string
 	activeFile    *bufferedActiveFile
@@ -37,6 +39,7 @@ func NewBufferedIO(
 		bufferMazSize: bufferMaxSize,
 		baseWriter:    newBaseWriter(fileType, zlogger),
 		workingDir:    workingDir,
+		written:       false,
 	}
 }
 
@@ -58,6 +61,7 @@ func (s *BufferedIO) StartBoundary(blockRange *bstream.Range) error {
 		outputFilename: s.filename(blockRange),
 	}
 
+	s.written = false
 	s.activeFile = a
 	return nil
 }
@@ -100,7 +104,15 @@ func (s *BufferedIO) Write(data []byte) (n int, err error) {
 		return 0, fmt.Errorf("failed to write to active file")
 	}
 
+	if !s.written {
+		s.written = true
+	}
+
 	return s.activeFile.writer.Write(data)
+}
+
+func (s *BufferedIO) IsWritten() bool {
+	return s.written
 }
 
 var _ io.WriteCloser = (*LazyFile)(nil)

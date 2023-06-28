@@ -11,6 +11,7 @@ import (
 type Writer interface {
 	io.Writer
 
+	IsWritten() bool
 	StartBoundary(*bstream.Range) error
 	CloseBoundary(ctx context.Context) (Uploadeable, error)
 	Type() FileType
