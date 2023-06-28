@@ -110,17 +110,16 @@ func (s *FirstLoadSinker) Run(ctx context.Context) {
 	}
 	s.Sinker.OnTerminating(s.Shutdown)
 	s.OnTerminating(func(err error) {
+		s.Sinker.Shutdown(err)
 		s.stats.LogNow()
 		s.logger.Info("csv sinker terminating", zap.Stringer("last_block_written", s.stats.lastBlock))
+		s.stats.Close()
 		if err == nil {
 			s.handleStopBlockReached(ctx)
 		}
 		s.CloseAllFileBundlers(err)
-		s.stats.Close()
-		s.Sinker.Shutdown(err)
 	})
 
-	s.OnTerminating(func(_ error) { s.stats.Close() })
 	s.stats.OnTerminated(func(err error) { s.Shutdown(err) })
 
 	logEach := 15 * time.Second
@@ -239,13 +238,13 @@ func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Datab
 }
 
 func (s *FirstLoadSinker) handleStopBlockReached(ctx context.Context) error {
-	s.rollAllBundlers(ctx, s.stopBlock)
-
 	store, err := dstore.NewSimpleStore(s.destFolder)
 	if err != nil {
 		return fmt.Errorf("failed to initialize store at path %s: %w", s.destFolder, err)
 	}
+
 	lastBlockAndHash := fmt.Sprintf("%d:%s\n", s.stats.lastBlock.Num(), s.stats.lastBlock.ID())
+	
 	if err := store.WriteObject(context.Background(), "last_block.txt", bytes.NewReader([]byte(lastBlockAndHash))); err != nil {
 		s.logger.Warn("could not write last block")
 	}

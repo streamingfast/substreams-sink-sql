@@ -105,7 +105,7 @@ func firstLoadE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup first load sinker: %w", err)
 	}
 
-	firstLoadSinker.OnTerminating(app.Shutdown)
+	firstLoadSinker.OnTerminated(app.Shutdown)
 	app.OnTerminating(func(err error) {
 		firstLoadSinker.Shutdown(err)
 	})
