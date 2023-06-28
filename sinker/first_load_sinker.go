@@ -212,7 +212,7 @@ func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Datab
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
 		}
 		table := change.Table
-		entityBundler, ok := s.fileBundlers[table]
+		tableBundler, ok := s.fileBundlers[table]
 		if !ok {
 			return fmt.Errorf("cannot get bundler writer for table %s", table)
 		}
@@ -223,11 +223,11 @@ func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Datab
 				fields[field.Name] = field.NewValue
 			}
 			data, _ := bundler.CSVEncode(fields)
-			if !entityBundler.HeaderWritten {
-				entityBundler.Writer().Write(entityBundler.Header)
-				entityBundler.HeaderWritten = true
+			if !tableBundler.HeaderWritten {
+				tableBundler.Writer().Write(tableBundler.Header)
+				tableBundler.HeaderWritten = true
 			}
-			entityBundler.Writer().Write(data)
+			tableBundler.Writer().Write(data)
 		case pbdatabase.TableChange_UPDATE:
 		case pbdatabase.TableChange_DELETE:
 		default:
