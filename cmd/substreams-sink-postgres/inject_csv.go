@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,16 +18,20 @@ import (
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/dstore"
+	sink "github.com/streamingfast/substreams-sink"
 
 	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-postgres/state"
 	"go.uber.org/zap"
 )
 
 var injectCSVCmd = Command(injectCSVE,
 	"inject-csv <schema> <input-path> <table> <psql-dsn> <start-block> <stop-block>",
 	"Injects generated CSV rows for <table> into the database pointed by <psql-dsn> argument. Can be run in parallel for multiple rows up to the same stop-block. Watch out, the start-block must be aligned with the range size of the csv files or the module inital block",
-	ExactArgs(6),
-	Flags(func(flags *pflag.FlagSet) {}),
+	ExactArgs(9),
+	Flags(func(flags *pflag.FlagSet) {
+		sink.AddFlagsToSet(flags)
+	}),
 )
 
 func injectCSVE(cmd *cobra.Command, args []string) error {
@@ -44,6 +51,12 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid stop block %q: %w", args[6], err)
 	}
+
+	// convert uint to string
+	blockRange := fmt.Sprint(startBlock, ":", stopBlock)
+	endpoint := args[6]
+	manifestPath := args[7]
+	outputModuleName := args[8]
 
 	postgresDSN, err := db.ParseDSN(psqlDSN)
 	if err != nil {
@@ -71,6 +84,89 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("table filler %q: %w", theTableName, err)
 	}
 
+	// update cursor
+
+	zlog.Info("getting sink from manifest")
+	// look for module hash
+	fmt.Println(endpoint, manifestPath, outputModuleName, blockRange)
+	sink, err := sink.NewFromViper(
+		cmd,
+		"sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges",
+		endpoint, manifestPath, outputModuleName, blockRange,
+		zlog,
+		tracer,
+	)
+	if err != nil {
+		return fmt.Errorf("unable to setup sinker: %w", err)
+	}
+	// get cursor from file
+
+	zlog.Info("getting cursor from state.yaml")
+	stateStorePath := filepath.Join(inputPath, "state.yaml")
+	stateFileDirectory := filepath.Dir(stateStorePath)
+	if err := os.MkdirAll(stateFileDirectory, os.ModePerm); err != nil {
+		return fmt.Errorf("create state file directories: %w", err)
+	}
+	stateStore, err := state.NewFileStateStore(stateStorePath)
+	if err != nil {
+		return fmt.Errorf("new file state store: %w", err)
+	}
+
+	fileCursor, err := stateStore.ReadCursor()
+	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
+		return fmt.Errorf("unable to retrieve cursor: %w", err)
+	}
+
+	zlog.Info("getting cursor inside postgres")
+	moduleMismatchMode, err := db.ParseOnModuleHashMismatch("error")
+	dbLoader, err := db.NewLoader(psqlDSN, 0, moduleMismatchMode, zlog, tracer)
+	if err != nil {
+		return fmt.Errorf("new psql loader: %w", err)
+	}
+
+	if err := dbLoader.LoadTables(); err != nil {
+		var e *db.CursorError
+		if errors.As(err, &e) {
+			fmt.Printf("Error validating the cursors table: %s\n", e)
+			fmt.Println("You can use the following sql schema to create a cursors table")
+			fmt.Println()
+			fmt.Println(dbLoader.GetCreateCursorsTableSQL())
+			fmt.Println()
+			return fmt.Errorf("invalid cursors table")
+		}
+		return fmt.Errorf("load psql table: %w", err)
+	}
+
+	_, mistmatchDetected, err := dbLoader.GetCursor(ctx, sink.OutputModuleHash())
+	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
+		return fmt.Errorf("unable to retrieve cursor: %w", err)
+	}
+
+	// We write an empty cursor right away in the database because the flush logic
+	// only performs an `update` operation so an initial cursor is required in the database
+	// for the flush to work correctly.
+	zlog.Info("updating cursor")
+	if errors.Is(err, db.ErrCursorNotFound) {
+		if err := dbLoader.InsertCursor(ctx, sink.OutputModuleHash(), fileCursor); err != nil {
+			return fmt.Errorf("unable to insert initial cursor: %w", err)
+		}
+	} else if mistmatchDetected {
+		if err := dbLoader.InsertCursor(ctx, sink.OutputModuleHash(), fileCursor); err != nil {
+			return fmt.Errorf("unable to insert initial cursor: %w", err)
+		}
+	} else {
+		// TODO: update cursor without transaction
+		tx, err := dbLoader.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to being db transaction: %w", err)
+		}
+		if err := dbLoader.UpdateCursor(ctx, tx, sink.OutputModuleHash(), fileCursor); err != nil {
+			return fmt.Errorf("update cursor: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit db transaction: %w", err)
+		}
+	}
 	zlog.Info("table done", zap.Duration("total", time.Since(t0)))
 	return nil
 }
