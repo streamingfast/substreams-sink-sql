@@ -1,10 +1,10 @@
 package sinker
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -19,6 +19,7 @@ import (
 	"github.com/streamingfast/substreams-sink-postgres/bundler"
 	"github.com/streamingfast/substreams-sink-postgres/bundler/writer"
 	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-postgres/state"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -33,6 +34,9 @@ type FirstLoadSinker struct {
 	stopBlock    uint64
 
 	// cursor
+	stateStore state.Store
+	bundleSize uint64
+
 	loader *db.Loader
 	logger *zap.Logger
 	tracer logging.Tracer
@@ -55,6 +59,19 @@ func NewFirstLoad(
 		return nil, fmt.Errorf("sink must have a stop block defined")
 	}
 
+	stateStorePath := filepath.Join(destFolder, "state.yaml")
+	// create cursor
+	stateFileDirectory := filepath.Dir(stateStorePath)
+	if err := os.MkdirAll(stateFileDirectory, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("create state file directories: %w", err)
+	}
+
+	stateStore, err := state.NewFileStateStore(stateStorePath)
+
+	if err != nil {
+		return nil, fmt.Errorf("new file state store: %w", err)
+	}
+
 	s := &FirstLoadSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
@@ -65,6 +82,9 @@ func NewFirstLoad(
 		loader: loader,
 		logger: logger,
 		tracer: tracer,
+
+		stateStore: stateStore,
+		bundleSize: bundleSize,
 
 		stats: NewStats(logger),
 	}
@@ -87,36 +107,23 @@ func NewFirstLoad(
 	return s, nil
 }
 
+func (b *FirstLoadSinker) GetCursor() (*sink.Cursor, error) {
+	return b.stateStore.ReadCursor()
+}
+
 func (s *FirstLoadSinker) Run(ctx context.Context) {
-	cursor, mistmatchDetected, err := s.loader.GetCursor(ctx, s.OutputModuleHash())
+	cursor, err := s.GetCursor()
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
 	}
 
-	// We write an empty cursor right away in the database because the flush logic
-	// only performs an `update` operation so an initial cursor is required in the database
-	// for the flush to work correctly.
-	if errors.Is(err, db.ErrCursorNotFound) {
-		if err := s.loader.InsertCursor(ctx, s.OutputModuleHash(), sink.NewBlankCursor()); err != nil {
-			s.Shutdown(fmt.Errorf("unable to write initial empty cursor: %w", err))
-			return
-		}
-	} else if mistmatchDetected {
-		if err := s.loader.InsertCursor(ctx, s.OutputModuleHash(), cursor); err != nil {
-			s.Shutdown(fmt.Errorf("unable to write new cursor after module mistmatch: %w", err))
-			return
-		}
-	}
 	s.Sinker.OnTerminating(s.Shutdown)
 	s.OnTerminating(func(err error) {
 		s.Sinker.Shutdown(err)
 		s.stats.LogNow()
 		s.logger.Info("csv sinker terminating", zap.Stringer("last_block_written", s.stats.lastBlock))
 		s.stats.Close()
-		if err == nil {
-			s.handleStopBlockReached(ctx)
-		}
 		s.CloseAllFileBundlers(err)
 	})
 
@@ -167,21 +174,22 @@ func (s *FirstLoadSinker) HandleBlockScopedData(ctx context.Context, data *pbsub
 		return fmt.Errorf("apply database changes: %w", err)
 	}
 
-	s.rollAllBundlers(ctx, data.Clock.Number)
-
-	if cursor.Block().Num()%s.batchBlockModulo(data, isLive) == 0 {
-		flushStart := time.Now()
-		if err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor); err != nil {
-			return fmt.Errorf("failed to flush at block %s: %w", cursor.Block(), err)
+	// we set the cursor before rolling because roll process shutdown the system
+	// TODO update to use queue
+	if cursor.Block().Num()%s.bundleSize == 0 {
+		s.stateStore.SetCursor(cursor)
+		state, err := s.stateStore.GetState()
+		if err != nil {
+			s.Shutdown(fmt.Errorf("unable to get state: %w", err))
+			return fmt.Errorf("unable to get state: %w", err)
 		}
-
-		flushDuration := time.Since(flushStart)
-
-		FlushCount.Inc()
-		FlushedEntriesCount.SetUint64(s.loader.EntriesCount())
-		FlushDuration.AddInt64(flushDuration.Nanoseconds())
-		s.stats.RecordBlock(cursor.Block())
+		if err := state.Save(); err != nil {
+			s.Shutdown(fmt.Errorf("unable to save state: %w", err))
+			return fmt.Errorf("unable to save state: %w", err)
+		}
 	}
+
+	s.rollAllBundlers(ctx, data.Clock.Number, cursor)
 
 	return nil
 }
@@ -237,22 +245,7 @@ func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Datab
 	return nil
 }
 
-func (s *FirstLoadSinker) handleStopBlockReached(ctx context.Context) error {
-	store, err := dstore.NewSimpleStore(s.destFolder)
-	if err != nil {
-		return fmt.Errorf("failed to initialize store at path %s: %w", s.destFolder, err)
-	}
-
-	lastBlockAndHash := fmt.Sprintf("%d:%s\n", s.stats.lastBlock.Num(), s.stats.lastBlock.ID())
-	
-	if err := store.WriteObject(context.Background(), "last_block.txt", bytes.NewReader([]byte(lastBlockAndHash))); err != nil {
-		s.logger.Warn("could not write last block")
-	}
-
-	return nil
-}
-
-func (s *FirstLoadSinker) rollAllBundlers(ctx context.Context, blockNum uint64) {
+func (s *FirstLoadSinker) rollAllBundlers(ctx context.Context, blockNum uint64, cursor *sink.Cursor) {
 	var wg sync.WaitGroup
 	for _, entityBundler := range s.fileBundlers {
 		wg.Add(1)
@@ -290,24 +283,7 @@ func (s *FirstLoadSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsub
 	return fmt.Errorf("received undo signal but there is no handling of undo, this is because you used `--undo-buffer-size=0` which is invalid right now")
 }
 
-func (s *FirstLoadSinker) batchBlockModulo(blockData *pbsubstreamsrpc.BlockScopedData, isLive *bool) uint64 {
-	if isLive == nil {
-		panic(fmt.Errorf("liveness checker has been disabled on the Sinker instance, this is invalid in the context of 'substreams-sink-postgres'"))
-	}
-
-	if *isLive {
-		return LIVE_BLOCK_FLUSH_EACH
-	}
-
-	if s.loader.FlushInterval() > 0 {
-		return uint64(s.loader.FlushInterval())
-	}
-
-	return HISTORICAL_BLOCK_FLUSH_EACH
-}
-
 func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint64, baseOutputStore dstore.Store, workingDir string, logger *zap.Logger, columns []string) (*bundler.Bundler, error) {
-	// Should be CSV
 	boundaryWriter := writer.NewBufferedIO(
 		bufferSize,
 		filepath.Join(workingDir, table),

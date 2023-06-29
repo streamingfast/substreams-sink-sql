@@ -206,6 +206,7 @@ func (l *Loader) GetAvailableTablesInSchemaList() []string {
 }
 
 func (l *Loader) GetColumnsForTable(name string) []string {
+	// we can't use fixed size because, for some reason, some of them may be empty
 	columns := []string{}
 	for column := range l.tables[name].columnsByName {
 		// check if column is empty
