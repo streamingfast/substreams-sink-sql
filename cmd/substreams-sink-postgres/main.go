@@ -23,6 +23,7 @@ func main() {
 		sinkToolsCmd,
 		sinkFirstLoadCmd,
 		injectCSVCmd,
+		injectCursorCmd,
 
 		ConfigureViper("SINK_POSTGRES"),
 		ConfigureVersion(version),

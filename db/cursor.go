@@ -124,6 +124,16 @@ func (l *Loader) UpdateCursor(ctx context.Context, tx *sql.Tx, moduleHash string
 	return err
 }
 
+func (l *Loader) UpdateCursorWithoutTransaction(ctx context.Context, moduleHash string, c *sink.Cursor) error {
+	query := fmt.Sprintf("UPDATE %s set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';",
+		l.cursorTable.identifier, c, c.Block().Num(), c.Block().ID(), moduleHash)
+	if _, err := l.DB.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("update cursor: %w", err)
+	}
+
+	return nil
+}
+
 // DeleteCursor deletes the active cursor for the given 'moduleHash'. If no cursor is active and
 // no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
 func (l *Loader) DeleteCursor(ctx context.Context, moduleHash string) error {
