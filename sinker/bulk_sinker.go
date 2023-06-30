@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type FirstLoadSinker struct {
+type BulkSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
 	destFolder string
@@ -44,7 +44,7 @@ type FirstLoadSinker struct {
 	stats *Stats
 }
 
-func NewFirstLoad(
+func NewBulkSinker(
 	sink *sink.Sinker,
 	destFolder string,
 	workingDir string,
@@ -53,26 +53,25 @@ func NewFirstLoad(
 	loader *db.Loader,
 	logger *zap.Logger,
 	tracer logging.Tracer,
-) (*FirstLoadSinker, error) {
+) (*BulkSinker, error) {
 	blockRange := sink.BlockRange()
 	if blockRange == nil || blockRange.EndBlock() == nil {
 		return nil, fmt.Errorf("sink must have a stop block defined")
 	}
 
-	stateStorePath := filepath.Join(destFolder, "state.yaml")
 	// create cursor
+	stateStorePath := filepath.Join(destFolder, "state.yaml")
 	stateFileDirectory := filepath.Dir(stateStorePath)
 	if err := os.MkdirAll(stateFileDirectory, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create state file directories: %w", err)
 	}
 
 	stateStore, err := state.NewFileStateStore(stateStorePath)
-
 	if err != nil {
 		return nil, fmt.Errorf("new file state store: %w", err)
 	}
 
-	s := &FirstLoadSinker{
+	s := &BulkSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
 
@@ -107,11 +106,11 @@ func NewFirstLoad(
 	return s, nil
 }
 
-func (b *FirstLoadSinker) GetCursor() (*sink.Cursor, error) {
+func (b *BulkSinker) GetCursor() (*sink.Cursor, error) {
 	return b.stateStore.ReadCursor()
 }
 
-func (s *FirstLoadSinker) Run(ctx context.Context) {
+func (s *BulkSinker) Run(ctx context.Context) {
 	cursor, err := s.GetCursor()
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
@@ -150,7 +149,7 @@ func (s *FirstLoadSinker) Run(ctx context.Context) {
 	s.Sinker.Run(ctx, cursor, s)
 }
 
-func (s *FirstLoadSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
+func (s *BulkSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
 	if output.Name != s.OutputModuleName() {
@@ -194,7 +193,7 @@ func (s *FirstLoadSinker) HandleBlockScopedData(ctx context.Context, data *pbsub
 	return nil
 }
 
-func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.DatabaseChanges) error {
+func (s *BulkSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.DatabaseChanges) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
@@ -245,7 +244,7 @@ func (s *FirstLoadSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Datab
 	return nil
 }
 
-func (s *FirstLoadSinker) rollAllBundlers(ctx context.Context, blockNum uint64, cursor *sink.Cursor) {
+func (s *BulkSinker) rollAllBundlers(ctx context.Context, blockNum uint64, cursor *sink.Cursor) {
 	var wg sync.WaitGroup
 	for _, entityBundler := range s.fileBundlers {
 		wg.Add(1)
@@ -265,7 +264,7 @@ func (s *FirstLoadSinker) rollAllBundlers(ctx context.Context, blockNum uint64, 
 	wg.Wait()
 }
 
-func (s *FirstLoadSinker) CloseAllFileBundlers(err error) {
+func (s *BulkSinker) CloseAllFileBundlers(err error) {
 	var wg sync.WaitGroup
 	for _, fb := range s.fileBundlers {
 		wg.Add(1)
@@ -279,7 +278,7 @@ func (s *FirstLoadSinker) CloseAllFileBundlers(err error) {
 	wg.Wait()
 }
 
-func (s *FirstLoadSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
+func (s *BulkSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
 	return fmt.Errorf("received undo signal but there is no handling of undo, this is because you used `--undo-buffer-size=0` which is invalid right now")
 }
 

@@ -100,7 +100,7 @@ func firstLoadE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup sinker: %w", err)
 	}
 
-	firstLoadSinker, err := sinker.NewFirstLoad(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
+	firstLoadSinker, err := sinker.NewBulkSinker(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("unable to setup first load sinker: %w", err)
 	}
