@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var sinkFirstLoadCmd = Command(firstLoadE,
-	"first-load <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
+var bulkLoadCmd = Command(bulkLoadE,
+	"bulk-load <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
 	"Runs first load sink process",
 	ExactArgs(6),
 	Flags(func(flags *pflag.FlagSet) {
@@ -42,7 +42,7 @@ var sinkFirstLoadCmd = Command(firstLoadE,
 	OnCommandErrorLogAndExit(zlog),
 )
 
-func firstLoadE(cmd *cobra.Command, args []string) error {
+func bulkLoadE(cmd *cobra.Command, args []string) error {
 	app := shutter.New()
 
 	sink.RegisterMetrics()
@@ -100,18 +100,18 @@ func firstLoadE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup sinker: %w", err)
 	}
 
-	firstLoadSinker, err := sinker.NewBulkSinker(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
+	bulkSinker, err := sinker.NewBulkSinker(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
 	if err != nil {
-		return fmt.Errorf("unable to setup first load sinker: %w", err)
+		return fmt.Errorf("unable to setup bulk sinker: %w", err)
 	}
 
-	firstLoadSinker.OnTerminated(app.Shutdown)
+	bulkSinker.OnTerminated(app.Shutdown)
 	app.OnTerminating(func(err error) {
-		firstLoadSinker.Shutdown(err)
+		bulkSinker.Shutdown(err)
 	})
 
 	go func() {
-		firstLoadSinker.Run(ctx)
+		bulkSinker.Run(ctx)
 	}()
 
 	zlog.Info("ready, waiting for signal to quit")

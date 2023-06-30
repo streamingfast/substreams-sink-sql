@@ -21,7 +21,7 @@ func main() {
 		sinkRunCmd,
 		sinkSetupCmd,
 		sinkToolsCmd,
-		sinkFirstLoadCmd,
+		bulkLoadCmd,
 		injectCSVCmd,
 		injectCursorCmd,
 
