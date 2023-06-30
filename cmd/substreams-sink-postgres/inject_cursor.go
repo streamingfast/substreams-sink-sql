@@ -13,6 +13,7 @@ import (
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
+	"github.com/streamingfast/dstore"
 	sink "github.com/streamingfast/substreams-sink"
 
 	"github.com/streamingfast/substreams-sink-postgres/db"
@@ -71,18 +72,23 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 	moduleHash := sink.OutputModuleHash()
 	// get cursor from file
 
+	// probably I need to completly rewrite how cursor are stored.
 	zlog.Info("getting cursor from state.yaml")
 	stateStorePath := filepath.Join(inputPath, "state.yaml")
 	stateFileDirectory := filepath.Dir(stateStorePath)
 	if err := os.MkdirAll(stateFileDirectory, os.ModePerm); err != nil {
 		return fmt.Errorf("create state file directories: %w", err)
 	}
-	stateStore, err := state.NewFileStateStore(stateStorePath)
+	stateDStore, err := dstore.NewStore(inputPath, "", "", false)
+	if err != nil {
+		return err
+	}
+	stateStore, err := state.NewFileStateStore(stateStorePath, stateDStore, zlog)
 	if err != nil {
 		return fmt.Errorf("new file state store: %w", err)
 	}
 
-	fileCursor, err := stateStore.ReadCursor()
+	fileCursor, err := stateStore.ReadCursor(ctx)
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		return fmt.Errorf("unable to retrieve cursor: %w", err)
 	}

@@ -59,14 +59,18 @@ func NewBulkSinker(
 		return nil, fmt.Errorf("sink must have a stop block defined")
 	}
 
-	// create cursor
-	stateStorePath := filepath.Join(destFolder, "state.yaml")
+	// create cursor in working Dir
+	stateStorePath := filepath.Join(workingDir, "state.yaml")
 	stateFileDirectory := filepath.Dir(stateStorePath)
 	if err := os.MkdirAll(stateFileDirectory, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("create state file directories: %w", err)
 	}
 
-	stateStore, err := state.NewFileStateStore(stateStorePath)
+	stateDStore, err := dstore.NewStore(destFolder, "", "", false)
+	if err != nil {
+		return nil, err
+	}
+	stateStore, err := state.NewFileStateStore(stateStorePath, stateDStore, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new file state store: %w", err)
 	}
@@ -106,16 +110,13 @@ func NewBulkSinker(
 	return s, nil
 }
 
-func (b *BulkSinker) GetCursor() (*sink.Cursor, error) {
-	return b.stateStore.ReadCursor()
-}
-
 func (s *BulkSinker) Run(ctx context.Context) {
-	cursor, err := s.GetCursor()
+	cursor, err := s.stateStore.ReadCursor(ctx)
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
 	}
+	s.stateStore.Start(ctx)
 
 	s.Sinker.OnTerminating(s.Shutdown)
 	s.OnTerminating(func(err error) {
@@ -123,6 +124,7 @@ func (s *BulkSinker) Run(ctx context.Context) {
 		s.stats.LogNow()
 		s.logger.Info("csv sinker terminating", zap.Stringer("last_block_written", s.stats.lastBlock))
 		s.stats.Close()
+		s.stateStore.Shutdown(err)
 		s.CloseAllFileBundlers(err)
 	})
 
@@ -175,8 +177,8 @@ func (s *BulkSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstrea
 
 	// we set the cursor before rolling because roll process shutdown the system
 	// TODO update to use queue
+	s.stateStore.SetCursor(cursor)
 	if cursor.Block().Num()%s.bundleSize == 0 {
-		s.stateStore.SetCursor(cursor)
 		state, err := s.stateStore.GetState()
 		if err != nil {
 			s.Shutdown(fmt.Errorf("unable to get state: %w", err))
@@ -186,6 +188,7 @@ func (s *BulkSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstrea
 			s.Shutdown(fmt.Errorf("unable to save state: %w", err))
 			return fmt.Errorf("unable to save state: %w", err)
 		}
+		s.stateStore.UploadCursor(state)
 	}
 
 	s.rollAllBundlers(ctx, data.Clock.Number, cursor)
