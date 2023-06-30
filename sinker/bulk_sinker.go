@@ -111,12 +111,12 @@ func NewBulkSinker(
 }
 
 func (s *BulkSinker) Run(ctx context.Context) {
+	s.stateStore.Start(ctx)
 	cursor, err := s.stateStore.ReadCursor(ctx)
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
 	}
-	s.stateStore.Start(ctx)
 
 	s.Sinker.OnTerminating(s.Shutdown)
 	s.OnTerminating(func(err error) {

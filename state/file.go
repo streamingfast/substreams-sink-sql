@@ -54,6 +54,7 @@ func NewFileStateStore(
 	if err := yaml.Unmarshal(content, s); err != nil {
 		return nil, fmt.Errorf("unmarshal state file %q: %w", outputPath, err)
 	}
+	outputStore.SetOverwrite(true)
 	f := &FileStateStore{
 		Shutter:        shutter.New(),
 		outputPath:  outputPath,
@@ -138,22 +139,23 @@ func (s *FileStateStore) Close() {
 
 func (s *FileStateStore) ReadCursor(ctx context.Context) (cursor *sink.Cursor, err error) {
 	fl, err := s.outputStore.OpenObject(ctx, "state.yaml")
-	if err != nil && err == dstore.ErrNotFound {
+	if err != nil && err != dstore.ErrNotFound {
 		return nil, fmt.Errorf("opening csv: %w", err)
 	}
-	defer fl.Close()
 
 	if err != nil && err == dstore.ErrNotFound {
 		s.state = newFileState()
+	} else {
+		defer fl.Close()
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(fl)
+		content := buf.Bytes()
+
+		if err := yaml.Unmarshal(content, s.state); err != nil {
+			return nil, fmt.Errorf("unmarshal state file %q: %w", s.outputPath, err)
+		}
 	}
 
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(fl)
-	content := buf.Bytes()
-
-	if err := yaml.Unmarshal(content, s.state); err != nil {
-		return nil, fmt.Errorf("unmarshal state file %q: %w", s.outputPath, err)
-	}
 	return sink.NewCursor(s.state.Cursor)
 }
 
@@ -185,7 +187,7 @@ func (s *FileStateStore) GetState() (Saveable, error) {
 	}
 	return &stateInstance{
 		data: cnt,
-		path: s.outputPath,
+		path: s.outputPath + "-" + s.state.Block.ID,
 	}, nil
 }
 
