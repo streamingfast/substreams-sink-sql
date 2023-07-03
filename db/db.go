@@ -124,7 +124,7 @@ func (l *Loader) LoadTables() error {
 		for _, f := range columns {
 			columnByName[f.Name()] = &ColumnInfo{
 				name:             f.Name(),
-				escapedName:      escapeIdentifier(f.Name()),
+				escapedName:      EscapeIdentifier(f.Name()),
 				databaseTypeName: f.DatabaseTypeName(),
 				scanType:         f.ScanType(),
 			}
@@ -142,7 +142,7 @@ func (l *Loader) LoadTables() error {
 	}
 
 	if !seenCursorTable {
-		return &CursorError{fmt.Errorf(`%s."cursors" table is not found`, escapeIdentifier(l.schema))}
+		return &CursorError{fmt.Errorf(`%s."cursors" table is not found`, EscapeIdentifier(l.schema))}
 	}
 	l.cursorTable = l.tables["cursors"]
 
@@ -194,7 +194,6 @@ func (l *Loader) GetIdentifier() string {
 	return fmt.Sprintf("%s/%s", l.database, l.schema)
 }
 
-
 func (l *Loader) GetAvailableTablesInSchemaList() []string {
 	tables := make([]string, len(l.tables))
 	i := 0
@@ -207,7 +206,7 @@ func (l *Loader) GetAvailableTablesInSchemaList() []string {
 
 func (l *Loader) GetColumnsForTable(name string) []string {
 	// we can't use fixed size because, for some reason, some of them may be empty
-	columns := []string{}
+	columns := make([]string, 0, len(l.tables[name].columnsByName))
 	for column := range l.tables[name].columnsByName {
 		// check if column is empty
 		if len(column) > 0 {
@@ -281,5 +280,5 @@ func (l *Loader) GetCreateCursorsTableSQL() string {
 			block_num  bigint,
 			block_id   text
 		);
-	`), escapeIdentifier(l.schema), escapeIdentifier("cursors"))
+	`), EscapeIdentifier(l.schema), EscapeIdentifier("cursors"))
 }

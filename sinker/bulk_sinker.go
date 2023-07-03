@@ -238,9 +238,11 @@ func (s *BulkSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.DatabaseCh
 			}
 			tableBundler.Writer().Write(data)
 		case pbdatabase.TableChange_UPDATE:
+			fallthrough
 		case pbdatabase.TableChange_DELETE:
+			fallthrough
 		default:
-			return fmt.Errorf("Currently, we only support append only databases")
+			return fmt.Errorf("currently, we only support append only databases (performing only inserts)")
 		}
 	}
 

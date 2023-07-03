@@ -42,14 +42,14 @@ func TestEscapeColumns(t *testing.T) {
 	}
 
 	columnDefs := strings.Join(slices.Map(colInputs, func(str string) string {
-		return fmt.Sprintf("%s text", escapeIdentifier(str))
+		return fmt.Sprintf("%s text", EscapeIdentifier(str))
 	}), ",")
 
 	createStatement := fmt.Sprintf(`create table "test" (%s)`, columnDefs)
 	_, err = tx.ExecContext(ctx, createStatement)
 	require.NoError(t, err)
 
-	columns := strings.Join(slices.Map(colInputs, escapeIdentifier), ",")
+	columns := strings.Join(slices.Map(colInputs, EscapeIdentifier), ",")
 	values := strings.Join(slices.Map(colInputs, func(str string) string { return `'any'` }), ",")
 	insertStatement := fmt.Sprintf(`insert into "test" (%s) values (%s)`, columns, values)
 

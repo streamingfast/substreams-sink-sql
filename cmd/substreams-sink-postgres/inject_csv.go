@@ -127,7 +127,7 @@ func extractFieldsFromFirstLine(ctx context.Context, filename string, store dsto
 func (t *TableFiller) Run(ctx context.Context) error {
 	zlog.Info("table filler", zap.String("table", t.tblName))
 
-	loadFiles, err := injectFilesToLoad(t.in, t.tblName, t.stopBlockNum, t.startBlockNum)
+	loadFiles, err := injectFilesToLoad(ctx, t.in, t.tblName, t.stopBlockNum, t.startBlockNum)
 	if err != nil {
 		return fmt.Errorf("listing files: %w", err)
 	}
@@ -171,7 +171,10 @@ func (t *TableFiller) injectFile(ctx context.Context, filename string, dbFields 
 	}
 	defer fl.Close()
 
-	query := fmt.Sprintf(`COPY %s.%s ("%s") FROM STDIN WITH (FORMAT CSV, HEADER)`, t.pqSchema, t.tblName, strings.Join(dbFields, `","`))
+	query := fmt.Sprintf(`COPY %s.%s ("%s") FROM STDIN WITH (FORMAT CSV, HEADER)`,
+		db.EscapeIdentifier(t.pqSchema),
+		db.EscapeIdentifier(t.tblName),
+		strings.Join(dbFields, `","`))
 	zlog.Info("loading file into sql", zap.String("filename", filename), zap.String("table_name", t.tblName), zap.Strings("db_fields", dbFields))
 
 	t0 := time.Now()
@@ -198,8 +201,8 @@ func (t *TableFiller) injectFile(ctx context.Context, filename string, dbFields 
 	return nil
 }
 
-func injectFilesToLoad(inputStore dstore.Store, tableName string, stopBlockNum, desiredStartBlockNum uint64) (out []string, err error) {
-	err = inputStore.Walk(context.Background(), tableName+"/", func(filename string) (err error) {
+func injectFilesToLoad(ctx context.Context, inputStore dstore.Store, tableName string, stopBlockNum, desiredStartBlockNum uint64) (out []string, err error) {
+	err = inputStore.Walk(ctx, tableName+"/", func(filename string) (err error) {
 		startBlockNum, endBlockNum, err := getBlockRange(filename)
 		if err != nil {
 			return fmt.Errorf("fail reading block range in %q: %w", filename, err)

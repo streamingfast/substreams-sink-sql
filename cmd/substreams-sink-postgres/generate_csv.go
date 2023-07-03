@@ -18,14 +18,13 @@ import (
 	"go.uber.org/zap"
 )
 
-var bulkLoadCmd = Command(bulkLoadE,
-	"bulk-load <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
+var generateCsvCmd = Command(generateCsvE,
+	"generate-csv <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
 	"Runs first load sink process",
 	ExactArgs(6),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
 
-		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
 		flags.Uint64("bundle-size", 1000, "Size of output bundle, in blocks")
 		flags.String("start-block", "", "Start processing at this block instead of the substreams initial block")
 		flags.String("working-dir", "./workdir", "Path to local folder used as working directory")
@@ -42,7 +41,7 @@ var bulkLoadCmd = Command(bulkLoadE,
 	OnCommandErrorLogAndExit(zlog),
 )
 
-func bulkLoadE(cmd *cobra.Command, args []string) error {
+func generateCsvE(cmd *cobra.Command, args []string) error {
 	app := shutter.New()
 
 	sink.RegisterMetrics()
@@ -67,9 +66,10 @@ func bulkLoadE(cmd *cobra.Command, args []string) error {
 	workingDir := sflags.MustGetString(cmd, "working-dir")
 	blockRange := startBlock + ":" + stopBlock
 
-	flushInterval := sflags.MustGetDuration(cmd, "flush-interval")
 	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, "on-module-hash-mistmatch"))
 	cli.NoError(err, "invalid mistmatch mode")
+
+	flushInterval := time.Duration(bundleSize)
 
 	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, moduleMismatchMode, zlog, tracer)
 	if err != nil {
@@ -106,8 +106,8 @@ func bulkLoadE(cmd *cobra.Command, args []string) error {
 	}
 
 	bulkSinker.OnTerminated(app.Shutdown)
-	app.OnTerminating(func(err error) {
-		bulkSinker.Shutdown(err)
+	app.OnTerminating(func(_ error) {
+		bulkSinker.Shutdown(nil)
 	})
 
 	go func() {
