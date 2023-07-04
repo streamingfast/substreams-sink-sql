@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type BulkSinker struct {
+type GenerateCSVSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
 	destFolder string
@@ -44,7 +44,7 @@ type BulkSinker struct {
 	stats *Stats
 }
 
-func NewBulkSinker(
+func NewGenerateCSVSinker(
 	sink *sink.Sinker,
 	destFolder string,
 	workingDir string,
@@ -53,7 +53,7 @@ func NewBulkSinker(
 	loader *db.Loader,
 	logger *zap.Logger,
 	tracer logging.Tracer,
-) (*BulkSinker, error) {
+) (*GenerateCSVSinker, error) {
 	blockRange := sink.BlockRange()
 	if blockRange == nil || blockRange.EndBlock() == nil {
 		return nil, fmt.Errorf("sink must have a stop block defined")
@@ -75,7 +75,7 @@ func NewBulkSinker(
 		return nil, fmt.Errorf("new file state store: %w", err)
 	}
 
-	s := &BulkSinker{
+	s := &GenerateCSVSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
 
@@ -110,7 +110,7 @@ func NewBulkSinker(
 	return s, nil
 }
 
-func (s *BulkSinker) Run(ctx context.Context) {
+func (s *GenerateCSVSinker) Run(ctx context.Context) {
 	s.stateStore.Start(ctx)
 	cursor, err := s.stateStore.ReadCursor(ctx)
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
@@ -151,7 +151,7 @@ func (s *BulkSinker) Run(ctx context.Context) {
 	s.Sinker.Run(ctx, cursor, s)
 }
 
-func (s *BulkSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
+func (s *GenerateCSVSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
 	if output.Name != s.OutputModuleName() {
@@ -196,7 +196,7 @@ func (s *BulkSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstrea
 	return nil
 }
 
-func (s *BulkSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.DatabaseChanges) error {
+func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.DatabaseChanges) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
@@ -249,7 +249,7 @@ func (s *BulkSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.DatabaseCh
 	return nil
 }
 
-func (s *BulkSinker) rollAllBundlers(ctx context.Context, blockNum uint64, cursor *sink.Cursor) {
+func (s *GenerateCSVSinker) rollAllBundlers(ctx context.Context, blockNum uint64, cursor *sink.Cursor) {
 	var wg sync.WaitGroup
 	for _, entityBundler := range s.fileBundlers {
 		wg.Add(1)
@@ -269,7 +269,7 @@ func (s *BulkSinker) rollAllBundlers(ctx context.Context, blockNum uint64, curso
 	wg.Wait()
 }
 
-func (s *BulkSinker) CloseAllFileBundlers(err error) {
+func (s *GenerateCSVSinker) CloseAllFileBundlers(err error) {
 	var wg sync.WaitGroup
 	for _, fb := range s.fileBundlers {
 		wg.Add(1)
@@ -283,7 +283,7 @@ func (s *BulkSinker) CloseAllFileBundlers(err error) {
 	wg.Wait()
 }
 
-func (s *BulkSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
+func (s *GenerateCSVSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
 	return fmt.Errorf("received undo signal but there is no handling of undo, this is because you used `--undo-buffer-size=0` which is invalid right now")
 }
 

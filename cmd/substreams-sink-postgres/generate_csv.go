@@ -100,18 +100,18 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup sinker: %w", err)
 	}
 
-	bulkSinker, err := sinker.NewBulkSinker(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
+	generateCSVSinker, err := sinker.NewGenerateCSVSinker(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
 	if err != nil {
-		return fmt.Errorf("unable to setup bulk sinker: %w", err)
+		return fmt.Errorf("unable to setup generate csv sinker: %w", err)
 	}
 
-	bulkSinker.OnTerminated(app.Shutdown)
+	generateCSVSinker.OnTerminated(app.Shutdown)
 	app.OnTerminating(func(_ error) {
-		bulkSinker.Shutdown(nil)
+		generateCSVSinker.Shutdown(nil)
 	})
 
 	go func() {
-		bulkSinker.Run(ctx)
+		generateCSVSinker.Run(ctx)
 	}()
 
 	zlog.Info("ready, waiting for signal to quit")
