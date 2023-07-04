@@ -136,7 +136,7 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 		}
 		// cursor found and it's the same hash, update it
 	} else {
-		if err := dbLoader.UpdateCursorWithoutTransaction(ctx, moduleHash, fileCursor); err != nil {
+		if err := dbLoader.UpdateCursor(ctx, nil, moduleHash, fileCursor); err != nil {
 			return fmt.Errorf("update cursor: %w", err)
 		}
 	}
