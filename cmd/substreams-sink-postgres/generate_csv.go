@@ -19,21 +19,28 @@ import (
 )
 
 var generateCsvCmd = Command(generateCsvE,
-	"generate-csv <psql_dsn> <endpoint> <manifest> <module> <dest-folder> <stop>",
-	"Runs first load sink process",
+	"generate-csv <psql_dsn> <endpoint> <manifest> <module> <dest-folder> [start]:<stop>",
+	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
 	Description(`
-		This command is going to fetch all known cursors from the database. In the database,
-		a cursor is saved per module's hash which mean if you update your '.spkg', you might
-		end up with multiple cursors for different module.
 
-		This command will list all of them.
+		This command command is the first of a multi-step process to bulk insert data into a Postgres database.
+		It creates a folder for each table and generates CSVs for block ranges. This files can be used with
+		the 'inject-csv' command to bulk insert data into the database.
+
+		It needs that the database already exists and that the schema is already created.
+
+		The process is as follows:
+
+		- Generate CSVs for each table with this command
+		- Inject the CSVs into the database with the 'inject-csv' command
+		- Run the 'inject-cursor' command to update the cursor in the database
+		- Start streaming with the 'run' command
 	`),
 	ExactArgs(6),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags)
+		sink.AddFlagsToSet(flags, sink.FlagIgnore("final-blocks-only"))
 
 		flags.Uint64("bundle-size", 1000, "Size of output bundle, in blocks")
-		flags.String("start-block", "", "Start processing at this block instead of the substreams initial block")
 		flags.String("working-dir", "./workdir", "Path to local folder used as working directory")
 		flags.String("on-module-hash-mistmatch", "error", FlagDescription(`
 			What to do when the module hash in the manifest does not match the one in the database, can be 'error', 'warn' or 'ignore'
@@ -44,6 +51,17 @@ var generateCsvCmd = Command(generateCsvE,
 			updates to the cursor will overwrite the module hash in the database.
 		`),
 		)
+		flags.Uint64("buffer-max-size", 4*1024*1024, FlagDescription(`
+			Amount of memory bytes to allocate to the buffered writer. If your data set is small enough that every is hold in memory, we are going to avoid
+			the local I/O operation(s) and upload accumulated content in memory directly to final storage location.
+
+			Ideally, you should set this as to about 80%% of RAM the process has access to. This will maximize amout of element in memory,
+			and reduce 'syscall' and I/O operations to write to the temporary file as we are buffering a lot of data.
+
+			This setting has probably the greatest impact on writting throughput.
+
+			Default value for the buffer is 64 MiB.
+		`))
 	}),
 	OnCommandErrorLogAndExit(zlog),
 )
@@ -64,14 +82,11 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	manifestPath := args[2]
 	outputModuleName := args[3]
 	destFolder := args[4]
-	stopBlock := args[5]
-
-	startBlock := sflags.MustGetString(cmd, "start-block") // empty string by default makes valid ':endBlock' range
+	blockRange := args[5]
 
 	bundleSize := sflags.MustGetUint64(cmd, "bundle-size")
-	bufferSize := uint64(10 * 1024) // too high, this wrecks havoc
+	bufferMaxSize := sflags.MustGetUint64(cmd, "buffer-max-size")
 	workingDir := sflags.MustGetString(cmd, "working-dir")
-	blockRange := startBlock + ":" + stopBlock
 
 	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, "on-module-hash-mistmatch"))
 	cli.NoError(err, "invalid mistmatch mode")
@@ -102,12 +117,13 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		endpoint, manifestPath, outputModuleName, blockRange,
 		zlog,
 		tracer,
+		sink.WithFinalBlocksOnly(),
 	)
 	if err != nil {
 		return fmt.Errorf("unable to setup sinker: %w", err)
 	}
 
-	generateCSVSinker, err := sinker.NewGenerateCSVSinker(sink, destFolder, workingDir, bundleSize, bufferSize, dbLoader, zlog, tracer)
+	generateCSVSinker, err := sinker.NewGenerateCSVSinker(sink, destFolder, workingDir, bundleSize, bufferMaxSize, dbLoader, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("unable to setup generate csv sinker: %w", err)
 	}

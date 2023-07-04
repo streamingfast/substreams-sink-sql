@@ -17,6 +17,7 @@ type Store interface {
 	GetState() (Saveable, error)
 	UploadCursor(state Saveable)
 	Shutdown(error)
+	OnTerminating(func(error))
 }
 
 type Saveable interface {

@@ -95,7 +95,7 @@ func NewGenerateCSVSinker(
 	if err != nil {
 		return nil, err
 	}
-	tables := s.loader.GetAvailableTablesInSchemaList()
+	tables := s.loader.GetAvailableTablesInSchema()
 
 	for _, table := range tables {
 		columns := s.loader.GetColumnsForTable(table)
@@ -111,6 +111,7 @@ func NewGenerateCSVSinker(
 
 func (s *GenerateCSVSinker) Run(ctx context.Context) {
 	s.stateStore.Start(ctx)
+	s.stateStore.OnTerminating(s.Shutdown)
 	cursor, err := s.stateStore.ReadCursor(ctx)
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
@@ -201,7 +202,7 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 				"your Substreams sent us a change for a table named %s we don't know about on %s (available tables: %s)",
 				change.Table,
 				s.loader.GetIdentifier(),
-				s.loader.GetAvailableTablesInSchema(),
+				strings.Join(s.loader.GetAvailableTablesInSchema(), ", "),
 			)
 		}
 

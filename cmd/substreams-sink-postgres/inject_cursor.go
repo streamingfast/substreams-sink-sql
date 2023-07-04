@@ -140,6 +140,6 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("update cursor: %w", err)
 		}
 	}
-	zlog.Info("cursor done", zap.Duration("total", time.Since(t0)))
+	zlog.Info("cursor written", zap.Duration("total", time.Since(t0)))
 	return nil
 }

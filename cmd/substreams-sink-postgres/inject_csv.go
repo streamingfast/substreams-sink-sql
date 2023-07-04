@@ -41,7 +41,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 	pgSchema := args[0]
 
 	inputPath := args[1]
-	table := args[2]
+	tableName := args[2]
 
 	psqlDSN := args[3]
 	startBlock, err := strconv.ParseUint(args[4], 10, 64)
@@ -71,7 +71,6 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 
 	t0 := time.Now()
 
-	tableName := table
 	zlog.Debug("table filler", zap.String("pg_schema", pgSchema), zap.String("table_name", tableName), zap.Uint64("start_block", startBlock), zap.Uint64("stop_block", stopBlock))
 	filler := NewTableFiller(pool, pgSchema, tableName, startBlock, stopBlock, inputStore)
 	theTableName := tableName
@@ -122,7 +121,7 @@ func extractFieldsFromFirstLine(ctx context.Context, filename string, store dsto
 func (t *TableFiller) Run(ctx context.Context) error {
 	zlog.Info("table filler", zap.String("table", t.tblName))
 
-	loadFiles, err := injectFilesToLoad(ctx, t.in, t.tblName, t.stopBlockNum, t.startBlockNum)
+	loadFiles, err := findFilesToLoad(ctx, t.in, t.tblName, t.stopBlockNum, t.startBlockNum)
 	if err != nil {
 		return fmt.Errorf("listing files: %w", err)
 	}
@@ -138,7 +137,6 @@ func (t *TableFiller) Run(ctx context.Context) error {
 	zlog.Info("files to load",
 		zap.String("table", t.tblName),
 		zap.Int("file_count", len(loadFiles)),
-		//		zap.Int("pruned_file_count", len(prunedFilenames)),
 	)
 
 	for _, filename := range loadFiles {
@@ -147,12 +145,6 @@ func (t *TableFiller) Run(ctx context.Context) error {
 		if err := t.injectFile(ctx, filename, dbFields); err != nil {
 			return fmt.Errorf("failed to inject file %q: %w", filename, err)
 		}
-
-		// FIXME: set up a way to mark progress
-		//
-		//if err := t.markProgress(ctx, filename, time.Now()); err != nil {
-		//	return fmt.Errorf("failed to mark progress file %q: %w", filename, err)
-		//}
 	}
 
 	return nil
@@ -195,7 +187,7 @@ func (t *TableFiller) injectFile(ctx context.Context, filename string, dbFields 
 	return nil
 }
 
-func injectFilesToLoad(ctx context.Context, inputStore dstore.Store, tableName string, stopBlockNum, desiredStartBlockNum uint64) (out []string, err error) {
+func findFilesToLoad(ctx context.Context, inputStore dstore.Store, tableName string, stopBlockNum, desiredStartBlockNum uint64) (out []string, err error) {
 	err = inputStore.Walk(ctx, tableName+"/", func(filename string) (err error) {
 		startBlockNum, endBlockNum, err := getBlockRange(filename)
 		if err != nil {

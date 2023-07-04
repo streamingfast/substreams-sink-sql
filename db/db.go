@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/jimsmart/schema"
@@ -194,18 +193,7 @@ func (l *Loader) GetIdentifier() string {
 	return fmt.Sprintf("%s/%s", l.database, l.schema)
 }
 
-func (l *Loader) GetAvailableTablesInSchemaList() []string {
-	tables := make([]string, len(l.tables))
-	i := 0
-	for table := range l.tables {
-		tables[i] = table
-		i++
-	}
-	return tables
-}
-
 func (l *Loader) GetColumnsForTable(name string) []string {
-	// we can't use fixed size because, for some reason, some of them may be empty
 	columns := make([]string, 0, len(l.tables[name].columnsByName))
 	for column := range l.tables[name].columnsByName {
 		// check if column is empty
@@ -216,10 +204,14 @@ func (l *Loader) GetColumnsForTable(name string) []string {
 	return columns
 }
 
-func (l *Loader) GetAvailableTablesInSchema() string {
-	tables := l.GetAvailableTablesInSchemaList()
-
-	return strings.Join(tables, ", ")
+func (l *Loader) GetAvailableTablesInSchema() []string {
+	tables := make([]string, len(l.tables))
+	i := 0
+	for table := range l.tables {
+		tables[i] = table
+		i++
+	}
+	return tables
 }
 
 func (l *Loader) GetDatabase() string {
