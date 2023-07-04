@@ -28,7 +28,6 @@ import (
 type GenerateCSVSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
-	destFolder string
 
 	fileBundlers map[string]*bundler.Bundler
 	stopBlock    uint64
@@ -137,16 +136,15 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 
 	s.stats.Start(logEach, cursor)
 
-	s.logger.Info("starting postgres sink",
+	s.logger.Info("starting postgres generate CSV sink",
 		zap.Duration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
 		zap.String("database", s.loader.GetDatabase()),
 		zap.String("schema", s.loader.GetSchema()),
 	)
 
-	uploadContext := context.Background()
 	for _, fb := range s.fileBundlers {
-		fb.Launch(uploadContext)
+		fb.Launch(ctx)
 	}
 	s.Sinker.Run(ctx, cursor, s)
 }

@@ -23,7 +23,12 @@ import (
 
 var injectCSVCmd = Command(injectCSVE,
 	"inject-csv <schema> <input-path> <table> <psql-dsn> <start-block> <stop-block>",
-	"Injects generated CSV rows for <table> into the database pointed by <psql-dsn> argument. Can be run in parallel for multiple rows up to the same stop-block. Watch out, the start-block must be aligned with the range size of the csv files or the module inital block",
+	"Injects generated CSV rows for <table> into the database pointed by <psql-dsn> argument.",
+	Description(`
+			Can be run in parallel for multiple rows up to the same stop-block. 
+
+			Watch out, the start-block must be aligned with the range size of the csv files or the module inital block
+	`),
 	ExactArgs(6),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
@@ -98,16 +103,6 @@ func NewTableFiller(pool *pgxpool.Pool, pqSchema, tblName string, startBlockNum,
 	}
 }
 
-type sortedFilenames []string
-
-func (p sortedFilenames) Len() int           { return len(p) }
-func (p sortedFilenames) Less(i, j int) bool { return p[i] > p[j] }
-func (p sortedFilenames) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-
-func s(str string) *string {
-	return &str
-}
-
 func extractFieldsFromFirstLine(ctx context.Context, filename string, store dstore.Store) ([]string, error) {
 	fl, err := store.OpenObject(ctx, filename)
 	if err != nil {
@@ -145,9 +140,8 @@ func (t *TableFiller) Run(ctx context.Context) error {
 		zap.Int("file_count", len(loadFiles)),
 		//		zap.Int("pruned_file_count", len(prunedFilenames)),
 	)
-	prunedFilenames := loadFiles
 
-	for _, filename := range prunedFilenames {
+	for _, filename := range loadFiles {
 		zlog.Info("opening file", zap.String("file", filename))
 
 		if err := t.injectFile(ctx, filename, dbFields); err != nil {
@@ -216,7 +210,7 @@ func injectFilesToLoad(ctx context.Context, inputStore dstore.Store, tableName s
 			return nil
 		}
 
-		if strings.Contains(filename, ".csv") {
+		if strings.HasSuffix(filename, ".csv") {
 			out = append(out, filename)
 		}
 

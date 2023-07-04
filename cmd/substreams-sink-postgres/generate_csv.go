@@ -19,8 +19,15 @@ import (
 )
 
 var generateCsvCmd = Command(generateCsvE,
-	"generate-csv <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
+	"generate-csv <psql_dsn> <endpoint> <manifest> <module> <dest-folder> <stop>",
 	"Runs first load sink process",
+	Description(`
+		This command is going to fetch all known cursors from the database. In the database,
+		a cursor is saved per module's hash which mean if you update your '.spkg', you might
+		end up with multiple cursors for different module.
+
+		This command will list all of them.
+	`),
 	ExactArgs(6),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
