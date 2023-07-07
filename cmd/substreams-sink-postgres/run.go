@@ -14,6 +14,7 @@ import (
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-postgres/rollback_sinker"
 	"github.com/streamingfast/substreams-sink-postgres/sinker"
 	"go.uber.org/zap"
 )
@@ -97,13 +98,20 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup postgres sinker: %w", err)
 	}
 
-	postgresSinker.OnTerminating(app.Shutdown)
+	rollbackSinker, err := rollback_sinker.NewFromViper(cmd, postgresSinker)
+
+	if err != nil {
+		return fmt.Errorf("unable to setup rollback sinker: %w", err)
+	}
+
+	rollbackSinker.OnTerminating(app.Shutdown)
+
 	app.OnTerminating(func(err error) {
-		postgresSinker.Shutdown(err)
+		rollbackSinker.Shutdown(err)
 	})
 
 	go func() {
-		postgresSinker.Run(ctx)
+		rollbackSinker.Run(ctx)
 	}()
 
 	zlog.Info("ready, waiting for signal to quit")
