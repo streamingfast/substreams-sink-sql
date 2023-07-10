@@ -60,7 +60,7 @@ var generateCsvCmd = Command(generateCsvE,
 
 			This setting has probably the greatest impact on writting throughput.
 
-			Default value for the buffer is 64 MiB.
+			Default value for the buffer is 4 MiB.
 		`))
 	}),
 	OnCommandErrorLogAndExit(zlog),
