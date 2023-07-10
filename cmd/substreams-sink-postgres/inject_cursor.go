@@ -23,7 +23,7 @@ import (
 
 var injectCursorCmd = Command(injectCursor,
 	"inject-cursor <input-path> <psql-dsn> <endpoint> <manifest> <outputModuleName>",
-	"Injects generated CSV rows for <table> into the database pointed by <psql-dsn> argument. Can be run in parallel for multiple rows up to the same stop-block. Watch out, the start-block must be aligned with the range size of the csv files or the module inital block",
+	"Injects the cursor from a file into database",
 	ExactArgs(5),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
