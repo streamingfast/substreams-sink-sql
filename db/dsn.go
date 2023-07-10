@@ -23,14 +23,6 @@ type DSN struct {
 	options  []string
 }
 
-func (c *DSN) DSN() string {
-	out := fmt.Sprintf("host=%s port=%d user=%s dbname=%s %s", c.host, c.port, c.username, c.database, strings.Join(c.options, " "))
-	if c.password != "" {
-		out = out + " password=" + c.password
-	}
-	return out
-}
-
 func ParseDSN(dsn string) (*DSN, error) {
 	expanded, err := envsubst.Eval(dsn, os.Getenv)
 	if err != nil {
@@ -87,7 +79,7 @@ func ParseDSN(dsn string) (*DSN, error) {
 	return d, nil
 }
 
-func (c *DSN) connString() string {
+func (c *DSN) ConnString() string {
 	out := fmt.Sprintf("host=%s port=%d user=%s dbname=%s %s", c.host, c.port, c.username, c.database, strings.Join(c.options, " "))
 	if c.password != "" {
 		out = out + " password=" + c.password

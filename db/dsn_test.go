@@ -35,7 +35,7 @@ func TestParseDSN(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, test.expectConnString, d.connString())
+				assert.Equal(t, test.expectConnString, d.ConnString())
 				assert.Equal(t, test.expectSchema, d.schema)
 			}
 		})

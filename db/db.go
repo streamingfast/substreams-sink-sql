@@ -57,7 +57,7 @@ func NewLoader(
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
 
-	db, err := sql.Open("postgres", dsn.connString())
+	db, err := sql.Open("postgres", dsn.ConnString())
 	if err != nil {
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
