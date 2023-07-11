@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -22,12 +23,10 @@ import (
 )
 
 var injectCursorCmd = Command(injectCursor,
-	"inject-cursor <input-path> <psql-dsn> <endpoint> <manifest> <outputModuleName>",
+	"inject-cursor <input-path> <psql-dsn> <manifest> <outputModuleName>",
 	"Injects the cursor from a file into database",
-	ExactArgs(5),
+	ExactArgs(4),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags)
-
 		flags.String("on-module-hash-mistmatch", "error", FlagDescription(`
 			What to do when the module hash in the manifest does not match the one in the database, can be 'error', 'warn' or 'ignore'
 
@@ -44,11 +43,8 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	inputPath := args[0]
 	psqlDSN := args[1]
-	// we don't need the block information, it's just used to get the sinker module hash
-	blockRange := "0:1"
-	endpoint := args[2]
-	manifestPath := args[3]
-	outputModuleName := args[4]
+	manifestPath := args[2]
+	outputModuleName := args[3]
 
 	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, "on-module-hash-mistmatch"))
 	cli.NoError(err, "invalid mistmatch mode")
@@ -57,19 +53,16 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 
 	// update cursor
 	zlog.Info("getting sink from manifest")
-	// if someone knows a better way to get the module hash, feel free to update it
-	// look for module hash
-	sink, err := sink.NewFromViper(
-		cmd,
+	_, _, outputModuleHash, err := sink.ReadManifestAndModule(
+		manifestPath,
+		outputModuleName,
 		"sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges",
-		endpoint, manifestPath, outputModuleName, blockRange,
-		zlog,
-		tracer,
-	)
+		zlog)
 	if err != nil {
-		return fmt.Errorf("unable to setup sinker: %w", err)
+		err = fmt.Errorf("read manifest and module: %w", err)
+		return err
 	}
-	moduleHash := sink.OutputModuleHash()
+	moduleHash := hex.EncodeToString(outputModuleHash)
 	// get cursor from file
 
 	// probably I need to completly rewrite how cursor are stored.
