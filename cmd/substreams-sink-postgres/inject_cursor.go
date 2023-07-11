@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -57,6 +56,7 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 		manifestPath,
 		outputModuleName,
 		"sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges",
+		false,
 		zlog)
 	if err != nil {
 		err = fmt.Errorf("read manifest and module: %w", err)
@@ -68,10 +68,6 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 	// probably I need to completly rewrite how cursor are stored.
 	zlog.Info("getting cursor from state.yaml")
 	stateStorePath := filepath.Join(inputPath, "state.yaml")
-	stateFileDirectory := filepath.Dir(stateStorePath)
-	if err := os.MkdirAll(stateFileDirectory, os.ModePerm); err != nil {
-		return fmt.Errorf("create state file directories: %w", err)
-	}
 	stateDStore, err := dstore.NewStore(inputPath, "", "", false)
 	if err != nil {
 		return err
@@ -110,28 +106,9 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load psql table: %w", err)
 	}
 
-	// load the cursor from the database
-	_, mistmatchDetected, err := dbLoader.GetCursor(ctx, moduleHash)
-	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
-		return fmt.Errorf("unable to retrieve cursor: %w", err)
-	}
-
-	zlog.Info("updating cursor")
-	// cursor not found
-	if errors.Is(err, db.ErrCursorNotFound) {
-		if err := dbLoader.InsertCursor(ctx, moduleHash, fileCursor); err != nil {
-			return fmt.Errorf("unable to insert initial cursor: %w", err)
-		}
-		// there's a cursor, but it isn't the same hash
-	} else if mistmatchDetected {
-		if err := dbLoader.InsertCursor(ctx, moduleHash, fileCursor); err != nil {
-			return fmt.Errorf("unable to insert initial cursor: %w", err)
-		}
-		// cursor found and it's the same hash, update it
-	} else {
-		if err := dbLoader.UpdateCursor(ctx, nil, moduleHash, fileCursor); err != nil {
-			return fmt.Errorf("update cursor: %w", err)
-		}
+	zlog.Info("inserting cursor")
+	if err := dbLoader.InsertCursor(ctx, moduleHash, fileCursor); err != nil {
+		return fmt.Errorf("unable to insert initial cursor: %w", err)
 	}
 	zlog.Info("cursor written", zap.Duration("total", time.Since(t0)))
 	return nil
