@@ -64,7 +64,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to create input store: %w", err)
 	}
 
-	pool, err := pgxpool.Connect(ctx, fmt.Sprintf("%s pool_min_conns=%d pool_max_conns=%d", postgresDSN.ConnString(), 2, 3))
+	pool, err := pgxpool.Connect(ctx, postgresDSN.ConnString())
 	if err != nil {
 		return fmt.Errorf("connecting to postgres: %w", err)
 	}
