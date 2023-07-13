@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/maps"
 )
 
 type TypeGetter func(tableName string, columnName string) (reflect.Type, error)
@@ -142,7 +144,7 @@ func prepareColValues(table *TableInfo, colValues map[string]string) (columns []
 	for columnName, value := range colValues {
 		columnInfo, found := table.columnsByName[columnName]
 		if !found {
-			return nil, nil, fmt.Errorf("cannot find column %q for table %q", columnName, table.identifier)
+			return nil, nil, fmt.Errorf("cannot find column %q for table %q (valid columns are %q)", columnName, table.identifier, strings.Join(maps.Keys(table.columnsByName), ", "))
 		}
 
 		normalizedValue, err := normalizeValueType(value, columnInfo.scanType)

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Next
+
+### Added
+
+* Added logging of new `Session` received values (`linear_handoff_block`, `max_parallel_workers` and `resolved_start_block`).
+
+* Added `--header, -H` (can be repeated multiple times) flag to pass extra headers to the server.
+
+### Changed
+
+* Now reporting available columns when an unknown column is encountered.
+
 ## v2.3.3
 
 ### Fixed
