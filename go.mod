@@ -12,7 +12,7 @@ require (
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20221209193439-bff11742bf4c
 	github.com/streamingfast/substreams v1.1.8-0.20230705171054-90758978ac9c
-	github.com/streamingfast/substreams-sink v0.2.7-0.20230719224247-2fcecf1940b4
+	github.com/streamingfast/substreams-sink v0.3.0
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
 	github.com/stretchr/testify v1.8.3
 	github.com/wk8/go-ordered-map/v2 v2.1.7
