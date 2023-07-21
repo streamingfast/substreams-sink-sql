@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/bobg/go-generics/v2 v2.1.1
 	github.com/drone/envsubst v1.0.3
+	github.com/golang/protobuf v1.5.3
 	github.com/jimsmart/schema v0.2.0
 	github.com/lib/pq v1.10.6
 	github.com/spf13/cobra v1.6.1
@@ -37,12 +38,19 @@ require (
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/ipfs/boxo v0.8.0 // indirect
 	github.com/ipfs/go-cid v0.4.0 // indirect
 	github.com/ipfs/go-ipfs-api v0.6.0 // indirect
+	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
+	github.com/jackc/pgconn v1.14.0 // indirect
+	github.com/jackc/pgio v1.0.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgproto3/v2 v2.3.2 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/pgtype v1.14.0 // indirect
+	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
@@ -103,6 +111,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.7.1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
+	github.com/jackc/pgx/v4 v4.18.1
 	github.com/jhump/protoreflect v1.14.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.15.12 // indirect
@@ -121,8 +130,9 @@ require (
 	github.com/streamingfast/cli v0.0.4-0.20230508203625-ecd532feb120
 	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20230621153617-bc715cdb9fd1 // indirect
+	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
 	github.com/streamingfast/dmetrics v0.0.0-20230516031116-28fcfeb4b9ed
-	github.com/streamingfast/dstore v0.1.1-0.20230620124109-3924b3b36c77 // indirect
+	github.com/streamingfast/dstore v0.1.1-0.20230620124109-3924b3b36c77
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect
 	github.com/streamingfast/pbgo v0.0.6-0.20220630154121-2e8bba36234e // indirect
 	github.com/streamingfast/shutter v1.5.0
@@ -142,5 +152,5 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230320184635-7606e756e683 // indirect
 	google.golang.org/grpc v1.54.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 )

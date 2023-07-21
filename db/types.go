@@ -30,8 +30,8 @@ type TableInfo struct {
 }
 
 func NewTableInfo(schema, name string, pkList []string, columnsByName map[string]*ColumnInfo) (*TableInfo, error) {
-	schemaEscaped := escapeIdentifier(schema)
-	nameEscaped := escapeIdentifier(name)
+	schemaEscaped := EscapeIdentifier(schema)
+	nameEscaped := EscapeIdentifier(name)
 	primaryColumns := make([]*ColumnInfo, len(pkList))
 
 	for i, primaryKeyColumnName := range(pkList) {
@@ -64,7 +64,7 @@ type ColumnInfo struct {
 func NewColumnInfo(name string, databaseTypeName string, scanType any) *ColumnInfo {
 	return &ColumnInfo{
 		name:             name,
-		escapedName:      escapeIdentifier(name),
+		escapedName:      EscapeIdentifier(name),
 		databaseTypeName: databaseTypeName,
 		scanType:         reflect.TypeOf(scanType),
 	}

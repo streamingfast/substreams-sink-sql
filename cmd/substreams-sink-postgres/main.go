@@ -21,6 +21,9 @@ func main() {
 		sinkRunCmd,
 		sinkSetupCmd,
 		sinkToolsCmd,
+		generateCsvCmd,
+		injectCSVCmd,
+		injectCursorCmd,
 
 		ConfigureViper("SINK_POSTGRES"),
 		ConfigureVersion(version),

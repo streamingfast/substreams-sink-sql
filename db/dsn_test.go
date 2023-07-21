@@ -30,12 +30,12 @@ func TestParseDSN(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.dns, func(t *testing.T) {
-			d, err := parseDSN(test.dns)
+			d, err := ParseDSN(test.dns)
 			if test.expectError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, test.expectConnString, d.connString())
+				assert.Equal(t, test.expectConnString, d.ConnString())
 				assert.Equal(t, test.expectSchema, d.schema)
 			}
 		})

@@ -117,6 +117,7 @@ func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cu
 
 // UpdateCursor updates the active cursor. If no cursor is active and no update occurred, returns
 // ErrCursorNotFound. If the update was not successful on the database, returns an error.
+// You can use tx=nil to run the query outside of a transaction.
 func (l *Loader) UpdateCursor(ctx context.Context, tx *sql.Tx, moduleHash string, c *sink.Cursor) error {
 	_, err := l.runModifiyQuery(ctx, tx, "update", query(`
 		UPDATE %s set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';

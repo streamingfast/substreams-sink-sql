@@ -120,13 +120,13 @@ func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
 	// Avoid any allocation if there is a single primary key
 	if len(primaryKey) == 1 {
 		for key, value := range primaryKey {
-			return escapeIdentifier(key) + " = " + escapeStringValue(value)
+			return EscapeIdentifier(key) + " = " + escapeStringValue(value)
 		}
 	}
 
 	reg := make([]string, 0, len(primaryKey))
 	for key, value := range primaryKey {
-		reg = append(reg, escapeIdentifier(key)+" = "+escapeStringValue(value))
+		reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
 	}
 
 	return strings.Join(reg[:], " AND ")
@@ -215,7 +215,7 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	}
 }
 
-func escapeIdentifier(valueToEscape string) string {
+func EscapeIdentifier(valueToEscape string) string {
 	if strings.Contains(valueToEscape, `"`) {
 		valueToEscape = strings.ReplaceAll(valueToEscape, `"`, `""`)
 	}

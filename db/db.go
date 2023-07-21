@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/jimsmart/schema"
@@ -53,12 +52,12 @@ func NewLoader(
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*Loader, error) {
-	dsn, err := parseDSN(psqlDsn)
+	dsn, err := ParseDSN(psqlDsn)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
 
-	db, err := sql.Open("postgres", dsn.connString())
+	db, err := sql.Open("postgres", dsn.ConnString())
 	if err != nil {
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
@@ -124,7 +123,7 @@ func (l *Loader) LoadTables() error {
 		for _, f := range columns {
 			columnByName[f.Name()] = &ColumnInfo{
 				name:             f.Name(),
-				escapedName:      escapeIdentifier(f.Name()),
+				escapedName:      EscapeIdentifier(f.Name()),
 				databaseTypeName: f.DatabaseTypeName(),
 				scanType:         f.ScanType(),
 			}
@@ -142,7 +141,7 @@ func (l *Loader) LoadTables() error {
 	}
 
 	if !seenCursorTable {
-		return &CursorError{fmt.Errorf(`%s."cursors" table is not found`, escapeIdentifier(l.schema))}
+		return &CursorError{fmt.Errorf(`%s."cursors" table is not found`, EscapeIdentifier(l.schema))}
 	}
 	l.cursorTable = l.tables["cursors"]
 
@@ -194,15 +193,25 @@ func (l *Loader) GetIdentifier() string {
 	return fmt.Sprintf("%s/%s", l.database, l.schema)
 }
 
-func (l *Loader) GetAvailableTablesInSchema() string {
+func (l *Loader) GetColumnsForTable(name string) []string {
+	columns := make([]string, 0, len(l.tables[name].columnsByName))
+	for column := range l.tables[name].columnsByName {
+		// check if column is empty
+		if len(column) > 0 {
+			columns = append(columns, column)
+		}
+	}
+	return columns
+}
+
+func (l *Loader) GetAvailableTablesInSchema() []string {
 	tables := make([]string, len(l.tables))
 	i := 0
 	for table := range l.tables {
 		tables[i] = table
 		i++
 	}
-
-	return strings.Join(tables, ", ")
+	return tables
 }
 
 func (l *Loader) GetDatabase() string {
@@ -263,5 +272,5 @@ func (l *Loader) GetCreateCursorsTableSQL() string {
 			block_num  bigint,
 			block_id   text
 		);
-	`), escapeIdentifier(l.schema), escapeIdentifier("cursors"))
+	`), EscapeIdentifier(l.schema), EscapeIdentifier("cursors"))
 }

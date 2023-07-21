@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/streamingfast/logging"
@@ -141,7 +142,7 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChan
 				"your Substreams sent us a change for a table named %s we don't know about on %s (available tables: %s)",
 				change.Table,
 				s.loader.GetIdentifier(),
-				s.loader.GetAvailableTablesInSchema(),
+				strings.Join(s.loader.GetAvailableTablesInSchema(), ", "),
 			)
 		}
 
