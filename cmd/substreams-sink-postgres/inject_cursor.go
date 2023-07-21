@@ -54,6 +54,7 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 	zlog.Info("getting sink from manifest")
 	_, _, outputModuleHash, err := sink.ReadManifestAndModule(
 		manifestPath,
+		nil,
 		outputModuleName,
 		"sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges",
 		false,
