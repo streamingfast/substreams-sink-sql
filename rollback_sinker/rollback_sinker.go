@@ -13,19 +13,22 @@ import (
 	"github.com/streamingfast/substreams-sink-postgres/sinker"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
+	"go.uber.org/zap"
 )
 
 type RollbackSinker struct {
 	*sinker.PostgresSinker
 	rollbackUrl    string
 	rollbackSchema string
+	logger         *zap.Logger
 }
 
-func New(postgresSinker *sinker.PostgresSinker, rollbackUrl string, rollbackSchema string) (*RollbackSinker, error) {
+func New(postgresSinker *sinker.PostgresSinker, rollbackUrl string, rollbackSchema string, zlog *zap.Logger) (*RollbackSinker, error) {
 	return &RollbackSinker{
 		PostgresSinker: postgresSinker,
 		rollbackUrl:    rollbackUrl,
 		rollbackSchema: rollbackSchema,
+		logger:         zlog,
 	}, nil
 }
 
@@ -35,8 +38,11 @@ func asBlockRef(blockRef *pbsubstreams.BlockRef) bstream.BlockRef {
 
 func (s *RollbackSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
 	if (s.rollbackUrl == "") || (s.rollbackSchema == "") {
+		s.logger.Info("rollback url or schema not set, skipping...")
 		return s.PostgresSinker.HandleBlockUndoSignal(ctx, data, cursor)
 	}
+
+	s.logger.Info("Performing rollback...")
 
 	lastValidBlock := asBlockRef(data.LastValidBlock)
 	lastValidBlock.Num()
@@ -59,7 +65,7 @@ func (s *RollbackSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubs
 
 	resp.Body.Close()
 
-	fmt.Println(string(body))
+	s.logger.Info(string(body))
 
 	return nil
 }

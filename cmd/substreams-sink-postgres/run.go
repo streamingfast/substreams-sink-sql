@@ -100,7 +100,9 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup postgres sinker: %w", err)
 	}
 
-	rollbackSinker, err := rollback_sinker.NewFromViper(cmd, postgresSinker)
+	rollbackSinker, err := rollback_sinker.NewFromViper(cmd, postgresSinker, zlog)
+
+	zlog.Info("rollback sinker created")
 
 	if err != nil {
 		return fmt.Errorf("unable to setup rollback sinker: %w", err)
