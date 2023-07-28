@@ -71,7 +71,7 @@ func NewLoader(
 		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
 	)
 
-	return &Loader{
+	l := &Loader{
 		DB:                 db,
 		database:           dsn.database,
 		schema:             dsn.schema,
@@ -81,7 +81,14 @@ func NewLoader(
 		moduleMismatchMode: moduleMismatchMode,
 		logger:             logger,
 		tracer:             tracer,
-	}, nil
+	}
+
+	_, err = l.tryDialect()
+	if err != nil {
+		return nil, fmt.Errorf("dialect not found: %s", err)
+	}
+
+	return l, nil
 }
 
 func (l *Loader) EntriesCount() uint64 {
@@ -242,8 +249,7 @@ func (l *Loader) Setup(ctx context.Context, schemaFile string) error {
 
 	schemaSql := string(b)
 
-	d, _ := l.getDialect()
-	if err := d.ExecuteSetupScript(ctx, l, schemaSql); err != nil {
+	if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
 		return fmt.Errorf("exec schema: %w", err)
 	}
 
@@ -266,11 +272,15 @@ func (l *Loader) setupCursorTable(ctx context.Context) error {
 }
 
 func (l *Loader) GetCreateCursorsTableSQL() string {
-	d, _ := l.getDialect()
-	return d.GetCreateCursorQuery(l.schema)
+	return l.getDialect().GetCreateCursorQuery(l.schema)
 }
 
-func (l *Loader) getDialect() (dialect, error) {
+func (l *Loader) getDialect() dialect {
+	d, _ := l.tryDialect()
+	return d
+}
+
+func (l *Loader) tryDialect() (dialect, error) {
 	dt := fmt.Sprintf("%T", l.DB.Driver())
 	d, ok := driverDialect[dt]
 	if !ok {

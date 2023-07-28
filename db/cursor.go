@@ -119,8 +119,7 @@ func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cu
 // ErrCursorNotFound. If the update was not successful on the database, returns an error.
 // You can use tx=nil to run the query outside of a transaction.
 func (l *Loader) UpdateCursor(ctx context.Context, tx *sql.Tx, moduleHash string, c *sink.Cursor) error {
-	d, _ := l.getDialect()
-	_, err := l.runModifiyQuery(ctx, tx, "update", d.GetUpdateCursorQuery(
+	_, err := l.runModifiyQuery(ctx, tx, "update", l.getDialect().GetUpdateCursorQuery(
 		l.cursorTable.identifier, moduleHash, c, c.Block().Num(), c.Block().ID(),
 	))
 	return err
@@ -169,9 +168,7 @@ func (l *Loader) runModifiyQuery(ctx context.Context, tx *sql.Tx, action string,
 		return 0, fmt.Errorf("rows affected: %w", err)
 	}
 
-	d, _ := l.getDialect()
-
-	if d.DriverSupportRowsAffected() && rowsAffected <= 0 {
+	if l.getDialect().DriverSupportRowsAffected() && rowsAffected <= 0 {
 		return 0, ErrCursorNotFound
 	}
 

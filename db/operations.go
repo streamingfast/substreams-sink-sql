@@ -30,7 +30,7 @@ type Operation struct {
 	opType     OperationType
 	primaryKey map[string]string
 	data       map[string]string
-	d          dialect
+	dialect    dialect
 }
 
 func (o *Operation) String() string {
@@ -38,34 +38,31 @@ func (o *Operation) String() string {
 }
 
 func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
-	d, _ := l.getDialect()
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeInsert,
 		primaryKey: primaryKey,
 		data:       data,
-		d:          d,
+		dialect:    l.getDialect(),
 	}
 }
 
 func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
-	d, _ := l.getDialect()
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeUpdate,
 		primaryKey: primaryKey,
 		data:       data,
-		d:          d,
+		dialect:    l.getDialect(),
 	}
 }
 
 func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string) *Operation {
-	d, _ := l.getDialect()
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeDelete,
 		primaryKey: primaryKey,
-		d:          d,
+		dialect:    l.getDialect(),
 	}
 }
 
@@ -84,7 +81,7 @@ func (o *Operation) query() (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
-		columns, values, err = prepareColValues(o.table, o.data, o.d)
+		columns, values, err = prepareColValues(o.table, o.data, o.dialect)
 		if err != nil {
 			return "", fmt.Errorf("preparing column & values: %w", err)
 		}
