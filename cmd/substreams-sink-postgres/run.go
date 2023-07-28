@@ -36,6 +36,8 @@ var sinkRunCmd = Command(sinkRunE,
 			updates to the cursor will overwrite the module hash in the database.
 		`),
 		)
+		flags.String("rollback-url", "", "url of the rollback service")
+		flags.String("rollback-db-schema", "", "schema rollback service")
 	}),
 	OnCommandErrorLogAndExit(zlog),
 )
