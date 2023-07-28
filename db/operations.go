@@ -30,6 +30,7 @@ type Operation struct {
 	opType     OperationType
 	primaryKey map[string]string
 	data       map[string]string
+	d          dialect
 }
 
 func (o *Operation) String() string {
@@ -37,28 +38,34 @@ func (o *Operation) String() string {
 }
 
 func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
+	d, _ := l.getDialect()
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeInsert,
 		primaryKey: primaryKey,
 		data:       data,
+		d:          d,
 	}
 }
 
 func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
+	d, _ := l.getDialect()
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeUpdate,
 		primaryKey: primaryKey,
 		data:       data,
+		d:          d,
 	}
 }
 
 func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string) *Operation {
+	d, _ := l.getDialect()
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeDelete,
 		primaryKey: primaryKey,
+		d:          d,
 	}
 }
 
@@ -77,7 +84,7 @@ func (o *Operation) query() (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
-		columns, values, err = prepareColValues(o.table, o.data)
+		columns, values, err = prepareColValues(o.table, o.data, o.d)
 		if err != nil {
 			return "", fmt.Errorf("preparing column & values: %w", err)
 		}
@@ -132,7 +139,7 @@ func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
 	return strings.Join(reg[:], " AND ")
 }
 
-func prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
+func prepareColValues(table *TableInfo, colValues map[string]string, d dialect) (columns []string, values []string, err error) {
 	if len(colValues) == 0 {
 		return
 	}
@@ -147,7 +154,7 @@ func prepareColValues(table *TableInfo, colValues map[string]string) (columns []
 			return nil, nil, fmt.Errorf("cannot find column %q for table %q (valid columns are %q)", columnName, table.identifier, strings.Join(maps.Keys(table.columnsByName), ", "))
 		}
 
-		normalizedValue, err := normalizeValueType(value, columnInfo.scanType)
+		normalizedValue, err := normalizeValueType(value, columnInfo.scanType, d)
 		if err != nil {
 			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", table.identifier, columnName, value, err)
 		}
@@ -164,7 +171,7 @@ var integerRegex = regexp.MustCompile(`^\d+$`)
 var reflectTypeTime = reflect.TypeOf(time.Time{})
 
 // Format based on type, value returned unescaped
-func normalizeValueType(value string, valueType reflect.Type) (string, error) {
+func normalizeValueType(value string, valueType reflect.Type, d dialect) (string, error) {
 	switch valueType.Kind() {
 	case reflect.String:
 		// replace unicode null character with empty string
@@ -198,8 +205,8 @@ func normalizeValueType(value string, valueType reflect.Type) (string, error) {
 				return escapeStringValue(time.Unix(int64(i), 0).Format(time.RFC3339)), nil
 			}
 
-			// It's a plain string, escape it and pass it to the database
-			return escapeStringValue(value), nil
+			// It's a plain string, parse by dialect it and pass it to the database
+			return d.ParseDatetimeNormalization(value), nil
 		}
 
 		return "", fmt.Errorf("unsupported struct type %s", valueType)

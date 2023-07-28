@@ -154,7 +154,7 @@ func Test_prepareColValues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotColumns, gotValues, err := prepareColValues(tt.args.table, tt.args.colValues)
+			gotColumns, gotValues, err := prepareColValues(tt.args.table, tt.args.colValues, postgresDialect{})
 			tt.assertion(t, err)
 			assert.Equal(t, tt.wantColumns, gotColumns)
 			assert.Equal(t, tt.wantValues, gotValues)

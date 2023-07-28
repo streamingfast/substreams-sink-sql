@@ -12,6 +12,7 @@ import (
 )
 
 type DSN struct {
+	driver   string
 	original string
 
 	host     string
@@ -21,6 +22,12 @@ type DSN struct {
 	database string
 	schema   string
 	options  []string
+}
+
+var driverMap = map[string]string{
+	"psql":       "postgres",
+	"postgres":   "postgres",
+	"clickhouse": "clickhouse",
 }
 
 func ParseDSN(dsn string) (*DSN, error) {
@@ -34,8 +41,16 @@ func ParseDSN(dsn string) (*DSN, error) {
 		return nil, fmt.Errorf("invalid url: %w", err)
 	}
 
-	if dsnURL.Scheme != "psql" {
-		return nil, fmt.Errorf(`invalid scheme %q, should be "psql"`, dsnURL.Scheme)
+	driver, ok := driverMap[dsnURL.Scheme]
+	if !ok {
+		keys := make([]string, len(driverMap))
+		i := 0
+		for k := range driverMap {
+			keys[i] = k
+			i++
+		}
+		fmt.Println(keys)
+		return nil, fmt.Errorf("invalid scheme %s, allowed schemes: [%s]", dsnURL.Scheme, strings.Join(keys, ","))
 	}
 
 	host := dsnURL.Hostname()
@@ -58,12 +73,17 @@ func ParseDSN(dsn string) (*DSN, error) {
 
 	d := &DSN{
 		original: dsn,
+		driver:   driver,
 		host:     host,
 		port:     port,
 		username: username,
 		password: password,
 		database: database,
 		schema:   "public",
+	}
+
+	if driver == "clickhouse" {
+		d.schema = database
 	}
 
 	options := make([]string, len(query))
@@ -80,6 +100,9 @@ func ParseDSN(dsn string) (*DSN, error) {
 }
 
 func (c *DSN) ConnString() string {
+	if c.driver == "clickhouse" {
+		return c.original
+	}
 	out := fmt.Sprintf("host=%s port=%d user=%s dbname=%s %s", c.host, c.port, c.username, c.database, strings.Join(c.options, " "))
 	if c.password != "" {
 		out = out + " password=" + c.password
