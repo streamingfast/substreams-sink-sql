@@ -14,7 +14,7 @@ import (
 type TypeGetter func(tableName string, columnName string) (reflect.Type, error)
 
 type Queryable interface {
-	query() (string, error)
+	query(d dialect) (string, error)
 }
 
 type OperationType string
@@ -30,7 +30,6 @@ type Operation struct {
 	opType     OperationType
 	primaryKey map[string]string
 	data       map[string]string
-	dialect    dialect
 }
 
 func (o *Operation) String() string {
@@ -43,7 +42,6 @@ func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]stri
 		opType:     OperationTypeInsert,
 		primaryKey: primaryKey,
 		data:       data,
-		dialect:    l.getDialect(),
 	}
 }
 
@@ -53,7 +51,6 @@ func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]stri
 		opType:     OperationTypeUpdate,
 		primaryKey: primaryKey,
 		data:       data,
-		dialect:    l.getDialect(),
 	}
 }
 
@@ -62,7 +59,6 @@ func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]stri
 		table:      table,
 		opType:     OperationTypeDelete,
 		primaryKey: primaryKey,
-		dialect:    l.getDialect(),
 	}
 }
 
@@ -77,11 +73,11 @@ func (o *Operation) mergeData(newData map[string]string) error {
 	return nil
 }
 
-func (o *Operation) query() (string, error) {
+func (o *Operation) query(d dialect) (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
-		columns, values, err = prepareColValues(o.table, o.data, o.dialect)
+		columns, values, err = prepareColValues(o.table, o.data, d)
 		if err != nil {
 			return "", fmt.Errorf("preparing column & values: %w", err)
 		}

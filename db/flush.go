@@ -36,7 +36,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
 			entry := entryPair.Value
 
-			query, err := entry.query()
+			query, err := entry.query(l.getDialect())
 			if err != nil {
 				return fmt.Errorf("failed to get query: %w", err)
 			}
