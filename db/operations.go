@@ -77,7 +77,7 @@ func (o *Operation) query(d dialect) (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
-		columns, values, err = prepareColValues(o.table, o.data, d)
+		columns, values, err = prepareColValues(d, o.table, o.data)
 		if err != nil {
 			return "", fmt.Errorf("preparing column & values: %w", err)
 		}
@@ -132,7 +132,7 @@ func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
 	return strings.Join(reg[:], " AND ")
 }
 
-func prepareColValues(table *TableInfo, colValues map[string]string, d dialect) (columns []string, values []string, err error) {
+func prepareColValues(d dialect, table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
 	if len(colValues) == 0 {
 		return
 	}
