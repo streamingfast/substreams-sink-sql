@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
+	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jimsmart/schema"
-	"github.com/streamingfast/cli"
 	"github.com/streamingfast/logging"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"go.uber.org/zap"
@@ -57,7 +57,7 @@ func NewLoader(
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
 
-	db, err := sql.Open("postgres", dsn.ConnString())
+	db, err := sql.Open(dsn.driver, dsn.ConnString())
 	if err != nil {
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
@@ -71,7 +71,7 @@ func NewLoader(
 		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
 	)
 
-	return &Loader{
+	l := &Loader{
 		DB:                 db,
 		database:           dsn.database,
 		schema:             dsn.schema,
@@ -81,7 +81,14 @@ func NewLoader(
 		moduleMismatchMode: moduleMismatchMode,
 		logger:             logger,
 		tracer:             tracer,
-	}, nil
+	}
+
+	_, err = l.tryDialect()
+	if err != nil {
+		return nil, fmt.Errorf("dialect not found: %s", err)
+	}
+
+	return l, nil
 }
 
 func (l *Loader) EntriesCount() uint64 {
@@ -241,7 +248,8 @@ func (l *Loader) Setup(ctx context.Context, schemaFile string) error {
 	}
 
 	schemaSql := string(b)
-	if _, err := l.ExecContext(ctx, schemaSql); err != nil {
+
+	if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
 		return fmt.Errorf("exec schema: %w", err)
 	}
 
@@ -264,13 +272,19 @@ func (l *Loader) setupCursorTable(ctx context.Context) error {
 }
 
 func (l *Loader) GetCreateCursorsTableSQL() string {
-	return fmt.Sprintf(cli.Dedent(`
-		create table if not exists %s.%s
-		(
-			id         text not null constraint cursor_pk primary key,
-			cursor     text,
-			block_num  bigint,
-			block_id   text
-		);
-	`), EscapeIdentifier(l.schema), EscapeIdentifier("cursors"))
+	return l.getDialect().GetCreateCursorQuery(l.schema)
+}
+
+func (l *Loader) getDialect() dialect {
+	d, _ := l.tryDialect()
+	return d
+}
+
+func (l *Loader) tryDialect() (dialect, error) {
+	dt := fmt.Sprintf("%T", l.DB.Driver())
+	d, ok := driverDialect[dt]
+	if !ok {
+		return nil, UnknownDriverError{Driver: dt}
+	}
+	return d, nil
 }
