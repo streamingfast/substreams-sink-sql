@@ -40,5 +40,5 @@ func (d postgresDialect) ParseDatetimeNormalization(value string) string {
 }
 
 func (d postgresDialect) DriverSupportRowsAffected() bool {
-	return false
+	return true
 }
