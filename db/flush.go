@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	sink "github.com/streamingfast/substreams-sink"
 	"go.uber.org/zap"
 )
 
 func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sink.Cursor) (err error) {
+	ctx = clickhouse.Context(context.Background(), clickhouse.WithStdAsync(true))
 	startAt := time.Now()
 
 	tx, err := l.DB.BeginTx(ctx, nil)
