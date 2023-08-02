@@ -11,7 +11,7 @@ import (
 )
 
 func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sink.Cursor) (err error) {
-	ctx = clickhouse.Context(context.Background(), clickhouse.WithStdAsync(true))
+	ctx = clickhouse.Context(context.Background(), clickhouse.WithStdAsync(false))
 	startAt := time.Now()
 
 	tx, err := l.DB.BeginTx(ctx, nil)
