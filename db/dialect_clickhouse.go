@@ -13,14 +13,14 @@ type clickhouseDialect struct{}
 
 func (d clickhouseDialect) GetCreateCursorQuery(schema string) string {
 	return fmt.Sprintf(cli.Dedent(`
-		create table if not exists %s.%s
-		(
-			id         text,
-			cursor     text,
-			block_num  bigint,
-			block_id   text
-		) engine = ReplacingMergeTree() order by id;
-		`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+	CREATE TABLE IF NOT EXISTS %s.%s
+	(
+    id         String,
+		cursor     String,
+		block_num  Int64,
+		block_id   String
+	) Engine = ReplacingMergeTree() ORDER BY id;
+	`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
 }
 
 func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
