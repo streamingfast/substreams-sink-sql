@@ -44,17 +44,6 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	return nil
 }
 
-func onlyOperation(op OperationType, entries *OrderedMap[string, *Operation]) bool {
-	sameOperation := true
-	for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
-		if entryPair.Value.opType != op {
-			sameOperation = false
-			break
-		}
-	}
-	return sameOperation
-}
-
 func (l *Loader) reset() {
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		l.entries.Set(entriesPair.Key, NewOrderedMap[string, *Operation]())
