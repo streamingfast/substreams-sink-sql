@@ -2,8 +2,10 @@ package db
 
 import (
 	"fmt"
+	"math/big"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +73,25 @@ func (o *Operation) mergeData(newData map[string]string) error {
 		o.data[k] = v
 	}
 	return nil
+}
+
+func (o *Operation) getValues() ([]any, error) {
+	columns := make([]string, len(o.data))
+	i := 0
+	for column := range o.data {
+		columns[i] = column
+		i++
+	}
+	sort.Strings(columns)
+	values := make([]any, len(o.data))
+	for i, v := range columns {
+		convertedType, err := convertToType(o.data[v], o.table.columnsByName[v].scanType)
+		if err != nil {
+			return nil, fmt.Errorf("converting value %q to type %q: %w", o.data[v], o.table.columnsByName[v].scanType, err)
+		}
+		values[i] = convertedType
+	}
+	return values, nil
 }
 
 func (o *Operation) query(d dialect) (string, error) {
@@ -163,6 +184,54 @@ func prepareColValues(d dialect, table *TableInfo, colValues map[string]string) 
 var integerRegex = regexp.MustCompile(`^\d+$`)
 var reflectTypeTime = reflect.TypeOf(time.Time{})
 
+func convertToType(value string, valueType reflect.Type) (any, error) {
+	switch valueType.Kind() {
+	case reflect.String:
+		return value, nil
+	case reflect.Slice:
+		return value, nil
+	case reflect.Bool:
+		return strconv.ParseBool(value)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.ParseInt(value, 10, 0)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint64:
+		return strconv.ParseUint(value, 10, 0)
+	case reflect.Uint32:
+		v, err := strconv.ParseUint(value, 10, 32)
+		return uint32(v), err
+	case reflect.Float32, reflect.Float64:
+		return strconv.ParseFloat(value, 10)
+	case reflect.Struct:
+		if valueType == reflectTypeTime {
+			if integerRegex.MatchString(value) {
+				i, err := strconv.Atoi(value)
+				if err != nil {
+					return "", fmt.Errorf("could not convert %s to int: %w", value, err)
+				}
+
+				return int64(i), nil
+			}
+
+			v, err := time.Parse("2006-01-02T15:04:05Z", value)
+			if err != nil {
+				return "", fmt.Errorf("could not convert %s to time: %w", value, err)
+			}
+			return v.Unix(), nil
+		}
+		return "", fmt.Errorf("unsupported struct type %s", valueType)
+
+	case reflect.Ptr:
+		if valueType.String() == "*big.Int" {
+			newInt := new(big.Int)
+			newInt.SetString(value, 10)
+			return newInt, nil
+		}
+		return "", fmt.Errorf("unsupported pointer type %s", valueType)
+	default:
+		return value, nil
+	}
+}
+
 // Format based on type, value returned unescaped
 func normalizeValueType(value string, valueType reflect.Type, d dialect) (string, error) {
 	switch valueType.Kind() {
@@ -203,7 +272,6 @@ func normalizeValueType(value string, valueType reflect.Type, d dialect) (string
 		}
 
 		return "", fmt.Errorf("unsupported struct type %s", valueType)
-
 	default:
 		// It's a column's type the schema parsing don't know how to represents as
 		// a Go type. In that case, we pass it unmodified to the database engine. It

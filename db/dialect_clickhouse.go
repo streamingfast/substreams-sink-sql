@@ -2,14 +2,77 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/streamingfast/cli"
 	sink "github.com/streamingfast/substreams-sink"
+	"go.uber.org/zap"
 )
 
 type clickhouseDialect struct{}
+
+func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
+	var entryCount int
+	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
+		tableName := entriesPair.Key
+		entries := entriesPair.Value
+		tx, err := l.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return entryCount, fmt.Errorf("failed to begin db transaction")
+		}
+
+		if l.tracer.Enabled() {
+			l.logger.Debug("flushing table entries", zap.String("table_name", tableName), zap.Int("entry_count", entries.Len()))
+		}
+		info := l.tables[tableName]
+		columns := make([]string, 0, len(info.columnsByName))
+		for column := range info.columnsByName {
+			columns = append(columns, column)
+		}
+		sort.Strings(columns)
+		query := fmt.Sprintf(
+			"INSERT INTO %s.%s (%s)",
+			EscapeIdentifier(l.schema),
+			EscapeIdentifier(tableName),
+			strings.Join(columns, ","))
+		// fmt.Println(query)
+		batch, err := tx.Prepare(query)
+		if err != nil {
+			return entryCount, fmt.Errorf("failed to prepare insert into %q: %w", tableName, err)
+		}
+		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
+			entry := entryPair.Value
+
+			if err != nil {
+				return entryCount, fmt.Errorf("failed to get query: %w", err)
+			}
+
+			if l.tracer.Enabled() {
+				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
+			}
+
+			values, err :=  entry.getValues()
+			if err != nil {
+				return entryCount, fmt.Errorf("failed to get values: %w", err)
+			}
+
+			if _, err := batch.ExecContext(ctx, values...); err != nil {
+				return entryCount, fmt.Errorf("executing for entry %q: %w", values, err)
+			}
+		}
+
+		// fmt.Println("flushing batch")
+		if err := tx.Commit(); err != nil {
+			return entryCount, fmt.Errorf("failed to commit db transaction: %w", err)
+		}
+		entryCount += entries.Len()
+	}
+
+	return entryCount, nil
+}
 
 func (d clickhouseDialect) GetCreateCursorQuery(schema string) string {
 	return fmt.Sprintf(cli.Dedent(`
@@ -47,4 +110,8 @@ func (d clickhouseDialect) ParseDatetimeNormalization(value string) string {
 
 func (d clickhouseDialect) DriverSupportRowsAffected() bool {
 	return false
+}
+
+func (d clickhouseDialect) OnlyInserts() bool {
+	return true
 }
