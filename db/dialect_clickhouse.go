@@ -38,7 +38,6 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 			EscapeIdentifier(l.schema),
 			EscapeIdentifier(tableName),
 			strings.Join(columns, ","))
-		// fmt.Println(query)
 		batch, err := tx.Prepare(query)
 		if err != nil {
 			return entryCount, fmt.Errorf("failed to prepare insert into %q: %w", tableName, err)
@@ -64,7 +63,6 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 			}
 		}
 
-		// fmt.Println("flushing batch")
 		if err := tx.Commit(); err != nil {
 			return entryCount, fmt.Errorf("failed to commit db transaction: %w", err)
 		}

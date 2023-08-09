@@ -3,8 +3,6 @@ package db
 import (
 	"context"
 	"fmt"
-	// "sort"
-	// "strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
