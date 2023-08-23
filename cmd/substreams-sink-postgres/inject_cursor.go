@@ -26,15 +26,7 @@ var injectCursorCmd = Command(injectCursor,
 	"Injects the cursor from a file into database",
 	ExactArgs(4),
 	Flags(func(flags *pflag.FlagSet) {
-		flags.String("on-module-hash-mistmatch", "error", FlagDescription(`
-			What to do when the module hash in the manifest does not match the one in the database, can be 'error', 'warn' or 'ignore'
-
-			- If 'error' is used (default), it will exit with an error explaining the problem and how to fix it.
-			- If 'warn' is used, it does the same as 'ignore' but it will log a warning message when it happens.
-			- If 'ignore' is set, we pick the cursor at the highest block number and use it as the starting point. Subsequent
-			updates to the cursor will overwrite the module hash in the database.
-		`),
-		)
+		AddCommonSinkerFlags(flags)
 	}),
 )
 
@@ -56,7 +48,7 @@ func injectCursor(cmd *cobra.Command, args []string) error {
 		manifestPath,
 		nil,
 		outputModuleName,
-		"sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges",
+		supportedOutputTypes,
 		false,
 		zlog)
 	if err != nil {
