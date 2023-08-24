@@ -21,7 +21,7 @@ jobs:
 
     strategy:
       matrix:
-        go-version: [1.18.x]
+        go-version: [1.20.x]
 
     outputs:
       tags: ${{ steps.meta.outputs.tags }}
@@ -95,4 +95,4 @@ jobs:
         with:
           args: |
             :done: *${{ github.repository }}* Success building docker images from ${{ github.ref_type }} _${{ github.ref_name }}_ (${{ github.actor }}) :sparkling_heart: ```${{ join(needs.build-vanilla.outputs.tags, ' ') }}
-            ${{ needs.build-bundle.outputs.image }}```          
+            ${{ needs.build-bundle.outputs.image }}```

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/logging"
+	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/db"
 	"go.uber.org/zap"
@@ -17,21 +19,21 @@ import (
 
 var supportedOutputTypes = "sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges"
 
-func newLoaderAndBaseSinker(
+var (
+	onModuleHashMistmatchFlag = "on-module-hash-mistmatch"
+)
+
+func newDBLoader(
 	cmd *cobra.Command,
 	psqlDSN string,
 	flushInterval time.Duration,
-	endpoint, manifestPath, moduleName, blockRange string,
-	zlog *zap.Logger,
-	tracer logging.Tracer,
-	opts ...sink.Option,
-) (*db.Loader, *sink.Sinker, error) {
-	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, "on-module-hash-mistmatch"))
+) (*db.Loader, error) {
+	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, onModuleHashMistmatchFlag))
 	cli.NoError(err, "invalid mistmatch mode")
 
 	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, moduleMismatchMode, zlog, tracer)
 	if err != nil {
-		return nil, nil, fmt.Errorf("new psql loader: %w", err)
+		return nil, fmt.Errorf("new psql loader: %w", err)
 	}
 
 	if err := dbLoader.LoadTables(); err != nil {
@@ -42,9 +44,27 @@ func newLoaderAndBaseSinker(
 			fmt.Println()
 			fmt.Println(dbLoader.GetCreateCursorsTableSQL())
 			fmt.Println()
-			return nil, nil, fmt.Errorf("invalid cursors table")
+			return nil, fmt.Errorf("invalid cursors table")
 		}
-		return nil, nil, fmt.Errorf("load psql table: %w", err)
+
+		return nil, fmt.Errorf("load psql table: %w", err)
+	}
+
+	return dbLoader, nil
+}
+
+func newDBLoaderAndBaseSinker(
+	cmd *cobra.Command,
+	psqlDSN string,
+	flushInterval time.Duration,
+	endpoint, manifestPath, moduleName, blockRange string,
+	zlog *zap.Logger,
+	tracer logging.Tracer,
+	opts ...sink.Option,
+) (*db.Loader, *sink.Sinker, error) {
+	dbLoader, err := newDBLoader(cmd, psqlDSN, flushInterval)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new db loader: %w", err)
 	}
 
 	outputModuleName := sink.InferOutputModuleFromPackage
@@ -61,7 +81,7 @@ func newLoaderAndBaseSinker(
 		opts...,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to setup sinker: %w", err)
+		return nil, nil, fmt.Errorf("new base sinker: %w", err)
 	}
 
 	return dbLoader, sink, nil
@@ -70,7 +90,7 @@ func newLoaderAndBaseSinker(
 // AddCommonSinkerFlags adds the flags common to all command that needs to create a sinker,
 // namely the `run` and `generate-csv` commands.
 func AddCommonSinkerFlags(flags *pflag.FlagSet) {
-	flags.String("on-module-hash-mistmatch", "error", cli.FlagDescription(`
+	flags.String(onModuleHashMistmatchFlag, "error", cli.FlagDescription(`
 		What to do when the module hash in the manifest does not match the one in the database, can be 'error', 'warn' or 'ignore'
 
 		- If 'error' is used (default), it will exit with an error explaining the problem and how to fix it.

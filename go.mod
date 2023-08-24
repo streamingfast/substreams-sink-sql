@@ -1,6 +1,6 @@
 module github.com/streamingfast/substreams-sink-postgres
 
-go 1.18
+go 1.20
 
 require (
 	github.com/bobg/go-generics/v2 v2.1.1
