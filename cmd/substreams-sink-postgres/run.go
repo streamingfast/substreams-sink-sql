@@ -13,9 +13,9 @@ import (
 )
 
 var sinkRunCmd = Command(sinkRunE,
-	"run <psql_dsn> <endpoint> <manifest> [<module>] [<start>:<stop>]",
+	"run <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
 	"Runs Postgres sink process",
-	RangeArgs(3, 5),
+	RangeArgs(4, 5),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
 		AddCommonSinkerFlags(flags)
@@ -34,10 +34,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	psqlDSN := args[0]
 	endpoint := args[1]
 	manifestPath := args[2]
-	moduleName := ""
-	if len(args) > 3 {
-		moduleName = args[3]
-	}
+	moduleName := args[3]
 	blockRange := ""
 	if len(args) > 4 {
 		blockRange = args[4]

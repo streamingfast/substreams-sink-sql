@@ -13,8 +13,8 @@ import (
 )
 
 var generateCsvCmd = Command(generateCsvE,
-	"generate-csv <psql_dsn> <endpoint> <dest-folder> <manifest> <module> [start]:<stop>",
-	"Generates CSVs for each table so it can then be bulk inserted with `inject-csv`",
+	"generate-csv <psql_dsn> <endpoint> <manifest> <module> <dest-folder> [start]:<stop>",
+	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
 	Description(`
 		This command command is the first of a multi-step process to bulk insert data into a Postgres database.
 		It creates a folder for each table and generates CSVs for block ranges. This files can be used with
@@ -59,9 +59,9 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 
 	psqlDSN := args[0]
 	endpoint := args[1]
-	destFolder := args[2]
-	manifestPath := args[3]
-	moduleName := args[4]
+	manifestPath := args[2]
+	moduleName := args[3]
+	destFolder := args[4]
 	blockRange := args[5]
 
 	bundleSize := sflags.MustGetUint64(cmd, "bundle-size")
