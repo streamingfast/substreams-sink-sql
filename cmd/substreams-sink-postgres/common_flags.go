@@ -79,3 +79,123 @@ func AddCommonSinkerFlags(flags *pflag.FlagSet) {
 		updates to the cursor will overwrite the module hash in the database.
 	`))
 }
+
+type cliApplication struct {
+	appCtx  context.Context
+	shutter *shutter.Shutter
+}
+
+func NewApplication(ctx context.Context) *cliApplication {
+	shutter := shutter.New()
+
+	appCtx, cancelApp := context.WithCancel(ctx)
+	shutter.OnTerminating(func(_ error) {
+		cancelApp()
+	})
+
+	return &cliApplication{
+		appCtx:  appCtx,
+		shutter: shutter,
+	}
+}
+
+func (a *cliApplication) Context() context.Context {
+	return a.appCtx
+}
+
+type Shutter interface {
+	OnTerminated(f func(error))
+	OnTerminating(f func(error))
+	Shutdown(error)
+}
+
+type Runnable interface {
+	Run()
+}
+
+type RunnableError interface {
+	Run() error
+}
+
+type RunnableContext interface {
+	Run(ctx context.Context)
+}
+
+type RunnableContextError interface {
+	Run(ctx context.Context) error
+}
+
+// Shutdown is a supervises the received child shutter, mainly, this
+// ensures that on child's termination, the application is also terminated
+// with the error that caused the child to terminate.
+//
+// If the application shuts down before the child, the child is also terminated but
+// gracefully (it does **not** receive the error that caused the application to terminate).
+//
+// The child termination is always performed before the application fully complete, unless
+// the gracecul shutdown delay has expired.
+func (a *cliApplication) Supervise(child Shutter) {
+	child.OnTerminated(a.shutter.Shutdown)
+	a.shutter.OnTerminating(func(_ error) {
+		child.Shutdown(nil)
+	})
+}
+
+func (a *cliApplication) SuperviseAndStart(child Shutter) {
+	child.OnTerminated(a.shutter.Shutdown)
+	a.shutter.OnTerminating(func(_ error) {
+		child.Shutdown(nil)
+	})
+
+	switch v := child.(type) {
+	case Runnable:
+		go v.Run()
+	case RunnableContext:
+		go v.Run(a.appCtx)
+	case RunnableError:
+		go func() {
+			err := v.Run()
+			if err != nil {
+				child.Shutdown(err)
+			}
+		}()
+	case RunnableContextError:
+		go func() {
+			err := v.Run(a.appCtx)
+			if err != nil {
+				child.Shutdown(err)
+			}
+		}()
+	}
+}
+
+func (a *cliApplication) WaitForTermination(logger *zap.Logger, unreadyPeriodAfterSignal, gracefulShutdownDelay time.Duration) error {
+	// On any exit path, we synchronize the logger one last time
+	defer func() {
+		logger.Sync()
+	}()
+
+	signalHandler, isSignaled, _ := cli.SetupSignalHandler(unreadyPeriodAfterSignal, logger)
+	select {
+	case <-signalHandler:
+		go a.shutter.Shutdown(nil)
+		break
+	case <-a.shutter.Terminating():
+		logger.Info("run terminating", zap.Bool("from_signal", isSignaled.Load()), zap.Bool("with_error", a.shutter.Err() != nil))
+		break
+	}
+
+	logger.Info("waiting for run termination")
+	select {
+	case <-a.shutter.Terminated():
+	case <-time.After(gracefulShutdownDelay):
+		logger.Warn("application did not terminate within graceful period of " + gracefulShutdownDelay.String() + ", forcing termination")
+	}
+
+	if err := a.shutter.Err(); err != nil {
+		return err
+	}
+
+	logger.Info("run terminated gracefully")
+	return nil
+}

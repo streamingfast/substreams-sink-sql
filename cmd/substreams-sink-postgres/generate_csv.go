@@ -1,19 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/sinker"
-	"go.uber.org/zap"
 )
 
 var generateCsvCmd = Command(generateCsvE,
@@ -38,7 +34,7 @@ var generateCsvCmd = Command(generateCsvE,
 		sink.AddFlagsToSet(flags, sink.FlagIgnore("final-blocks-only"))
 		AddCommonSinkerFlags(flags)
 
-		flags.Uint64("bundle-size", 1000, "Size of output bundle, in blocks")
+		flags.Uint64("bundle-size", 10000, "Size of output bundle, in blocks")
 		flags.String("working-dir", "./workdir", "Path to local folder used as working directory")
 		flags.Uint64("buffer-max-size", 4*1024*1024, FlagDescription(`
 			Amount of memory bytes to allocate to the buffered writer. If your data set is small enough that every is hold in memory, we are going to avoid
@@ -56,15 +52,10 @@ var generateCsvCmd = Command(generateCsvE,
 )
 
 func generateCsvE(cmd *cobra.Command, args []string) error {
-	app := shutter.New()
+	app := NewApplication(cmd.Context())
 
 	sink.RegisterMetrics()
 	sinker.RegisterMetrics()
-
-	ctx, cancelApp := context.WithCancel(cmd.Context())
-	app.OnTerminating(func(_ error) {
-		cancelApp()
-	})
 
 	psqlDSN := args[0]
 	endpoint := args[1]
@@ -77,7 +68,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	bufferMaxSize := sflags.MustGetUint64(cmd, "buffer-max-size")
 	workingDir := sflags.MustGetString(cmd, "working-dir")
 
-	dbLoader, sink, err := newLoaderAndBaseSinker(
+	dbLoader, sink, err := newDBLoaderAndBaseSinker(
 		cmd,
 		psqlDSN,
 		time.Duration(bundleSize),
@@ -94,38 +85,11 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup generate csv sinker: %w", err)
 	}
 
-	generateCSVSinker.OnTerminated(app.Shutdown)
-	app.OnTerminating(func(_ error) {
-		generateCSVSinker.Shutdown(nil)
-	})
+	app.Supervise(generateCSVSinker.Shutter)
 
 	go func() {
-		generateCSVSinker.Run(ctx)
+		generateCSVSinker.Run(app.Context())
 	}()
 
-	zlog.Info("ready, waiting for signal to quit")
-
-	signalHandler, isSignaled, _ := cli.SetupSignalHandler(0*time.Second, zlog)
-	select {
-	case <-signalHandler:
-		go app.Shutdown(nil)
-		break
-	case <-app.Terminating():
-		zlog.Info("run terminating", zap.Bool("from_signal", isSignaled.Load()), zap.Bool("with_error", app.Err() != nil))
-		break
-	}
-
-	zlog.Info("waiting for run termination")
-	select {
-	case <-app.Terminated():
-	case <-time.After(30 * time.Second):
-		zlog.Warn("application did not terminate within 30s")
-	}
-
-	if err := app.Err(); err != nil {
-		return err
-	}
-
-	zlog.Info("run terminated gracefully")
-	return nil
+	return app.WaitForTermination(zlog, 0*time.Second, 30*time.Second)
 }

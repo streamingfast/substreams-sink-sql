@@ -1,19 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/sinker"
-	"go.uber.org/zap"
 )
 
 var sinkRunCmd = Command(sinkRunE,
@@ -30,15 +26,10 @@ var sinkRunCmd = Command(sinkRunE,
 )
 
 func sinkRunE(cmd *cobra.Command, args []string) error {
-	app := shutter.New()
+	app := NewApplication(cmd.Context())
 
 	sink.RegisterMetrics()
 	sinker.RegisterMetrics()
-
-	ctx, cancelApp := context.WithCancel(cmd.Context())
-	app.OnTerminating(func(_ error) {
-		cancelApp()
-	})
 
 	psqlDSN := args[0]
 	endpoint := args[1]
@@ -52,9 +43,13 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		blockRange = args[4]
 	}
 
-	flushInterval := sflags.MustGetDuration(cmd, "flush-interval")
-
-	dbLoader, sink, err := newLoaderAndBaseSinker(cmd, psqlDSN, flushInterval, endpoint, manifestPath, moduleName, blockRange, zlog, tracer)
+	dbLoader, sink, err := newDBLoaderAndBaseSinker(
+		cmd,
+		psqlDSN,
+		sflags.MustGetDuration(cmd, "flush-interval"),
+		endpoint, manifestPath, moduleName, blockRange,
+		zlog, tracer,
+	)
 	if err != nil {
 		return fmt.Errorf("instantiate db loader and sink: %w", err)
 	}
@@ -64,38 +59,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to setup postgres sinker: %w", err)
 	}
 
-	postgresSinker.OnTerminating(app.Shutdown)
-	app.OnTerminating(func(err error) {
-		postgresSinker.Shutdown(err)
-	})
+	app.SuperviseAndStart(postgresSinker)
 
-	go func() {
-		postgresSinker.Run(ctx)
-	}()
-
-	zlog.Info("ready, waiting for signal to quit")
-
-	signalHandler, isSignaled, _ := cli.SetupSignalHandler(0*time.Second, zlog)
-	select {
-	case <-signalHandler:
-		go app.Shutdown(nil)
-		break
-	case <-app.Terminating():
-		zlog.Info("run terminating", zap.Bool("from_signal", isSignaled.Load()), zap.Bool("with_error", app.Err() != nil))
-		break
-	}
-
-	zlog.Info("waiting for run termination")
-	select {
-	case <-app.Terminated():
-	case <-time.After(30 * time.Second):
-		zlog.Warn("application did not terminate within 30s")
-	}
-
-	if err := app.Err(); err != nil {
-		return err
-	}
-
-	zlog.Info("run terminated gracefully")
-	return nil
+	return app.WaitForTermination(zlog, 0*time.Second, 30*time.Second)
 }
