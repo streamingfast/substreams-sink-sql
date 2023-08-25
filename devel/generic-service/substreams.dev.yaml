@@ -13,11 +13,3 @@ sink:
   config:
     schema: "@@../eth-block-meta/schema.sql"
     dsn: "psql://dev-node:$PGPASSWORD@localhost:5432/dev-node?sslmode=disable"
-
-sink:
-  module: blockmeta:db_out
-  type: sf.substreams.sink.sql.v1beta1.HashuraService
-  config:
-    schema: "@@../eth-block-meta/schema.sql"
-    dsn: "psql://dev-node:$PGPASSWORD@localhost:5432/dev-node?sslmode=disable"
-
