@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	sink "github.com/streamingfast/substreams-sink"
@@ -22,6 +23,8 @@ type dialect interface {
 	DriverSupportRowsAffected() bool
 	GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string
 	ParseDatetimeNormalization(value string) string
+	Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error)
+	OnlyInserts() bool
 }
 
 var driverDialect = map[string]dialect{
