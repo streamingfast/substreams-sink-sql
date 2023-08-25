@@ -14,6 +14,11 @@ import (
 
 type clickhouseDialect struct{}
 
+// Clickhouse should be used to insert a lot of data in batches. The current official clickhouse
+// driver doesn't support Transactions for multiple tables. The only way to add in batches is 
+// creating a transaction for a table, adding all rows and commiting it.
+//
+// That's why two different Flush() functions are needed depending on the dialect.
 func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
 	var entryCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
@@ -53,7 +58,7 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
 			}
 
-			values, err :=  entry.getValues()
+			values, err := entry.getValues()
 			if err != nil {
 				return entryCount, fmt.Errorf("failed to get values: %w", err)
 			}
