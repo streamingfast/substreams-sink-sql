@@ -4,8 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/big"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/streamingfast/cli"
 	sink "github.com/streamingfast/substreams-sink"
@@ -17,8 +21,6 @@ type clickhouseDialect struct{}
 // Clickhouse should be used to insert a lot of data in batches. The current official clickhouse
 // driver doesn't support Transactions for multiple tables. The only way to add in batches is 
 // creating a transaction for a table, adding all rows and commiting it.
-//
-// That's why two different Flush() functions are needed depending on the dialect.
 func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
 	var entryCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
@@ -58,7 +60,7 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
 			}
 
-			values, err := entry.getValues()
+			values, err := convertOpToClickhouseValues(entry)
 			if err != nil {
 				return entryCount, fmt.Errorf("failed to get values: %w", err)
 			}
@@ -117,4 +119,73 @@ func (d clickhouseDialect) DriverSupportRowsAffected() bool {
 
 func (d clickhouseDialect) OnlyInserts() bool {
 	return true
+}
+
+
+func convertOpToClickhouseValues(o *Operation) ([]any, error) {
+	columns := make([]string, len(o.data))
+	i := 0
+	for column := range o.data {
+		columns[i] = column
+		i++
+	}
+	sort.Strings(columns)
+	values := make([]any, len(o.data))
+	for i, v := range columns {
+		convertedType, err := convertToType(o.data[v], o.table.columnsByName[v].scanType)
+		if err != nil {
+			return nil, fmt.Errorf("converting value %q to type %q: %w", o.data[v], o.table.columnsByName[v].scanType, err)
+		}
+		values[i] = convertedType
+	}
+	return values, nil
+}
+
+
+func convertToType(value string, valueType reflect.Type) (any, error) {
+	switch valueType.Kind() {
+	case reflect.String:
+		return value, nil
+	case reflect.Slice:
+		return value, nil
+	case reflect.Bool:
+		return strconv.ParseBool(value)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.ParseInt(value, 10, 0)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint64:
+		return strconv.ParseUint(value, 10, 0)
+	case reflect.Uint32:
+		v, err := strconv.ParseUint(value, 10, 32)
+		return uint32(v), err
+	case reflect.Float32, reflect.Float64:
+		return strconv.ParseFloat(value, 10)
+	case reflect.Struct:
+		if valueType == reflectTypeTime {
+			if integerRegex.MatchString(value) {
+				i, err := strconv.Atoi(value)
+				if err != nil {
+					return "", fmt.Errorf("could not convert %s to int: %w", value, err)
+				}
+
+				return int64(i), nil
+			}
+
+			v, err := time.Parse("2006-01-02T15:04:05Z", value)
+			if err != nil {
+				return "", fmt.Errorf("could not convert %s to time: %w", value, err)
+			}
+			return v.Unix(), nil
+		}
+		return "", fmt.Errorf("unsupported struct type %s", valueType)
+
+	case reflect.Ptr:
+		if valueType.String() == "*big.Int" {
+			newInt := new(big.Int)
+			newInt.SetString(value, 10)
+			return newInt, nil
+		}
+		return "", fmt.Errorf("unsupported pointer type %s", valueType)
+	default:
+		return value, nil
+	}
 }
