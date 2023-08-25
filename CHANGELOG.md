@@ -12,9 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added newer method of populating the database via CSV
 
   Newer commands:
-    - `generate_csv`: Generates CSVs for each table
-    - `insert_csv`: Injects generated CSV rows for <table>
-    - `inject_cursor`: Injects the cursor from a file into database
+  - `generate_csv`: Generates CSVs for each table
+  - `insert_csv`: Injects generated CSV rows for <table>
+  - `inject_cursor`: Injects the cursor from a file into database
+
+
+* Added driver abstraction
+
+* Added Clickhouse as the second driver.
+
+You can connect to Clickhouse by using the following DSN:
+
+- Not encrypted: `clickhouse://<host>:9000/<database>?username=<user>&password=<password>`
+- Encrypted: `clickhouse://<host>:9440/<database>?secure=true&skip_verify=true&username=<user>&password=<password>`
+
+If you want to send custom args to the connection, you can use by sending as query params.
+
 
 ## v2.4.0
 
