@@ -12,13 +12,13 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20221209193439-bff11742bf4c
-	github.com/streamingfast/substreams v1.1.8-0.20230705171054-90758978ac9c
-	github.com/streamingfast/substreams-sink v0.3.0
+	github.com/streamingfast/substreams v1.1.12-0.20230829174456-08bca20358c7
+	github.com/streamingfast/substreams-sink v0.3.1
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
 	github.com/stretchr/testify v1.8.3
 	github.com/wk8/go-ordered-map/v2 v2.1.7
 	go.uber.org/zap v1.24.0
-	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
+	golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
 	google.golang.org/protobuf v1.30.0
 )
 
@@ -104,7 +104,7 @@ require (
 	github.com/blendle/zapdriver v1.3.2-0.20200203083823-9200777f8a3d // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
+	github.com/chzyer/readline v1.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
@@ -126,22 +126,22 @@ require (
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.0 // indirect
 	github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20230510131449-6b591d74130d
+	github.com/streamingfast/bstream v0.0.2-0.20230731165201-639b4f347707
 	github.com/streamingfast/cli v0.0.4-0.20230508203625-ecd532feb120
 	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20230621153617-bc715cdb9fd1 // indirect
 	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
-	github.com/streamingfast/dmetrics v0.0.0-20230516031116-28fcfeb4b9ed
+	github.com/streamingfast/dmetrics v0.0.0-20230830150831-a7c98f755707
 	github.com/streamingfast/dstore v0.1.1-0.20230620124109-3924b3b36c77
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect
-	github.com/streamingfast/pbgo v0.0.6-0.20220630154121-2e8bba36234e // indirect
+	github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28 // indirect
 	github.com/streamingfast/shutter v1.5.0
 	github.com/yourbasic/graph v0.0.0-20210606180040-8ecfec1c2869 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.6.0 // indirect
-	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
 	golang.org/x/sys v0.9.0 // indirect

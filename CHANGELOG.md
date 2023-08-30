@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v2.4.1
+
+### Substreams Progress Messages
+
+> [!IMPORTANT]
+> This client only support progress messages sent from a to a server with substreams version >=v1.1.12
+
+* Bumped substreams-sink to `v0.3.1` and substreams to `v1.1.12` to support the new progress message format. Progression now relates to **stages** instead of modules. You can get stage information using the `substreams info` command starting at version `v1.1.12`.
+
+#### Changed Prometheus Metrics
+
+* `substreams_sink_progress_message` removed in favor of `substreams_sink_progress_message_total_processed_blocks`
+* `substreams_sink_progress_message_last_end_block` removed in favor of `substreams_sink_progress_message_last_block` (per stage)
+
+#### Added Prometheus Metrics
+
+* added `substreams_sink_progress_message_last_contiguous_block` (per stage)
+* added `substreams_sink_progress_message_running_jobs`(per stage)
 
 ### Added
 
