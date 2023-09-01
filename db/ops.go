@@ -82,12 +82,14 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 		return nil, fmt.Errorf("your Substreams sent a primary key but your database definition for table %q is using a composite primary key", tableName)
 	}
 
-	primaryKey := make(map[string]string, len(primaryKeyColumns))
-	for _, column := range primaryKeyColumns {
-		primaryKey[column.name] = pk
+	// There can be only 0 or 1 column here as we check above for > 1 and return.
+	// If there is 0, there is no primary key column in which case we return the
+	// received primary key as is under and "" (empty) column name.
+	if len(primaryKeyColumns) == 0 {
+		return map[string]string{"": pk}, nil
 	}
 
-	return primaryKey, nil
+	return map[string]string{primaryKeyColumns[0].name: pk}, nil
 }
 
 // Update a row in the DB, it is assumed the table exists, you can do a

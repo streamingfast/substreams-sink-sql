@@ -227,22 +227,31 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 			if err != nil {
 				return err
 			}
+
+			// Tables that don't have a primary key set at the schema level yield a single column
+			// primary key named "" (empty string). We need to remove it from the fields map because
+			// it's not a real column in the table.
+			delete(fields, "")
+
 		case *pbdatabase.TableChange_CompositePk:
 			fields = u.CompositePk.Keys
 		default:
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
 		}
+
 		table := change.Table
 		tableBundler, ok := s.bundlersByTable[table]
 		if !ok {
 			return fmt.Errorf("cannot get bundler writer for table %s", table)
 		}
+
 		switch change.Operation {
 		case pbdatabase.TableChange_CREATE:
-			// add fields
+			// Add fields
 			for _, field := range change.Fields {
 				fields[field.Name] = field.NewValue
 			}
+
 			data, _ := bundler.CSVEncode(fields)
 			if !tableBundler.HeaderWritten {
 				tableBundler.Writer().Write(tableBundler.Header)

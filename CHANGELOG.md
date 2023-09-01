@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.5.1
+
+This is a bug fix release containing a fix for inserting rows into a table for which no primary key constraint exist. For now, we still requires internally that your provide an `id` in your `DatabaseChange` of your row, a future update will lift that limitations.
+
 ## v2.5.0
 
 ### Highlights

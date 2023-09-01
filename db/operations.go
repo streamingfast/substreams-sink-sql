@@ -83,6 +83,13 @@ func (o *Operation) query(d dialect) (string, error) {
 		}
 	}
 
+	if o.opType == OperationTypeUpdate || o.opType == OperationTypeDelete {
+		// A table without a primary key set yield a `primaryKey` map with a single entry where the key is an empty string
+		if _, found := o.primaryKey[""]; found {
+			return "", fmt.Errorf("trying to perform %s operation but table %q don't have a primary key set, this is not accepted", o.opType, o.table.name)
+		}
+	}
+
 	switch o.opType {
 	case OperationTypeInsert:
 		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
