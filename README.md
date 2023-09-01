@@ -48,6 +48,50 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
         db_out
     ```
 
+
+### DSN
+
+DSN stands for Data Source Name (or Database Source Name) and `substreams-sink-postgres` expects a URL input that defines how to connect to the right driver. An example input for Postgres is `psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable` which lists hostname, user, password, port and database (with some options) in a single string input.
+
+The URL's scheme is used to determine the driver to use, `psql`, `clickhouse`, etc. In the example case above, the picked driver will be Postgres. The generic format of a DSN is of the form:
+
+```
+<scheme>:://<username>:<password>@<hostname>:<port>/<database_name>?<options>
+```
+
+You will find below connection details for each currently supported driver.
+
+#### Clickhouse
+
+The DSN format for Clickhouse is:
+
+```
+clickhouse://<user>:<password>@<host>:<port>/<dbname>[?<options>]
+```
+
+#### PostgreSQL
+
+The DSN format for Postgres is:
+
+```
+psql://<user>:<password>@<host>:<port>/<dbname>[?<options>]
+```
+
+Where `<options>` is URL query parameters in `<key>=<value>` format, multiple options are separated by `&` signs. Supported options can be seen [on libpq official documentation](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). The options `<user>`, `<password>`, `<host>` and `<dbname>` should **not** be passed in `<options>` as they are automatically extracted from the DSN URL.
+
+Moreover, the `schema` option key can be used to select a particular schema within the `<dbname>` database.
+
+#### Others
+
+Only `psql` and `clickhouse` are supported today, adding support for a new _dialect_ is quite easy:
+
+- Copy [db/dialect_clickhouse.go](./db/dialect_clickhouse.go) to a new file `db/dialect_<name>.go` implementing the right functionality.
+- Update [`db.driverDialect` map](https://github.com/streamingfast/substreams-sink-postgres/blob/develop/db/dialect.go#L27-L31) to add you dialect (key is the Golang type of your dialect implementation).
+- Update [`dsn.driverMap` map](https://github.com/streamingfast/substreams-sink-postgres/blob/develop/db/dsn.go#L27-L31) to add DSN -> `dialect name` mapping, edit the file to accommodate for your specific driver (might not be required)
+- Update Docker Compose to have this dependency auto-started for development purposes
+- Update README and CHANGELOG to add information about the new dialect
+- Open a PR
+
 ### Output Module
 
 To be accepted by `substreams-sink-postgres`, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
@@ -56,18 +100,6 @@ To be accepted by `substreams-sink-postgres`, your module output's type must be 
 By convention, we name the `map` module that emits [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) output `db_out`.
 
 > Note that using prior versions (0.2.0, 0.1.*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
-
-### PostgreSQL DSN
-
-The connection string is provided using a simple string format respecting the URL specification. The DSN format is:
-
-```
-psql://<user>:<password>@<host>/<dbname>[?<options>]
-```
-
-Where `<options>` is URL query parameters in `<key>=<value>` format, multiple options are separated by `&` signs. Supported options can be seen [on libpq official documentation](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). The options `<user>`, `<password>`, `<host>` and `<dbname>` should **not** be passed in `<options>` as they are automatically extracted from the DSN URL.
-
-Moreover, the `schema` option key can be used to select a particular schema within the `<dbname>` database.
 
 ### Advanced Topics
 

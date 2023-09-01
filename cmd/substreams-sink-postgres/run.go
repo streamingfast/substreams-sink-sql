@@ -13,9 +13,9 @@ import (
 )
 
 var sinkRunCmd = Command(sinkRunE,
-	"run <psql_dsn> <endpoint> <manifest> <module> [<start>:<stop>]",
+	"run <endpoint> <manifest> [<start>:<stop>]",
 	"Runs Postgres sink process",
-	RangeArgs(4, 5),
+	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
 		AddCommonSinkerFlags(flags)
@@ -31,20 +31,17 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	sink.RegisterMetrics()
 	sinker.RegisterMetrics()
 
-	psqlDSN := args[0]
-	endpoint := args[1]
-	manifestPath := args[2]
-	moduleName := args[3]
+	endpoint := args[0]
+	manifestPath := args[1]
 	blockRange := ""
-	if len(args) > 4 {
-		blockRange = args[4]
+	if len(args) > 2 {
+		blockRange = args[2]
 	}
 
 	dbLoader, sink, err := newDBLoaderAndBaseSinker(
 		cmd,
-		psqlDSN,
 		sflags.MustGetDuration(cmd, "flush-interval"),
-		endpoint, manifestPath, moduleName, blockRange,
+		endpoint, manifestPath, blockRange,
 		zlog, tracer,
 	)
 	if err != nil {

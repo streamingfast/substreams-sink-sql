@@ -34,9 +34,9 @@ services:
     depends_on:
       - postgres
   database:
+    container_name: clickhouse-ssp
     image: clickhouse/clickhouse-server
     user: "101:101"
-    container_name: clickhouse
     hostname: clickhouse
     volumes:
       - ${PWD}/devel/clickhouse-server/config.xml:/etc/clickhouse-server/config.d/config.xml

@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jimsmart/schema"
 	"github.com/streamingfast/logging"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
@@ -239,20 +238,26 @@ func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 	return nil
 }
 
+// Setup creates the schema and the cursors table where the <schemaFile> is a local file
+// on disk.
 func (l *Loader) Setup(ctx context.Context, schemaFile string) error {
 	b, err := os.ReadFile(schemaFile)
 	if err != nil {
 		return fmt.Errorf("read schema file: %w", err)
 	}
 
-	schemaSql := string(b)
+	return l.SetupFromBytes(ctx, b)
+}
 
+// SetupFromBytes creates the schema and the cursors table where the <schemaBytes> is a byte array
+// taken from somewhere.
+func (l *Loader) SetupFromBytes(ctx context.Context, schemaBytes []byte) error {
+	schemaSql := string(schemaBytes)
 	if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
 		return fmt.Errorf("exec schema: %w", err)
 	}
 
-	err = l.setupCursorTable(ctx)
-	if err != nil {
+	if err := l.setupCursorTable(ctx); err != nil {
 		return fmt.Errorf("setup cursor table: %w", err)
 	}
 

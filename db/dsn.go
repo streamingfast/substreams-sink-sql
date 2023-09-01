@@ -49,7 +49,7 @@ func ParseDSN(dsn string) (*DSN, error) {
 			keys[i] = k
 			i++
 		}
-		fmt.Println(keys)
+
 		return nil, fmt.Errorf("invalid scheme %s, allowed schemes: [%s]", dsnURL.Scheme, strings.Join(keys, ","))
 	}
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/ClickHouse/clickhouse-go/v2"
+
 	"github.com/streamingfast/cli"
 	sink "github.com/streamingfast/substreams-sink"
 	"go.uber.org/zap"

@@ -16,7 +16,7 @@ import (
 const lastCursorFilename = "last_cursor"
 
 var generateCsvCmd = Command(generateCsvE,
-	"generate-csv <psql_dsn> <endpoint> <manifest> <module> <dest-folder> [start]:<stop>",
+	"generate-csv <endpoint> <dest-folder> <manifest> [start]:<stop>",
 	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
 	Description(`
 		This command command is the first of a multi-step process to bulk insert data into a Postgres database.
@@ -31,7 +31,7 @@ var generateCsvCmd = Command(generateCsvE,
 		- Inject the CSVs into the database with the 'inject-csv' command (contains 'cursors' table, double check you injected it correctly!)
 		- Start streaming with the 'run' command
 	`),
-	ExactArgs(6),
+	ExactArgs(4),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags, sink.FlagIgnore("final-blocks-only"))
 		AddCommonSinkerFlags(flags)
@@ -59,12 +59,10 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	sink.RegisterMetrics()
 	sinker.RegisterMetrics()
 
-	psqlDSN := args[0]
-	endpoint := args[1]
+	endpoint := args[0]
+	destFolder := args[1]
 	manifestPath := args[2]
-	moduleName := args[3]
-	destFolder := args[4]
-	blockRange := args[5]
+	blockRange := args[3]
 
 	bundleSize := sflags.MustGetUint64(cmd, "bundle-size")
 	bufferMaxSize := sflags.MustGetUint64(cmd, "buffer-max-size")
@@ -72,9 +70,8 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 
 	dbLoader, sink, err := newDBLoaderAndBaseSinker(
 		cmd,
-		psqlDSN,
 		time.Duration(bundleSize),
-		endpoint, manifestPath, moduleName, blockRange,
+		endpoint, manifestPath, blockRange,
 		zlog, tracer,
 		sink.WithFinalBlocksOnly(),
 	)

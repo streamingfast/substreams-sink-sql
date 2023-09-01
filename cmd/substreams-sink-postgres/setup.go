@@ -9,14 +9,14 @@ import (
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
+	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/db"
-	"go.uber.org/zap"
 )
 
 var sinkSetupCmd = Command(sinkSetupE,
-	"setup <psql_dsn> <schema_file>",
-	"Setup the database with the schema and create default cursor table if it does not exist",
-	ExactArgs(2),
+	"setup <manifest>",
+	"Setup the required infrastructure to deploy a Substreams SQL deployable unit",
+	ExactArgs(1),
 	Flags(func(flags *pflag.FlagSet) {
 		flags.Bool("ignore-duplicate-table-errors", false, "[Dev] Use this if you want to ignore duplicate table errors, take caution that this means the 'schemal.sql' file will not have run fully!")
 	}),
@@ -25,19 +25,35 @@ var sinkSetupCmd = Command(sinkSetupE,
 func sinkSetupE(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	psqlDSN := args[0]
-	schemaFile := args[1]
+	manifestPath := args[0]
 	ignoreDuplicateTableErrors := sflags.MustGetBool(cmd, "ignore-duplicate-table-errors")
 
-	dbLoader, err := db.NewLoader(psqlDSN, 0, db.OnModuleHashMismatchError, zlog, tracer)
+	zlog.Info("getting sink from manifest")
+	pkg, _, _, err := sink.ReadManifestAndModule(
+		manifestPath,
+		nil,
+		sink.InferOutputModuleFromPackage,
+		supportedOutputTypes,
+		false,
+		zlog)
+	if err != nil {
+		return fmt.Errorf("read manifest and module: %w", err)
+	}
+
+	sinkConfig, err := extractSinkConfig(pkg)
+	if err != nil {
+		return fmt.Errorf("extract sink config: %w", err)
+	}
+
+	dbLoader, err := db.NewLoader(sinkConfig.Dsn, 0, db.OnModuleHashMismatchError, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}
 
-	err = dbLoader.Setup(ctx, schemaFile)
+	err = dbLoader.SetupFromBytes(ctx, sinkConfig.Schema)
 	if err != nil {
 		if isDuplicateTableError(err) && ignoreDuplicateTableErrors {
-			zlog.Info("received duplicate table error, script dit not executed succesfully completed", zap.String("schema_file", schemaFile))
+			zlog.Info("received duplicate table error, script dit not executed succesfully completed")
 		} else {
 			return fmt.Errorf("setup: %w", err)
 		}

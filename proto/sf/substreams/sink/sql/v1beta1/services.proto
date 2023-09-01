@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package sf.substreams.sink.sql.v1beta1;
+
+option go_package = "github.com/streamingfast/substreams-sink-postgres/pb;pbsql";
+
+message GenericService {
+  bytes schema = 1;
+  string dsn = 2;
+}

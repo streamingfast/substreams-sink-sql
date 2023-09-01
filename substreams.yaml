@@ -1,0 +1,15 @@
+specVersion: v0.1.0
+package:
+  name: substreams_sink_sql
+  version: v0.0.1
+  url: https://github.com/streamingfast/substreams-sink-postgres
+  doc: |
+    Protobuf definitions for Substreams SQL Sink modules.
+
+    This package does not include any modules, it contains **only** Protobuf definitions.
+
+protobuf:
+  files:
+    - sf/substreams/sink/sql/v1beta1/services.proto
+  importPaths:
+    - ./proto
