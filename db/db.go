@@ -15,6 +15,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+const CURSORS_TABLE = "cursors"
+
 // Make the typing a bit easier
 type OrderedMap[K comparable, V any] struct {
 	*orderedmap.OrderedMap[K, V]
@@ -111,7 +113,7 @@ func (l *Loader) LoadTables() error {
 			continue
 		}
 
-		if tableName == "cursors" {
+		if tableName == CURSORS_TABLE {
 			if err := l.validateCursorTables(columns); err != nil {
 				return fmt.Errorf("invalid cursors table: %w", err)
 			}
@@ -141,9 +143,9 @@ func (l *Loader) LoadTables() error {
 	}
 
 	if !seenCursorTable {
-		return &CursorError{fmt.Errorf(`%s."cursors" table is not found`, EscapeIdentifier(l.schema))}
+		return &CursorError{fmt.Errorf(`%s.%s table is not found`, EscapeIdentifier(l.schema), CURSORS_TABLE)}
 	}
-	l.cursorTable = l.tables["cursors"]
+	l.cursorTable = l.tables[CURSORS_TABLE]
 
 	return nil
 }
@@ -175,7 +177,7 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType) (err error) {
 			return &CursorError{fmt.Errorf("missing column %q from cursors", k)}
 		}
 	}
-	key, err := schema.PrimaryKey(l.DB, l.schema, "cursors")
+	key, err := schema.PrimaryKey(l.DB, l.schema, CURSORS_TABLE)
 	if err != nil {
 		return &CursorError{fmt.Errorf("failed getting primary key: %w", err)}
 	}
@@ -272,5 +274,5 @@ func (l *Loader) GetCreateCursorsTableSQL() string {
 			block_num  bigint,
 			block_id   text
 		);
-	`), EscapeIdentifier(l.schema), EscapeIdentifier("cursors"))
+	`), EscapeIdentifier(l.schema), EscapeIdentifier(CURSORS_TABLE))
 }

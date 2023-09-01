@@ -7,25 +7,21 @@ import (
 	"path"
 	"time"
 
+	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/dhammer"
 	"github.com/streamingfast/dstore"
 	"github.com/streamingfast/shutter"
-
 	"github.com/streamingfast/substreams-sink-postgres/bundler/writer"
-
-	"github.com/streamingfast/bstream"
 	"go.uber.org/zap"
 )
 
 type Bundler struct {
 	*shutter.Shutter
 
-	blockCount uint64
-	// encoder        Encoder
+	blockCount     uint64
 	stats          *boundaryStats
 	boundaryWriter writer.Writer
 	outputStore    dstore.Store
-	fileType       writer.FileType
 	Header         []byte
 	HeaderWritten  bool
 
@@ -92,7 +88,7 @@ func (b *Bundler) Launch(ctx context.Context) {
 		}
 	}()
 
-	b.uploadQueue.OnTerminating(func(err error) {
+	b.uploadQueue.OnTerminating(func(_ error) {
 		b.Shutdown(fmt.Errorf("upload queue failed: %w", b.uploadQueue.Err()))
 	})
 }
@@ -105,9 +101,9 @@ func (b *Bundler) Close() {
 	b.zlogger.Debug("boundary upload completed")
 }
 
-func (b *Bundler) Roll(ctx context.Context, blockNum uint64) error {
+func (b *Bundler) Roll(ctx context.Context, blockNum uint64) (rolled bool, err error) {
 	if b.activeBoundary.Contains(blockNum) {
-		return nil
+		return false, nil
 	}
 
 	boundaries := boundariesToSkip(b.activeBoundary, blockNum, b.blockCount)
@@ -119,26 +115,28 @@ func (b *Bundler) Roll(ctx context.Context, blockNum uint64) error {
 	)
 
 	if err := b.stop(ctx); err != nil {
-		return fmt.Errorf("stop active boundary: %w", err)
+		return false, fmt.Errorf("stop active boundary: %w", err)
+	}
+
+	// Empty boundaries are before `blockNum`, we must flush them also before checking if we should quit
+	for _, boundary := range boundaries {
+		if err := b.Start(boundary.StartBlock()); err != nil {
+			return false, fmt.Errorf("start skipping boundary: %w", err)
+		}
+		if err := b.stop(ctx); err != nil {
+			return false, fmt.Errorf("stop skipping boundary: %w", err)
+		}
 	}
 
 	if blockNum >= b.stopBlock {
-		return ErrStopBlockReached
-	}
-
-	for _, boundary := range boundaries {
-		if err := b.Start(boundary.StartBlock()); err != nil {
-			return fmt.Errorf("start skipping boundary: %w", err)
-		}
-		if err := b.stop(ctx); err != nil {
-			return fmt.Errorf("stop skipping boundary: %w", err)
-		}
+		return false, ErrStopBlockReached
 	}
 
 	if err := b.Start(blockNum); err != nil {
-		return fmt.Errorf("start active boundary: %w", err)
+		return false, fmt.Errorf("start active boundary: %w", err)
 	}
-	return nil
+
+	return true, nil
 }
 
 func (b *Bundler) TrackBlockProcessDuration(elapsed time.Duration) {
@@ -171,20 +169,22 @@ func (b *Bundler) stop(ctx context.Context) error {
 		return fmt.Errorf("closing file: %w", err)
 	}
 
-	b.zlogger.Debug("queuing boundary upload",
-		zap.Stringer("boundary", b.activeBoundary),
-	)
-	if b.boundaryWriter.IsWritten(){
+	if b.boundaryWriter.IsWritten() {
+		b.zlogger.Debug("queuing boundary upload", zap.Stringer("boundary", b.activeBoundary))
+
 		b.uploadQueue.In <- &boundaryFile{
 			name: b.activeBoundary.String(),
 			file: file,
 		}
+	} else {
+		b.zlogger.Debug("boundary not written, skipping upload of files", zap.Stringer("boundary", b.activeBoundary))
 	}
+
+	// Reset state
 	b.HeaderWritten = false
-
 	b.activeBoundary = nil
-
 	b.stats.endBoundary()
+
 	b.zlogger.Info("bundler stats", b.stats.Log()...)
 	return nil
 }

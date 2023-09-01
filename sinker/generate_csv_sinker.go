@@ -1,6 +1,7 @@
 package sinker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/streamingfast/dstore"
@@ -29,8 +31,10 @@ type GenerateCSVSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
 
-	fileBundlers map[string]*bundler.Bundler
-	stopBlock    uint64
+	bundlersByTable    map[string]*bundler.Bundler
+	cursorsTableStore  dstore.Store
+	lastCursorFilename string
+	stopBlock          uint64
 
 	// cursor
 	stateStore state.Store
@@ -50,6 +54,7 @@ func NewGenerateCSVSinker(
 	bundleSize uint64,
 	bufferSize uint64,
 	loader *db.Loader,
+	lastCursorFilename string,
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*GenerateCSVSinker, error) {
@@ -74,12 +79,24 @@ func NewGenerateCSVSinker(
 		return nil, fmt.Errorf("new file state store: %w", err)
 	}
 
+	csvOutputStore, err := dstore.NewStore(destFolder, "csv", "", false)
+	if err != nil {
+		return nil, err
+	}
+
+	cursorsStore, err := csvOutputStore.SubStore(db.CURSORS_TABLE)
+	if err != nil {
+		return nil, fmt.Errorf("cursors sub store: %w", err)
+	}
+
 	s := &GenerateCSVSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
 
-		fileBundlers: make(map[string]*bundler.Bundler),
-		stopBlock:    *blockRange.EndBlock(),
+		bundlersByTable:    make(map[string]*bundler.Bundler),
+		cursorsTableStore:  cursorsStore,
+		lastCursorFilename: lastCursorFilename,
+		stopBlock:          *blockRange.EndBlock(),
 
 		loader: loader,
 		logger: logger,
@@ -91,19 +108,14 @@ func NewGenerateCSVSinker(
 		stats: NewStats(logger),
 	}
 
-	csvOutputStore, err := dstore.NewStore(destFolder, "csv", "", false)
-	if err != nil {
-		return nil, err
-	}
 	tables := s.loader.GetAvailableTablesInSchema()
-
 	for _, table := range tables {
 		columns := s.loader.GetColumnsForTable(table)
 		fb, err := getBundler(table, s.Sinker.BlockRange().StartBlock(), s.stopBlock, bundleSize, bufferSize, csvOutputStore, workingDir, logger, columns)
 		if err != nil {
 			return nil, err
 		}
-		s.fileBundlers[table] = fb
+		s.bundlersByTable[table] = fb
 	}
 
 	return s, nil
@@ -119,13 +131,13 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 	}
 
 	s.Sinker.OnTerminating(s.Shutdown)
-	s.OnTerminating(func(err error) {
-		s.Sinker.Shutdown(err)
+	s.OnTerminating(func(_ error) {
+		s.Sinker.Shutdown(nil)
 		s.stats.LogNow()
 		s.logger.Info("csv sinker terminating", zap.Stringer("last_block_written", s.stats.lastBlock))
 		s.stats.Close()
-		s.stateStore.Shutdown(err)
-		s.CloseAllFileBundlers(err)
+		s.stateStore.Shutdown(nil)
+		s.closeAllFileBundlers()
 	})
 
 	s.stats.OnTerminated(func(err error) { s.Shutdown(err) })
@@ -144,7 +156,7 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 		zap.String("schema", s.loader.GetSchema()),
 	)
 
-	for _, fb := range s.fileBundlers {
+	for _, fb := range s.bundlersByTable {
 		fb.Launch(ctx)
 	}
 	s.Sinker.Run(ctx, cursor, s)
@@ -183,6 +195,7 @@ func (s *GenerateCSVSinker) HandleBlockScopedData(ctx context.Context, data *pbs
 			s.Shutdown(fmt.Errorf("unable to get state: %w", err))
 			return fmt.Errorf("unable to get state: %w", err)
 		}
+
 		if err := state.Save(); err != nil {
 			s.Shutdown(fmt.Errorf("unable to save state: %w", err))
 			return fmt.Errorf("unable to save state: %w", err)
@@ -220,7 +233,7 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
 		}
 		table := change.Table
-		tableBundler, ok := s.fileBundlers[table]
+		tableBundler, ok := s.bundlersByTable[table]
 		if !ok {
 			return fmt.Errorf("cannot get bundler writer for table %s", table)
 		}
@@ -249,32 +262,48 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 }
 
 func (s *GenerateCSVSinker) rollAllBundlers(ctx context.Context, blockNum uint64, cursor *sink.Cursor) {
+	block := cursor.Block()
+	reachedEndBlock := &atomic.Bool{}
+
 	var wg sync.WaitGroup
-	for _, entityBundler := range s.fileBundlers {
+	for table, entityBundler := range s.bundlersByTable {
 		wg.Add(1)
 
-		eb := entityBundler
-		go func() {
-			if err := eb.Roll(ctx, blockNum); err != nil {
-				// no worries, Shutdown can and will be called multiple times
+		go func(table string, eb *bundler.Bundler) {
+			rolled, err := eb.Roll(ctx, blockNum)
+			if err != nil {
 				if errors.Is(err, bundler.ErrStopBlockReached) {
-					err = nil
+					// We will terminated after all bundles have completed because have "cursors" table to write
+					reachedEndBlock.Store(true)
+				} else {
+					// no worries, Shutdown can and will be called multiple times
+					s.Shutdown(err)
 				}
-				s.Shutdown(err)
 			}
+
+			if rolled {
+				s.logger.Debug("table data bundler rolled out some files", zap.String("table", table), zap.Stringer("block", block))
+			}
+
 			wg.Done()
-		}()
+		}(table, entityBundler)
 	}
+
 	wg.Wait()
+
+	if reachedEndBlock.Load() {
+		// Graceful completion
+		s.Shutdown(nil)
+	}
 }
 
-func (s *GenerateCSVSinker) CloseAllFileBundlers(err error) {
+func (s *GenerateCSVSinker) closeAllFileBundlers() {
 	var wg sync.WaitGroup
-	for _, fb := range s.fileBundlers {
+	for _, fb := range s.bundlersByTable {
 		wg.Add(1)
 		f := fb
 		go func() {
-			f.Shutdown(err)
+			f.Shutdown(nil)
 			<-f.Terminated()
 			wg.Done()
 		}()
@@ -307,4 +336,40 @@ func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint
 	}
 	fb.Start(startBlock)
 	return fb, nil
+}
+
+func (s *GenerateCSVSinker) HandleBlockRangeCompletion(ctx context.Context, cursor *sink.Cursor) error {
+	// We must wait for all file bundlers to complete before writing the cursors table to ensure everything is written
+	// correctly. To note that `closeAllFileBundlers` will also be called again in `onTerminating` but it's fine because
+	// it's idempotent.
+	s.closeAllFileBundlers()
+
+	s.logger.Info("stream completed, writing cursors table", zap.Stringer("block", cursor.Block()))
+	if err := s.writeCursorsTable(ctx, cursor); err != nil {
+		return fmt.Errorf("write cursors table: %w", err)
+	}
+
+	return nil
+}
+
+func (s *GenerateCSVSinker) writeCursorsTable(ctx context.Context, lastCursor *sink.Cursor) error {
+	buffer := bytes.NewBuffer(make([]byte, 0, 1024))
+
+	columns := s.loader.GetColumnsForTable(db.CURSORS_TABLE)
+	sort.Strings(columns)
+	buffer.WriteString(strings.Join(columns, ","))
+	buffer.WriteString("\n")
+
+	block := lastCursor.Block()
+
+	// Columns are sorted by name, so we **must** follow this order too! (e.g. block_id,block_num,cursor,id)
+	buffer.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", block.ID(), block.Num(), lastCursor, s.OutputModuleHash()))
+
+	// We always write the exact same file, so if a bigger range is re-processed, the `lastCursor` is always
+	// pointing to a single record that is the last block processed.
+	if err := s.cursorsTableStore.WriteObject(ctx, s.lastCursorFilename, buffer); err != nil {
+		return fmt.Errorf("write object: %w", err)
+	}
+
+	return nil
 }

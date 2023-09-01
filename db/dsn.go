@@ -86,3 +86,7 @@ func (c *DSN) ConnString() string {
 	}
 	return out
 }
+
+func (c *DSN) Schema() string {
+	return c.schema
+}

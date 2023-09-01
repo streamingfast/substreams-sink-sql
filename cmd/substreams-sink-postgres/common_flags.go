@@ -8,12 +8,14 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-postgres/db"
+	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"
 )
 
@@ -98,6 +100,13 @@ func AddCommonSinkerFlags(flags *pflag.FlagSet) {
 		- If 'ignore' is set, we pick the cursor at the highest block number and use it as the starting point. Subsequent
 		updates to the cursor will overwrite the module hash in the database.
 	`))
+}
+
+func readBlockRangeArgument(in string) (blockRange *bstream.Range, err error) {
+	return sink.ReadBlockRange(&pbsubstreams.Module{
+		Name:         "dummy",
+		InitialBlock: 0,
+	}, in)
 }
 
 type cliApplication struct {

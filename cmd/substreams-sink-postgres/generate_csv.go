@@ -12,6 +12,9 @@ import (
 	"github.com/streamingfast/substreams-sink-postgres/sinker"
 )
 
+// lastCursorFilename is the name of the file where the last cursor is stored, no extension as it's added by the store
+const lastCursorFilename = "last_cursor"
+
 var generateCsvCmd = Command(generateCsvE,
 	"generate-csv <psql_dsn> <endpoint> <manifest> <module> <dest-folder> [start]:<stop>",
 	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
@@ -25,8 +28,7 @@ var generateCsvCmd = Command(generateCsvE,
 		The process is as follows:
 
 		- Generate CSVs for each table with this command
-		- Inject the CSVs into the database with the 'inject-csv' command
-		- Run the 'inject-cursor' command to update the cursor in the database
+		- Inject the CSVs into the database with the 'inject-csv' command (contains 'cursors' table, double check you injected it correctly!)
 		- Start streaming with the 'run' command
 	`),
 	ExactArgs(6),
@@ -80,7 +82,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("instantiate db loader and sink: %w", err)
 	}
 
-	generateCSVSinker, err := sinker.NewGenerateCSVSinker(sink, destFolder, workingDir, bundleSize, bufferMaxSize, dbLoader, zlog, tracer)
+	generateCSVSinker, err := sinker.NewGenerateCSVSinker(sink, destFolder, workingDir, bundleSize, bufferMaxSize, dbLoader, lastCursorFilename, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("unable to setup generate csv sinker: %w", err)
 	}

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,45 +15,33 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/dstore"
-	sink "github.com/streamingfast/substreams-sink"
-
 	"github.com/streamingfast/substreams-sink-postgres/db"
 	"go.uber.org/zap"
 )
 
 var injectCSVCmd = Command(injectCSVE,
-	"inject-csv <schema> <input-path> <table> <psql-dsn> <start-block> <stop-block>",
-	"Injects generated CSV rows for <table> into the database pointed by <psql-dsn> argument.",
+	"inject-csv <psql_dsn> <input_path> <table> <start>:<stop>",
+	"Injects generated CSV rows for <table> into the database pointed by <psql_dsn> argument.",
 	Description(`
-			Can be run in parallel for multiple rows up to the same stop-block. 
+		Can be run in parallel for multiple rows up to the same <stop>, the <start> and <stop> block must be provided explicitely.
 
-			Watch out, the start-block must be aligned with the range size of the csv files or the module inital block
+		Watch out, the <start> must be aligned with the range size of the CSV files or the module initial block.
 	`),
-	ExactArgs(6),
-	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags)
-	}),
+	ExactArgs(4),
 )
 
 func injectCSVE(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	pgSchema := args[0]
-
+	psqlDSN := args[0]
 	inputPath := args[1]
 	tableName := args[2]
 
-	psqlDSN := args[3]
-	startBlock, err := strconv.ParseUint(args[4], 10, 64)
+	blockRange, err := readBlockRangeArgument(args[3])
 	if err != nil {
-		return fmt.Errorf("invalid start block %q: %w", args[5], err)
-	}
-	stopBlock, err := strconv.ParseUint(args[5], 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid stop block %q: %w", args[6], err)
+		return fmt.Errorf("invalid block range %q: %w", args[3], err)
 	}
 
 	postgresDSN, err := db.ParseDSN(psqlDSN)
@@ -59,7 +50,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 	}
 
 	zlog.Info("connecting to input store")
-	inputStore, err := dstore.NewStore(inputPath, "", "", false)
+	inputStore, err := dstore.NewStore(inputPath, "csv", "", false)
 	if err != nil {
 		return fmt.Errorf("unable to create input store: %w", err)
 	}
@@ -71,12 +62,13 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 
 	t0 := time.Now()
 
-	zlog.Debug("table filler", zap.String("pg_schema", pgSchema), zap.String("table_name", tableName), zap.Uint64("start_block", startBlock), zap.Uint64("stop_block", stopBlock))
-	filler := NewTableFiller(pool, pgSchema, tableName, startBlock, stopBlock, inputStore)
-	theTableName := tableName
+	zlog.Debug("table filler", zap.String("pg_schema", postgresDSN.Schema()), zap.String("table_name", tableName), zap.Stringer("range", blockRange))
+	filler := NewTableFiller(pool, postgresDSN.Schema(), tableName, blockRange.StartBlock(), *blockRange.EndBlock(), inputStore)
+
 	if err := filler.Run(ctx); err != nil {
-		return fmt.Errorf("table filler %q: %w", theTableName, err)
+		return fmt.Errorf("table filler %q: %w", tableName, err)
 	}
+
 	zlog.Info("table done", zap.Duration("total", time.Since(t0)))
 	return nil
 }
@@ -109,10 +101,18 @@ func extractFieldsFromFirstLine(ctx context.Context, filename string, store dsto
 	}
 	defer fl.Close()
 
-	r := csv.NewReader(fl)
+	return extractFieldsFromReader(fl)
+}
+
+func extractColumnsFromBytes(data []byte) ([]string, error) {
+	return extractFieldsFromReader(bytes.NewBuffer(data))
+}
+
+func extractFieldsFromReader(reader io.Reader) ([]string, error) {
+	r := csv.NewReader(reader)
 	out, err := r.Read()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read csv first line: %w", err)
 	}
 
 	return out, nil
@@ -120,6 +120,10 @@ func extractFieldsFromFirstLine(ctx context.Context, filename string, store dsto
 
 func (t *TableFiller) Run(ctx context.Context) error {
 	zlog.Info("table filler", zap.String("table", t.tblName))
+
+	if t.tblName == db.CURSORS_TABLE {
+		return t.injectCursorsTable(ctx)
+	}
 
 	loadFiles, err := findFilesToLoad(ctx, t.in, t.tblName, t.stopBlockNum, t.startBlockNum)
 	if err != nil {
@@ -129,6 +133,7 @@ func (t *TableFiller) Run(ctx context.Context) error {
 	if len(loadFiles) == 0 {
 		return fmt.Errorf("no file to process")
 	}
+
 	dbFields, err := extractFieldsFromFirstLine(ctx, loadFiles[0], t.in)
 	if err != nil {
 		return fmt.Errorf("extracting fields from first csv line: %w", err)
@@ -142,7 +147,7 @@ func (t *TableFiller) Run(ctx context.Context) error {
 	for _, filename := range loadFiles {
 		zlog.Info("opening file", zap.String("file", filename))
 
-		if err := t.injectFile(ctx, filename, dbFields); err != nil {
+		if err := t.injectCSVFromFile(ctx, filename, dbFields); err != nil {
 			return fmt.Errorf("failed to inject file %q: %w", filename, err)
 		}
 	}
@@ -150,18 +155,52 @@ func (t *TableFiller) Run(ctx context.Context) error {
 	return nil
 }
 
-func (t *TableFiller) injectFile(ctx context.Context, filename string, dbFields []string) error {
+func (t *TableFiller) injectCursorsTable(ctx context.Context) error {
+	path := db.CURSORS_TABLE + "/" + lastCursorFilename
+	reader, err := t.in.OpenObject(ctx, path)
+	if err != nil {
+		if errors.Is(err, dstore.ErrNotFound) {
+			return fmt.Errorf("trying to inject %q table but the last cursor filename %q was not found in %s", db.CURSORS_TABLE, path, t.in.BaseURL())
+		}
+
+		return fmt.Errorf("open object %q: %w", lastCursorFilename, err)
+	}
+	defer reader.Close()
+
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read object %q: %w", lastCursorFilename, err)
+	}
+
+	dbColumns, err := extractColumnsFromBytes(content)
+	if err != nil {
+		return fmt.Errorf("extracting fields from first csv line: %w", err)
+	}
+
+	zlog.Info("injecting cursors table")
+	if err := t.injectCSVFromReader(ctx, bytes.NewBuffer(content), "<generated>", dbColumns); err != nil {
+		return fmt.Errorf("failed to inject %q table content: %w", db.CURSORS_TABLE, err)
+	}
+
+	return nil
+}
+
+func (t *TableFiller) injectCSVFromFile(ctx context.Context, filename string, dbColumns []string) error {
 	fl, err := t.in.OpenObject(ctx, filename)
 	if err != nil {
 		return fmt.Errorf("opening csv: %w", err)
 	}
 	defer fl.Close()
 
+	return t.injectCSVFromReader(ctx, fl, filename, dbColumns)
+}
+
+func (t *TableFiller) injectCSVFromReader(ctx context.Context, fl io.Reader, source string, dbColumns []string) error {
 	query := fmt.Sprintf(`COPY %s.%s ("%s") FROM STDIN WITH (FORMAT CSV, HEADER)`,
 		db.EscapeIdentifier(t.pqSchema),
 		db.EscapeIdentifier(t.tblName),
-		strings.Join(dbFields, `","`))
-	zlog.Info("loading file into sql", zap.String("filename", filename), zap.String("table_name", t.tblName), zap.Strings("db_fields", dbFields))
+		strings.Join(dbColumns, `","`))
+	zlog.Info("loading file into sql from reader", zap.String("source", source), zap.String("table_name", t.tblName), zap.Strings("db_columns", dbColumns))
 
 	t0 := time.Now()
 
@@ -178,7 +217,7 @@ func (t *TableFiller) injectFile(ctx context.Context, filename string, dbFields 
 	count := tag.RowsAffected()
 	elapsed := time.Since(t0)
 	zlog.Info("loaded file into sql",
-		zap.String("filename", filename),
+		zap.String("source", source),
 		zap.String("table_name", t.tblName),
 		zap.Int64("rows_affected", count),
 		zap.Duration("elapsed", elapsed),
@@ -202,10 +241,7 @@ func findFilesToLoad(ctx context.Context, inputStore dstore.Store, tableName str
 			return nil
 		}
 
-		if strings.HasSuffix(filename, ".csv") {
-			out = append(out, filename)
-		}
-
+		out = append(out, filename)
 		return nil
 	})
 	return

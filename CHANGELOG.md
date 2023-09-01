@@ -5,14 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v2.4.1
+## v2.5.0
+
+### Highlights
+
+This releases brings improvements to reported progress message while your Substreams executes which should greatly enhanced progression tracking
+
+> [!NOTE]
+> Stay tuned, we are planning even more useful progression tracking now that we've updated progression data sent back to the client!
+
+This releases also introduces a new mode to dump data in the database at high speed, useful for large amount of data insertion.
 
 ### Substreams Progress Messages
 
-> [!IMPORTANT]
-> This client only support progress messages sent from a to a server with substreams version >=v1.1.12
+Bumped [substreams-sink](https://github.com/streamingfast/substreams-sink) [v0.3.1](https://github.com/streamingfast/substreams-sink/releases/tag/v0.3.1) and [substreams](https://github.com/streamingfast/substreams) to [v1.1.12](https://github.com/streamingfast/substreams/releases/tag/v1.1.12) to support the new progress message format. Progression now relates to **stages** instead of modules. You can get stage information using the `substreams info` command starting from version `v1.1.12`.
 
-* Bumped substreams-sink to `v0.3.1` and substreams to `v1.1.12` to support the new progress message format. Progression now relates to **stages** instead of modules. You can get stage information using the `substreams info` command starting at version `v1.1.12`.
+> [!IMPORTANT]
+> This client only support progress messages sent from a server using `substreams` version `>=v1.1.12`
 
 #### Changed Prometheus Metrics
 
@@ -21,17 +30,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Added Prometheus Metrics
 
-* added `substreams_sink_progress_message_last_contiguous_block` (per stage)
-* added `substreams_sink_progress_message_running_jobs`(per stage)
+* Added `substreams_sink_progress_message_last_contiguous_block` (per stage)
+* Added `substreams_sink_progress_message_running_jobs`(per stage)
+
+### New injection method
+
+A new injection method has been added to this `substreams-sink-postgres` release. It's a 2 steps method that leverage `COPY FROM` SQL operations to inject at high speed a great quantity of data.
+
+> [!NOTE]
+> This method will be useful if you insert a lot of data into the database. If the standard ingestion speed satisfy your needs, continue to use it, the new feature is an advanced use case.
+
+See the [High Throughput Injection section](https://github.com/streamingfast/substreams-sink-postgres/blob/develop/README.md#high-throughput-injection) of the `README.md` file to check how to use it.
 
 ### Added
 
-* Added newer method of populating the database via CSV
+* Added newer method of populating the database via CSV (thanks [@gusinacio](https://github.com/gusinacio)!).
 
   Newer commands:
-    - `generate_csv`: Generates CSVs for each table
-    - `insert_csv`: Injects generated CSV rows for <table>
-    - `inject_cursor`: Injects the cursor from a file into database
+    - `generate-csv`: Generates CSVs for each table
+    - `inject-csv`: Injects generated CSV rows for `<table>`
 
 ## v2.4.0
 
