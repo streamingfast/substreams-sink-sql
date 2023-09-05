@@ -95,7 +95,6 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 // Update a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string) error {
-
 	uniqueID := createRowUniqueID(primaryKey)
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing update operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID), zap.Int("field_count", len(data)))
@@ -104,6 +103,10 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 	table, found := l.tables[tableName]
 	if !found {
 		return fmt.Errorf("unknown table %q", tableName)
+	}
+
+	if len(table.primaryColumns) == 0 {
+		return fmt.Errorf("trying to perform an UPDATE operation but table %q don't have a primary key(s) set, this is not accepted", tableName)
 	}
 
 	entry, found := l.entries.Get(tableName)
@@ -151,6 +154,10 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
 	table, found := l.tables[tableName]
 	if !found {
 		return fmt.Errorf("unknown table %q", tableName)
+	}
+
+	if len(table.primaryColumns) == 0 {
+		return fmt.Errorf("trying to perform a DELETE operation but table %q don't have a primary key(s) set, this is not accepted", tableName)
 	}
 
 	entry, found := l.entries.Get(tableName)
