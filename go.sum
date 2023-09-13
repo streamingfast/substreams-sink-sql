@@ -1190,8 +1190,8 @@ github.com/streamingfast/logging v0.0.0-20210811175431-f3b44b61606a/go.mod h1:4G
 github.com/streamingfast/logging v0.0.0-20210908162127-bdc5856d5341/go.mod h1:4GdqELhZOXj4xwc4IaBmzofzdErGynnaSzuzxy0ZIBo=
 github.com/streamingfast/logging v0.0.0-20220222131651-12c3943aac2e/go.mod h1:4GdqELhZOXj4xwc4IaBmzofzdErGynnaSzuzxy0ZIBo=
 github.com/streamingfast/logging v0.0.0-20220304214715-bc750a74b424/go.mod h1:VlduQ80JcGJSargkRU4Sg9Xo63wZD/l8A5NC/Uo1/uU=
-github.com/streamingfast/logging v0.0.0-20221209193439-bff11742bf4c h1:dV1ye/S2PiW9uIWvLtMrxWoTLcZS+yhjZDSKEV102Ho=
-github.com/streamingfast/logging v0.0.0-20221209193439-bff11742bf4c/go.mod h1:VlduQ80JcGJSargkRU4Sg9Xo63wZD/l8A5NC/Uo1/uU=
+github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091 h1:RN5mrigyirb8anBEtdjtHFIufXdacyTi6i4KBfeNXeo=
+github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091/go.mod h1:VlduQ80JcGJSargkRU4Sg9Xo63wZD/l8A5NC/Uo1/uU=
 github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 h1:xlWSfi1BoPfsHtPb0VEHGUcAdBF208LUiFCwfaVPfLA=
 github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308/go.mod h1:K1p8Bj/wG34KJvYzPUqtzpndffmpkrVY11u2hkyxCWQ=
 github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28 h1:wmQg8T0rIFl/R3dy97OWRi8OSdM3llvRw2p3TPFVKZQ=
