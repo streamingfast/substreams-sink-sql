@@ -2,13 +2,14 @@ package main
 
 import (
 	"net/http"
+	_ "net/http/pprof"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 	. "github.com/streamingfast/cli"
+	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/dmetrics"
 	"go.uber.org/zap"
 )
@@ -38,21 +39,22 @@ func main() {
 	)
 }
 
-func preStart(_ *cobra.Command, _ []string) {
-	delay := viper.GetDuration("global-delay-before-start")
+func preStart(cmd *cobra.Command, _ []string) {
+	delay := sflags.MustGetDuration(cmd, "delay-before-start")
 	if delay > 0 {
 		zlog.Info("sleeping to respect delay before start setting", zap.Duration("delay", delay))
 		time.Sleep(delay)
 	}
 
-	if v := viper.GetString("global-metrics-listen-addr"); v != "" {
+	if v := sflags.MustGetString(cmd, "metrics-listen-addr"); v != "" {
 		zlog.Debug("starting prometheus metrics server", zap.String("listen_addr", v))
 		go dmetrics.Serve(v)
 	}
 
-	if v := viper.GetString("global-pprof-listen-addr"); v != "" {
+	if v := sflags.MustGetString(cmd, "pprof-listen-addr"); v != "" {
 		go func() {
 			zlog.Debug("starting pprof server", zap.String("listen_addr", v))
+
 			err := http.ListenAndServe(v, nil)
 			if err != nil {
 				zlog.Debug("unable to start profiling server", zap.Error(err), zap.String("listen_addr", v))
