@@ -120,16 +120,27 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 
 	if cursor.Block().Num()%s.batchBlockModulo(data, isLive) == 0 {
 		flushStart := time.Now()
-		if err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor); err != nil {
+		rowFlushedCount, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor)
+		if err != nil {
 			return fmt.Errorf("failed to flush at block %s: %w", cursor.Block(), err)
 		}
 
 		flushDuration := time.Since(flushStart)
+		if flushDuration > 5*time.Second {
+			level := zap.InfoLevel
+			if flushDuration > 30*time.Second {
+				level = zap.WarnLevel
+			}
+
+			s.logger.Check(level, "flush to database took a long time to complete, could cause long sync time along the road").Write(zap.Duration("took", flushDuration))
+		}
 
 		FlushCount.Inc()
-		FlushedEntriesCount.SetUint64(s.loader.EntriesCount())
+		FlushedRowsCount.AddInt(rowFlushedCount)
 		FlushDuration.AddInt64(flushDuration.Nanoseconds())
+
 		s.stats.RecordBlock(cursor.Block())
+		s.stats.RecordFlushDuration(flushDuration)
 	}
 
 	return nil

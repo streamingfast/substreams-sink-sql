@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Next
 
+### Added
+
+* Added average flush duration to sink stats.
+
+* Added log line when flush time to database is `> 5s` in `INFO` and in `WARN` if `> 30s`.
+
 ### Fixed
 
 * Fixed `pprof` HTTP routes not properly registered.
+
+### Changed
+
+* Renamed metric Prometheus metric `substreams_sink_postgres_flushed_entries_count` to `substreams_sink_postgres_flushed_rows_count`, adjust your dashboard if needed and change it found a `Gauge` to a `Counter`.
 
 ## v2.5.3
 

@@ -18,20 +18,20 @@ import (
 type postgresDialect struct{}
 
 func (d postgresDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
-	var entryCount int
+	var rowCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		tableName := entriesPair.Key
 		entries := entriesPair.Value
 
 		if l.tracer.Enabled() {
-			l.logger.Debug("flushing table entries", zap.String("table_name", tableName), zap.Int("entry_count", entries.Len()))
+			l.logger.Debug("flushing table rows", zap.String("table_name", tableName), zap.Int("row_count", entries.Len()))
 		}
 		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
 			entry := entryPair.Value
 
 			query, err := d.prepareStatement(entry)
 			if err != nil {
-				return 0, fmt.Errorf("failed to get query: %w", err)
+				return 0, fmt.Errorf("failed to prepare statement: %w", err)
 			}
 
 			if l.tracer.Enabled() {
@@ -42,10 +42,10 @@ func (d postgresDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outpu
 				return 0, fmt.Errorf("executing query %q: %w", query, err)
 			}
 		}
-		entryCount += entries.Len()
+		rowCount += entries.Len()
 	}
 
-	return entryCount, nil
+	return rowCount, nil
 }
 
 func (d postgresDialect) GetCreateCursorQuery(schema string) string {

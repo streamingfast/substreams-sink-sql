@@ -13,19 +13,21 @@ import (
 type Stats struct {
 	*shutter.Shutter
 
-	dbFlushRate    *dmetrics.AvgRatePromCounter
-	flusehdEntries *dmetrics.ValueFromMetric
-	lastBlock      bstream.BlockRef
-	logger         *zap.Logger
+	dbFlushRate        *dmetrics.AvgRatePromCounter
+	dbFlushAvgDuration *dmetrics.AvgDurationCounter
+	flusehdRows        *dmetrics.ValueFromMetric
+	lastBlock          bstream.BlockRef
+	logger             *zap.Logger
 }
 
 func NewStats(logger *zap.Logger) *Stats {
 	return &Stats{
 		Shutter: shutter.New(),
 
-		dbFlushRate:    dmetrics.MustNewAvgRateFromPromCounter(FlushCount, 1*time.Second, 30*time.Second, "flush"),
-		flusehdEntries: dmetrics.NewValueFromMetric(FlushedEntriesCount, "entries"),
-		logger:         logger,
+		dbFlushRate:        dmetrics.MustNewAvgRateFromPromCounter(FlushCount, 1*time.Second, 30*time.Second, "flush"),
+		dbFlushAvgDuration: dmetrics.NewAvgDurationCounter(30*time.Second, dmetrics.InferUnit, "per flush"),
+		flusehdRows:        dmetrics.NewValueFromMetric(FlushedRowsCount, "rows"),
+		logger:             logger,
 
 		lastBlock: unsetBlockRef{},
 	}
@@ -33,6 +35,10 @@ func NewStats(logger *zap.Logger) *Stats {
 
 func (s *Stats) RecordBlock(block bstream.BlockRef) {
 	s.lastBlock = block
+}
+
+func (s *Stats) RecordFlushDuration(duration time.Duration) {
+	s.dbFlushAvgDuration.AddDuration(duration)
 }
 
 func (s *Stats) Start(each time.Duration, cursor *sink.Cursor) {
@@ -64,7 +70,8 @@ func (s *Stats) LogNow() {
 	// them so the development logs looks nicer.
 	s.logger.Info("postgres sink stats",
 		zap.Stringer("db_flush_rate", s.dbFlushRate),
-		zap.Uint64("flushed_entries", s.flusehdEntries.ValueUint()),
+		zap.Stringer("db_flush_duration_rate", s.dbFlushAvgDuration),
+		zap.Uint64("flushed_rows", s.flusehdRows.ValueUint()),
 		zap.Stringer("last_block", s.lastBlock),
 	)
 }

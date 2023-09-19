@@ -93,10 +93,6 @@ func NewLoader(
 	return l, nil
 }
 
-func (l *Loader) EntriesCount() uint64 {
-	return l.entriesCount
-}
-
 func (l *Loader) FlushInterval() time.Duration {
 	return l.flushInterval
 }
