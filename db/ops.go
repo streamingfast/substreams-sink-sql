@@ -95,6 +95,10 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 // Update a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string) error {
+	if l.getDialect().OnlyInserts() {
+		return fmt.Errorf("update operation is not supported by the current database")
+	}
+
 	uniqueID := createRowUniqueID(primaryKey)
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing update operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID), zap.Int("field_count", len(data)))
@@ -146,6 +150,10 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 // Delete a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
+	if l.getDialect().OnlyInserts() {
+		return fmt.Errorf("delete operation is not supported by the current database")
+	}
+
 	uniqueID := createRowUniqueID(primaryKey)
 	if l.tracer.Enabled() {
 		l.logger.Debug("processing delete operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID))

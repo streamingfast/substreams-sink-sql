@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.5.3
+
+* Refactored internal code to support multiple database drivers.
+
+* **Experimental** `clickhouse` is now supported as a new `clickhouse` is now supported* Added driver abstraction
+
+  You can connect to Clickhouse by using the following DSN:
+
+  - Not encrypted: `clickhouse://<host>:9000/<database>?username=<user>&password=<password>`
+  - Encrypted: `clickhouse://<host>:9440/<database>?secure=true&skip_verify=true&username=<user>&password=<password>`
+
+  If you want to send custom args to the connection, you can use by sending as query params.
+
 ## v2.5.2
 
 ### Changed

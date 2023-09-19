@@ -13,7 +13,6 @@ import (
 func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sink.Cursor) (err error) {
 	ctx = clickhouse.Context(context.Background(), clickhouse.WithStdAsync(false))
 	startAt := time.Now()
-
 	tx, err := l.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to being db transaction: %w", err)
@@ -25,36 +24,10 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 			}
 		}
 	}()
-
-	var entryCount int
-	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
-		tableName := entriesPair.Key
-		entries := entriesPair.Value
-
-		if l.tracer.Enabled() {
-			l.logger.Debug("flushing table entries", zap.String("table_name", tableName), zap.Int("entry_count", entries.Len()))
-		}
-
-		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
-			entry := entryPair.Value
-
-			query, err := entry.query(l.getDialect())
-			if err != nil {
-				return fmt.Errorf("failed to get query: %w", err)
-			}
-
-			if l.tracer.Enabled() {
-				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
-			}
-
-			if _, err := tx.ExecContext(ctx, query); err != nil {
-				return fmt.Errorf("executing query %q: %w", query, err)
-			}
-		}
-
-		entryCount += entries.Len()
+	entryCount, err := l.getDialect().Flush(tx, ctx, l, outputModuleHash, cursor)
+	if err != nil {
+		return fmt.Errorf("dialect flush: %w", err)
 	}
-
 	entryCount += 1
 	if err := l.UpdateCursor(ctx, tx, outputModuleHash, cursor); err != nil {
 		return fmt.Errorf("update cursor: %w", err)
