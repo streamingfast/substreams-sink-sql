@@ -8,10 +8,11 @@ create table block_meta
     timestamp   text
 );
 
-create table cursors
+create table if not exists "public"."cursors"
 (
-    id         text not null constraint cursor_pk primary key,
-    cursor     text,
-    block_num  bigint,
-    block_id   text
+	id         text not null constraint cursor_pk primary key,
+	cursor     text,
+	block_num  bigint,
+	block_id   text
 );
+

@@ -1,6 +1,8 @@
 module github.com/streamingfast/substreams-sink-postgres
 
-go 1.20
+go 1.21
+
+toolchain go1.21.1
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.11.0
@@ -13,7 +15,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
-	github.com/streamingfast/substreams v1.1.12-0.20230829174456-08bca20358c7
+	github.com/streamingfast/substreams v1.1.15-0.20230921193616-a011e076e70d
 	github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
 	github.com/stretchr/testify v1.8.3

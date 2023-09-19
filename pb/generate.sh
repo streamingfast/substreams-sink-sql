@@ -23,11 +23,12 @@ function main() {
 
   set -e
 
-  cd "$ROOT/proto" &> /dev/null
+  cd "$ROOT" > /dev/null
 
   buf generate
 
   echo "generate.sh - `date` - `whoami`" > $ROOT/pb/last_generate.txt
+  cd - >/dev/null
 }
 
 function checks() {

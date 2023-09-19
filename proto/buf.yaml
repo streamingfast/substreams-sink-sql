@@ -1,10 +1,10 @@
 version: v1
 name: buf.build/streamingfast/substreams-sink-sql
-
+deps:
+  - buf.build/streamingfast/substreams
 lint:
   use:
     - DEFAULT
-
 breaking:
   use:
     - FILE

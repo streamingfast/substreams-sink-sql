@@ -101,6 +101,11 @@ By convention, we name the `map` module that emits [sf.substreams.sink.database.
 
 > Note that using prior versions (0.2.0, 0.1.*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
 
+
+### Protobuf models
+
+* protobuf bindings are generated using `buf generate` at the root of this repo. See https://buf.build/docs/installation to install buf.
+
 ### Advanced Topics
 
 #### High Throughput Injection
