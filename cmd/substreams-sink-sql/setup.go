@@ -10,7 +10,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-sql/db"
 )
 
 var sinkSetupCmd = Command(sinkSetupE,
@@ -64,13 +64,13 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 }
 
 func isDuplicateTableError(err error) bool {
-	var postgresqlError *pq.Error
-	if !errors.As(err, &postgresqlError) {
+	var sqlError *pq.Error
+	if !errors.As(err, &sqlError) {
 		return false
 	}
 
 	// List at https://www.postgresql.org/docs/14/errcodes-appendix.html#ERRCODES-TABLE
-	switch postgresqlError.Code {
+	switch sqlError.Code {
 	// Error code named `duplicate_table`
 	case "42P07":
 		return true

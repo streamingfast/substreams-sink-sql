@@ -17,7 +17,7 @@ main() {
 
   set -e
 
-  sink="../substreams-sink-postgres"
+  sink="../substreams-sink-sql"
 
   if [[ "$clean" == "true" ]]; then
     echo "Cleaning up existing tables"

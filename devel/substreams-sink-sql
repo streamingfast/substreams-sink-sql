@@ -19,17 +19,17 @@ main() {
   fi
 
   pushd "$ROOT" &> /dev/null
-    go install -ldflags "-X main.Version=$version" ./cmd/substreams-sink-postgres
+    go install -ldflags "-X main.Version=$version" ./cmd/substreams-sink-sql
   popd &> /dev/null
 
   if [[ $KILL_AFTER != "" ]]; then
-    ${GOPATH:-$HOME/go}/bin/substreams-sink-postgres "$@" &
+    ${GOPATH:-$HOME/go}/bin/substreams-sink-sql "$@" &
     active_pid=$!
 
     sleep $KILL_AFTER
     kill -s TERM $active_pid &> /dev/null || true
   else
-    exec ${GOPATH:-$HOME/go}/bin/substreams-sink-postgres "$@"
+    exec ${GOPATH:-$HOME/go}/bin/substreams-sink-sql "$@"
   fi
 }
 

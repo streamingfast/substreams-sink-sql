@@ -9,7 +9,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-postgres/sinker"
+	"github.com/streamingfast/substreams-sink-sql/sinker"
 )
 
 var sinkRunCmd = Command(sinkRunE,

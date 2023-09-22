@@ -18,7 +18,7 @@ main() {
   set -e
 
   pg_dsn="${PG_DSN:-"psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"}"
-  sink="../substreams-sink-postgres"
+  sink="../substreams-sink-sql"
   # TODO: Extract PGPASSWORD from `pg_dsn` variable
 
   if [[ "$clean" == "true" ]]; then

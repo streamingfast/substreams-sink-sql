@@ -18,10 +18,10 @@ import (
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
-	"github.com/streamingfast/substreams-sink-postgres/bundler"
-	"github.com/streamingfast/substreams-sink-postgres/bundler/writer"
-	"github.com/streamingfast/substreams-sink-postgres/db"
-	"github.com/streamingfast/substreams-sink-postgres/state"
+	"github.com/streamingfast/substreams-sink-sql/bundler"
+	"github.com/streamingfast/substreams-sink-sql/bundler/writer"
+	"github.com/streamingfast/substreams-sink-sql/db"
+	"github.com/streamingfast/substreams-sink-sql/state"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -149,7 +149,7 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 
 	s.stats.Start(logEach, cursor)
 
-	s.logger.Info("starting postgres generate CSV sink",
+	s.logger.Info("starting sql generate CSV sink",
 		zap.Duration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
 		zap.String("database", s.loader.GetDatabase()),

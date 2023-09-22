@@ -9,22 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Highlights
 
-This is a major releases changing how deployment is made now requiring a deployable unit, this breaks slightly how you are going to operator with this new version major. In addition, this version is loaded we some interesting new features:
-
-- Side injection using CSV files directly
-- Support for Clickhouse database (using the standard SQL interface)
+* This project has been renamed from `substreams-sink-postgresql` to `substreams-sink-sql` since it now supports clickhouse. The binary and go modules have been renamed in consequence.
+* This is a major releases that changes how the sink is operated. SQL schema, output module and DSN must now be written in the "SinkConfig" section of the Substreams manifest (or, consequently, 
+  bundled inside the spkg). This Substreams manifest with extra SinkConfig defines a "Deployable Unit".
 
 #### Operators
 
-Deploying now requires usage of a "deployable" Substreams package. While before you would pass the `psql_dsn` and the `module_name` as argument to the `substreams-sink-postgres run` binary command, now you need to define that in a dedicated file that is going to contains the full config needed to run the deployment.
+Passing the `psql_dsn`, the `schema` and the `module_name` to the `run` and `setup` commands is no longer possible via arguments: they need to be written to the substreams.yaml file.
 
 Before:
 
 ```bash
-substreams-sink-postgres run "psql://..." mainnet.eth.streamingfast.io:443 https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg db_out [<range>]
+substreams-sink-sql setup "psql://..." "path/to/schema.sql"
+substreams-sink-sql run "psql://..." mainnet.eth.streamingfast.io:443 https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg db_out [<range>]
 ```
 
-Now you will need to create a deployable unit file, let's call it `substreams.prod.yaml` with content:
+Now:
+
+* Create a deployable unit file, let's call it `substreams.prod.yaml` with content:
 
 ```yaml
 specVersion: v0.1.0
@@ -41,7 +43,7 @@ sink:
   module: <id>:db_out
   type: sf.substreams.sink.sql.v1beta1.GenericService
   config:
-    schema: "@@<path/to/schema.sql>"
+    schema: "<path/to/schema.sql>"
     dsn: "psql://..."
 ```
 
@@ -49,13 +51,18 @@ In this `<name>` is the same name as what `<manifest>` defines was, the `<id>` i
 
 The `<path/to/schema.sql>` would point to your schema file (path resolved relative to parent directory of `substreams.prod.yaml`). Also, the `dsn` value can use environment variables, which are resolved at deployment time when reading your config.
 
-You would then run this with:
-
+* setup your database:
 ```bash
-substreams-sink-postgres run <endpoint> substreams.prod.yaml
+substreams-sink-sql setup <endpoint> substreams.prod.yaml
 ```
 
-Now everything is fetched through the deployable unit and not from command line argument anymore. Similar changes have been applied to `generate-csv` and `setup`, which now collects various information from there.
+* run the sink:
+
+```bash
+substreams-sink-sql run <endpoint> substreams.prod.yaml
+```
+
+Similar changes have been applied to `generate-csv`.
 
 ## v2.5.4
 

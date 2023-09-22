@@ -9,7 +9,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-postgres/sinker"
+	"github.com/streamingfast/substreams-sink-sql/sinker"
 )
 
 // lastCursorFilename is the name of the file where the last cursor is stored, no extension as it's added by the store
@@ -19,7 +19,7 @@ var generateCsvCmd = Command(generateCsvE,
 	"generate-csv <endpoint> <dest-folder> <manifest> [start]:<stop>",
 	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
 	Description(`
-		This command command is the first of a multi-step process to bulk insert data into a Postgres database.
+		This command command is the first of a multi-step process to bulk insert data into an SQL database.
 		It creates a folder for each table and generates CSVs for block ranges. This files can be used with
 		the 'inject-csv' command to bulk insert data into the database.
 

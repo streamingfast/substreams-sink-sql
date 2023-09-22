@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var zlog, tracer = logging.RootLogger("sink-postgres", "github.com/streamingfast/substreams-sink-mongodb/cmd/substreams-sink-mongodb")
+var zlog, tracer = logging.RootLogger("sink-sql", "github.com/streamingfast/substreams-sink-mongodb/cmd/substreams-sink-sql")
 
 func init() {
 	cli.SetLogger(zlog, tracer)

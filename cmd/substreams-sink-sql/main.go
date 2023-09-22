@@ -18,14 +18,14 @@ import (
 var version = "dev"
 
 func main() {
-	Run("substreams-sink-postgres", "Substreams Postgres Sink",
+	Run("substreams-sink-sql", "Substreams SQL Sink",
 		sinkRunCmd,
 		sinkSetupCmd,
 		sinkToolsCmd,
 		generateCsvCmd,
 		injectCSVCmd,
 
-		ConfigureViper("SINK_POSTGRES"),
+		ConfigureViper("SINK_SQL"),
 		ConfigureVersion(version),
 
 		PersistentFlags(func(flags *pflag.FlagSet) {

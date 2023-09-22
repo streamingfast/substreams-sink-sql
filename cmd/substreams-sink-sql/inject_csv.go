@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/dstore"
-	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-sql/db"
 	"go.uber.org/zap"
 )
 
@@ -44,9 +44,9 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid block range %q: %w", args[3], err)
 	}
 
-	postgresDSN, err := db.ParseDSN(psqlDSN)
+	sqlDSN, err := db.ParseDSN(psqlDSN)
 	if err != nil {
-		return fmt.Errorf("invalid postgres DSN %q: %w", psqlDSN, err)
+		return fmt.Errorf("invalid sql DSN %q: %w", psqlDSN, err)
 	}
 
 	zlog.Info("connecting to input store")
@@ -55,15 +55,15 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to create input store: %w", err)
 	}
 
-	pool, err := pgxpool.Connect(ctx, postgresDSN.ConnString())
+	pool, err := pgxpool.Connect(ctx, sqlDSN.ConnString())
 	if err != nil {
-		return fmt.Errorf("connecting to postgres: %w", err)
+		return fmt.Errorf("connecting to database: %w", err)
 	}
 
 	t0 := time.Now()
 
-	zlog.Debug("table filler", zap.String("pg_schema", postgresDSN.Schema()), zap.String("table_name", tableName), zap.Stringer("range", blockRange))
-	filler := NewTableFiller(pool, postgresDSN.Schema(), tableName, blockRange.StartBlock(), *blockRange.EndBlock(), inputStore)
+	zlog.Debug("table filler", zap.String("pg_schema", sqlDSN.Schema()), zap.String("table_name", tableName), zap.Stringer("range", blockRange))
+	filler := NewTableFiller(pool, sqlDSN.Schema(), tableName, blockRange.StartBlock(), *blockRange.EndBlock(), inputStore)
 
 	if err := filler.Run(ctx); err != nil {
 		return fmt.Errorf("table filler %q: %w", tableName, err)

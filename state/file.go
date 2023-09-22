@@ -13,7 +13,7 @@ import (
 	"github.com/streamingfast/dstore"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-postgres/bundler/writer"
+	"github.com/streamingfast/substreams-sink-sql/bundler/writer"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )

@@ -8,8 +8,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
 
 RUN rm /etc/localtime && ln -snf /usr/share/zoneinfo/America/Montreal /etc/localtime && dpkg-reconfigure -f noninteractive tzdata
 
-ADD /substreams-sink-postgres /app/substreams-sink-postgres
+ADD /substreams-sink-sql /app/substreams-sink-sql
 
 ENV PATH "$PATH:/app"
 
-ENTRYPOINT ["/app/substreams-sink-postgres"]
+ENTRYPOINT ["/app/substreams-sink-sql"]

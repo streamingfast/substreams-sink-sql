@@ -5,7 +5,7 @@ import (
 	"github.com/streamingfast/logging"
 )
 
-var zlog, tracer = logging.PackageLogger("sink-postgres", "github.com/streamingfast/substreams-sink-postgres/db")
+var zlog, tracer = logging.PackageLogger("sink-sql", "github.com/streamingfast/substreams-sink-sql/db")
 
 func init() {
 	logging.InstantiateLoggers()

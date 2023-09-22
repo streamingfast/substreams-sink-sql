@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-sql/db"
 )
 
 var sinkToolsCmd = Group(
@@ -19,7 +19,7 @@ var sinkToolsCmd = Group(
 	"Tools for developers and operators",
 
 	PersistentFlags(func(flags *pflag.FlagSet) {
-		flags.String("dsn", "", "The Postgres DSN string used to connect to your database (same as when you use 'run' command)")
+		flags.String("dsn", "", "The DSN string used to connect to your database")
 	}),
 
 	Group("cursor", "Tools related to cursor handling (read/write)",
@@ -39,7 +39,7 @@ var sinkToolsCmd = Group(
 			"write <module_hash> <cursor>",
 			"[Operator] Write a new active cursor for a given module's hash in the database",
 			Description(`
-				**Warning** This can screw up 'substreams-sink-postgres' state, use only if you know. what you are doing.
+				**Warning** This can screw up 'substreams-sink-sql' state, use only if you know. what you are doing.
 
 				This command is going to write a new cursor in the database for the given module's
 				hash. The command update the current cursor if it exists or insert a new one if
@@ -51,7 +51,7 @@ var sinkToolsCmd = Group(
 			"delete <module_hash>",
 			"[Operator] Delete the active cursor for a given module's hash in the database",
 			Description(`
-				**Warning** This can screw up 'substreams-sink-postgres' state, use only if you know. what you are doing.
+				**Warning** This can screw up 'substreams-sink-sql' state, use only if you know. what you are doing.
 
 				This command is going to delete the cursor in the database for the given module's
 				hash. If the cursor does not exist, the command assume it is correctly deleted.

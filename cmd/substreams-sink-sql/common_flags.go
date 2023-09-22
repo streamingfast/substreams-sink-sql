@@ -16,8 +16,8 @@ import (
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-postgres/db"
-	pbsql "github.com/streamingfast/substreams-sink-postgres/pb/sf/substreams/sink/sql/v1beta1"
+	"github.com/streamingfast/substreams-sink-sql/db"
+	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1beta1"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"
 )

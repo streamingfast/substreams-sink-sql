@@ -1,12 +1,12 @@
-# Substreams Sink PostgreSQL
+# Substreams Sink SQL
 
 This is a command line tool to quickly sync a Substreams with a PostgreSQL database.
 
 ### Quickstart
 
-1. Install `substreams-sink-postgres` by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-postgres/releases). Extract `substreams-sink-postgres` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable.
+1. Install `substreams-sink-sql` by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-sql/releases). Extract `substreams-sink-sql` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable.
 
-    > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-postgres/cmd/substreams-sink-postgres@latest`.
+    > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-sql/cmd/substreams-sink-sql@latest`.
 
 1. Start Docker Compose:
 
@@ -19,7 +19,7 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
 1. Run the setup command:
 
     ```bash
-    substreams-sink-postgres setup "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" docs/tutorial/schema.sql
+    substreams-sink-sql setup "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" docs/tutorial/schema.sql
     ```
 
     This will connect to the given database pointed by `psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable`, create the tables and indexes specified in the given `<schema_file>`, and will create the required tables to run the sink (e.g. the `cursors` table).
@@ -41,7 +41,7 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
     > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
 
     ```shell
-    substreams-sink-postgres run \
+    substreams-sink-sql run \
         "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" \
         "mainnet.eth.streamingfast.io:443" \
         "./docs/tutorial/substreams.yaml" \
@@ -51,7 +51,7 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
 
 ### DSN
 
-DSN stands for Data Source Name (or Database Source Name) and `substreams-sink-postgres` expects a URL input that defines how to connect to the right driver. An example input for Postgres is `psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable` which lists hostname, user, password, port and database (with some options) in a single string input.
+DSN stands for Data Source Name (or Database Source Name) and `substreams-sink-sql` expects a URL input that defines how to connect to the right driver. An example input for Postgres is `psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable` which lists hostname, user, password, port and database (with some options) in a single string input.
 
 The URL's scheme is used to determine the driver to use, `psql`, `clickhouse`, etc. In the example case above, the picked driver will be Postgres. The generic format of a DSN is of the form:
 
@@ -86,15 +86,15 @@ Moreover, the `schema` option key can be used to select a particular schema with
 Only `psql` and `clickhouse` are supported today, adding support for a new _dialect_ is quite easy:
 
 - Copy [db/dialect_clickhouse.go](./db/dialect_clickhouse.go) to a new file `db/dialect_<name>.go` implementing the right functionality.
-- Update [`db.driverDialect` map](https://github.com/streamingfast/substreams-sink-postgres/blob/develop/db/dialect.go#L27-L31) to add you dialect (key is the Golang type of your dialect implementation).
-- Update [`dsn.driverMap` map](https://github.com/streamingfast/substreams-sink-postgres/blob/develop/db/dsn.go#L27-L31) to add DSN -> `dialect name` mapping, edit the file to accommodate for your specific driver (might not be required)
+- Update [`db.driverDialect` map](https://github.com/streamingfast/substreams-sink-sql/blob/develop/db/dialect.go#L27-L31) to add you dialect (key is the Golang type of your dialect implementation).
+- Update [`dsn.driverMap` map](https://github.com/streamingfast/substreams-sink-sql/blob/develop/db/dsn.go#L27-L31) to add DSN -> `dialect name` mapping, edit the file to accommodate for your specific driver (might not be required)
 - Update Docker Compose to have this dependency auto-started for development purposes
 - Update README and CHANGELOG to add information about the new dialect
 - Open a PR
 
 ### Output Module
 
-To be accepted by `substreams-sink-postgres`, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
+To be accepted by `substreams-sink-sql`, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
 - [substreams-eth-block-meta](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) (some helpers found in [db_out.rs](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6))
 
 By convention, we name the `map` module that emits [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) output `db_out`.
@@ -113,12 +113,12 @@ By convention, we name the `map` module that emits [sf.substreams.sink.database.
 > [!IMPORTANT]
 > This method will be useful if you insert a lot of data into the database. If the standard ingestion speed satisfy your needs, continue to use it, the steps below are an advanced use case.
 
-The `substreams-sink-postgres` contains a fast injection mechanism for cases where big data needs to be dump into the database. In those cases, it may be preferable to dump every files to CSV and then use `COPYFROM` to transfer data super quick to Postgres.
+The `substreams-sink-sql` contains a fast injection mechanism for cases where big data needs to be dump into the database. In those cases, it may be preferable to dump every files to CSV and then use `COPYFROM` to transfer data super quick to Postgres.
 
-The idea is to first dump the Substreams data to `CSV` files using `substreams-sink-postgres generate-csv` command:
+The idea is to first dump the Substreams data to `CSV` files using `substreams-sink-sql generate-csv` command:
 
 ```bash
-substreams-sink-postgres generate-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" mainnet.eth.streamingfast.io:443 <spkg> db_out ./data/tables :14490000
+substreams-sink-sql generate-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" mainnet.eth.streamingfast.io:443 <spkg> db_out ./data/tables :14490000
 ```
 
 > [!NOTE]
@@ -126,11 +126,11 @@ substreams-sink-postgres generate-csv "psql://dev-node:insecure-change-me-in-pro
 
 This will generate block segmented CSV files for each table in your schema inside the folder `./data/tables`. Next step is to actually inject those CSV files into your database. You can use `psql` and inject directly with it.
 
-We offer `substreams-sink-postgres inject-csv` command as a convenience. It's a per table invocation but feel free to run each table concurrently, your are bound by your database as this point, so it's up to you to decide you much concurrency you want to use. Here a small `Bash` command to loop through all tables and inject them all
+We offer `substreams-sink-sql inject-csv` command as a convenience. It's a per table invocation but feel free to run each table concurrently, your are bound by your database as this point, so it's up to you to decide you much concurrency you want to use. Here a small `Bash` command to loop through all tables and inject them all
 
 ```bash
 for i in `ls ./data/tables | grep -v state.yaml`; do \
-  substreams-sink-postgres inject-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" ./data/tables "$i" :14490000; \
+  substreams-sink-sql inject-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" ./data/tables "$i" :14490000; \
   if [[ $? != 0 ]]; then break; fi; \
 done
 ```
@@ -140,19 +140,19 @@ Those files are then inserted in the database efficiently by doing a `COPY FROM`
 The command above will also pick up the `cursors` table injection as it's a standard table to write. The table is a bit special as it contains a single file which is contains the `cursor` that will handoff between CSV injection and going back to "live" blocks. It's extremely important that you validate that this table has been properly populated. You can do this simply by doing:
 
 ```bash
-substreams-sink-postgres tools --dsn="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" cursor read
+substreams-sink-sql tools --dsn="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" cursor read
 Module eaf2fc2ea827d6aca3d5fee4ec9af202f3d1b725: Block #14490000 (61bd396f3776f26efc3f73c44e2b8be3b90cc5171facb1f9bdeef9cb5c4fd42a) [cqR8Jx...hxNg==]
 ```
 
 This should emit a single line, the `Module <hash>` should fit the for `db_out` (check `substreams info <spkg>` to see your module's hashes) and the block number should fit your last block you written.
 
 > [!WARNING]
-> Failure to properly populate will 'cursors' table will make the injection starts from scratch when you will do `substreams-sink-postgres run` to bridge with "live" blocks as no cursor will exist so we will start from scratch.
+> Failure to properly populate will 'cursors' table will make the injection starts from scratch when you will do `substreams-sink-sql run` to bridge with "live" blocks as no cursor will exist so we will start from scratch.
 
 Once data has been injected and you validated the `cursors` table, you can then simply start streaming normally using:
 
 ```bash
-substreams-sink-postgres run "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" mainnet.eth.streamingfast.io:443 <spkg> db_out
+substreams-sink-sql run "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" mainnet.eth.streamingfast.io:443 <spkg> db_out
 ```
 
 This will start back at the latest block written and will start to handoff streaming to a "live" blocks.

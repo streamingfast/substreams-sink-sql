@@ -1,8 +1,6 @@
-module github.com/streamingfast/substreams-sink-postgres
+module github.com/streamingfast/substreams-sink-sql
 
 go 1.21
-
-toolchain go1.21.1
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.11.0

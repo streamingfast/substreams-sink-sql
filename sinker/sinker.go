@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
-	"github.com/streamingfast/substreams-sink-postgres/db"
+	"github.com/streamingfast/substreams-sink-sql/db"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +22,7 @@ const (
 	LIVE_BLOCK_FLUSH_EACH       = 1
 )
 
-type PostgresSinker struct {
+type SQLSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
 
@@ -33,8 +33,8 @@ type PostgresSinker struct {
 	stats *Stats
 }
 
-func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer logging.Tracer) (*PostgresSinker, error) {
-	return &PostgresSinker{
+func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer logging.Tracer) (*SQLSinker, error) {
+	return &SQLSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
 
@@ -46,7 +46,7 @@ func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer loggin
 	}, nil
 }
 
-func (s *PostgresSinker) Run(ctx context.Context) {
+func (s *SQLSinker) Run(ctx context.Context) {
 	cursor, mistmatchDetected, err := s.loader.GetCursor(ctx, s.OutputModuleHash())
 	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
@@ -71,7 +71,7 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 	s.Sinker.OnTerminating(s.Shutdown)
 	s.OnTerminating(func(err error) {
 		s.stats.LogNow()
-		s.logger.Info("postgres sinker terminating", zap.Stringer("last_block_written", s.stats.lastBlock))
+		s.logger.Info("sql sinker terminating", zap.Stringer("last_block_written", s.stats.lastBlock))
 		s.Sinker.Shutdown(err)
 	})
 
@@ -85,7 +85,7 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 
 	s.stats.Start(logEach, cursor)
 
-	s.logger.Info("starting postgres sink",
+	s.logger.Info("starting sql sink",
 		zap.Duration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
 		zap.String("database", s.loader.GetDatabase()),
@@ -94,7 +94,7 @@ func (s *PostgresSinker) Run(ctx context.Context) {
 	s.Sinker.Run(ctx, cursor, s)
 }
 
-func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
+func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
 	if output.Name != s.OutputModuleName() {
@@ -146,7 +146,7 @@ func (s *PostgresSinker) HandleBlockScopedData(ctx context.Context, data *pbsubs
 	return nil
 }
 
-func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) error {
+func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
@@ -199,13 +199,13 @@ func (s *PostgresSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChan
 	return nil
 }
 
-func (s *PostgresSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
+func (s *SQLSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
 	return fmt.Errorf("received undo signal but there is no handling of undo, this is because you used `--undo-buffer-size=0` which is invalid right now")
 }
 
-func (s *PostgresSinker) batchBlockModulo(blockData *pbsubstreamsrpc.BlockScopedData, isLive *bool) uint64 {
+func (s *SQLSinker) batchBlockModulo(blockData *pbsubstreamsrpc.BlockScopedData, isLive *bool) uint64 {
 	if isLive == nil {
-		panic(fmt.Errorf("liveness checker has been disabled on the Sinker instance, this is invalid in the context of 'substreams-sink-postgres'"))
+		panic(fmt.Errorf("liveness checker has been disabled on the Sinker instance, this is invalid in the context of 'substreams-sink-sql'"))
 	}
 
 	if *isLive {
