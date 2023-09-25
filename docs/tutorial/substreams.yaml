@@ -9,8 +9,10 @@ protobuf:
   importPaths:
     - ./proto
 
-# imports:
-#   database_change: https://github.com/streamingfast/substreams-database-change/releases/download/v0.1.0/substreams-database-change-v0.1.0.spkg
+imports:
+  #  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.0/substreams-sink-sql-protodefs-v1.0.0.spkg
+  sql: ../../substreams-sink-sql-protodefs-v1.0.0.spkg
+  blockmeta: https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg
 
 binaries:
   default:
@@ -32,3 +34,10 @@ modules:
         mode: deltas
     output:
       type: proto:sf.substreams.sink.database.v1.DatabaseChanges
+
+sink:
+  module: blockmeta:db_out
+  type: sf.substreams.sink.sql.v1beta1.GenericService
+  config:
+    schema: "./schema.sql"
+    dsn: "psql://dev-node:$PGPASSWORD@localhost:5432/dev-node?sslmode=disable"

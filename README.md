@@ -11,24 +11,13 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
 1. Start Docker Compose:
 
     ```bash
+    # from the root of this repository
     docker compose up
     ```
 
-    > **Note** Feel free to skip this step if you already have a running Postgres instance accessible, don't forget to update the connection string in the command below.
+    > **Note** Feel free to skip this step if you already have a running Postgres instance accessible
 
-1. Run the setup command:
-
-    ```bash
-    substreams-sink-sql setup "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" docs/tutorial/schema.sql
-    ```
-
-    This will connect to the given database pointed by `psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable`, create the tables and indexes specified in the given `<schema_file>`, and will create the required tables to run the sink (e.g. the `cursors` table).
-
-    > **Note** For the sake of idempotency, we recommend that the schema file only contain `create table if not exists` statements.
-
-1. Run the sink
-
-    Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project first:
+1. Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project:
 
     ```bash
     cd docs/tutorial
@@ -36,18 +25,45 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
     cd ../..
     ```
 
-    Once the compilation has completed, let launch the `sink` process.
+    This creates the following WASM file: `target/wasm32-unknown-unknown/release/substreams_postgresql_sink_tutorial.wasm` 
+
+
+1. Observe the "Sink Config" section of the [substreams manifest in the tutorial](docs/tutorial/substreams.yaml), changing the DSN if needed.
+
+   ```yaml
+   sink:
+     module: blockmeta:db_out
+     type: sf.substreams.sink.sql.v1beta1.GenericService
+     config:
+       schema: "../eth-block-meta/schema.sql"
+       dsn: "psql://dev-node:$PGPASSWORD@localhost:5432/dev-node?sslmode=disable"
+   ```
+
+   > **Note** You can environment variables here, like PGPASSWORD, they are expanded when used.
+
+1. Run the setup command:
+
+    ```bash
+    # that password comes from the default config in `docker-compose.yml`
+    export PGPASSWORD=insecure-change-me-in-prod
+    substreams-sink-sql setup docs/tutorial/substreams.yaml
+    ```
+
+    This will connect to the database and create the schema, using the values from `sink.config.schema` and `sink.config.dsn`
+
+    > **Note** For the sake of idempotency, we recommend that the schema file only contain `create table if not exists` statements.
+
+1. Run the sink
+
+    Now that the code is compiled and the databse is set up, let launch the `sink` process.
 
     > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
 
     ```shell
     substreams-sink-sql run \
-        "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" \
-        "mainnet.eth.streamingfast.io:443" \
-        "./docs/tutorial/substreams.yaml" \
-        db_out
+        mainnet.eth.streamingfast.io:443 \
+        docs/tutorial/substreams.yaml
     ```
-
 
 ### DSN
 

@@ -35,7 +35,6 @@ package:
   version: v0.0.1
 
 imports:
-  # FIXME: Change to real publish URL of the Substreams package
   sql: ../../substreams-sink-sql-v0.0.1.spkg
   <id>: https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg
 
@@ -43,7 +42,7 @@ sink:
   module: <id>:db_out
   type: sf.substreams.sink.sql.v1beta1.GenericService
   config:
-    schema: "<path/to/schema.sql>"
+    schema: "path/to/schema.sql"
     dsn: "psql://..."
 ```
 
@@ -53,7 +52,7 @@ The `<path/to/schema.sql>` would point to your schema file (path resolved relati
 
 * setup your database:
 ```bash
-substreams-sink-sql setup <endpoint> substreams.prod.yaml
+substreams-sink-sql setup substreams.prod.yaml
 ```
 
 * run the sink:
