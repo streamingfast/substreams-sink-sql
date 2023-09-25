@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package sf.substreams.sink.sql.v1beta1;
+
 option go_package = "github.com/streamingfast/substreams-sink-sql/pb;pbsql";
 
 import "sf/substreams/options.proto";
