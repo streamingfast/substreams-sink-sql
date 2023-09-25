@@ -5,17 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v3.0.0
 
 ### Highlights
 
-* This project has been renamed from `substreams-sink-postgresql` to `substreams-sink-sql` since it now supports clickhouse. The binary and go modules have been renamed in consequence.
-* This is a major releases that changes how the sink is operated. SQL schema, output module and DSN must now be written in the "SinkConfig" section of the Substreams manifest (or, consequently, 
-  bundled inside the spkg). This Substreams manifest with extra SinkConfig defines a "Deployable Unit".
+This release brings a major refactoring enabling support for multiple database drivers and not just Postgres anymore. Our first newly supported driver is [Clickhouse](https://clickhouse.com/#getting_started) which defines itself as _The fastest and most resource efficient open-source database for real-time apps and analytics_. In the future, further database driver could be supported like MySQL, MSSQL and any other that can talk the SQL protocol.
+
+Now that we support multiple driver, keeping the `substreams-sink-postgres` didn't make sense anymore. As such, we have renamed the project from `substreams-sink-postgresql` to `substreams-sink-sql` since it now supports Clickhouse out of the box. The binary and Go modules have been renamed in consequence.
+
+Another major change brought by this release is the usage of Substreams "Deployable Unit". What we call a "Deployable Unit" is a Substreams manifest that fully defines a deployment packaged as a single artifact. This change how the sink is operated; the SQL schema, output module and DSN are now passed in the "SinkConfig" section of the Substreams manifest instead of being accepted at command line.
+
+Read the **Operators** section below to learn how to migrate to this new version.
 
 #### Operators
 
-Passing the `psql_dsn`, the `schema` and the `module_name` to the `run` and `setup` commands is no longer possible via arguments: they need to be written to the substreams.yaml file.
+Passing the `psql_dsn`, the `schema` and the `module_name` to the `run` and `setup` commands is no longer accepted via arguments, they need to be written to the `substreams.yaml` file.
 
 Before:
 
@@ -35,33 +39,34 @@ package:
   version: v0.0.1
 
 imports:
-  sql: ../../substreams-sink-sql-v0.0.1.spkg
-  <id>: https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.0/substreams-sink-sql-protodefs-v1.0.0.spkg
+  main: https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg
 
 sink:
-  module: <id>:db_out
+  module: main:db_out
   type: sf.substreams.sink.sql.v1beta1.GenericService
   config:
-    schema: "path/to/schema.sql"
+    schema: "./path/to/schema.sql"
     dsn: "psql://..."
 ```
 
-In this `<name>` is the same name as what `<manifest>` defines was, the `<id>` is a short id for your manifest, could be `block_meta` for example, `https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg` is your current manifest you deploy.
+In this `<name>` is the same name as what `<manifest>` defines was, `https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg` is the current manifest you deploy.
 
-The `<path/to/schema.sql>` would point to your schema file (path resolved relative to parent directory of `substreams.prod.yaml`). Also, the `dsn` value can use environment variables, which are resolved at deployment time when reading your config.
+The `./path/to/schema.sql` would point to your schema file (path resolved relative to parent directory of `substreams.prod.yaml`). Also, the `dsn` value can use environment variables, which are resolved at deployment time when reading your config.
 
-* setup your database:
+* Setup your database:
+
 ```bash
 substreams-sink-sql setup substreams.prod.yaml
 ```
 
-* run the sink:
+* Run the sink:
 
 ```bash
 substreams-sink-sql run <endpoint> substreams.prod.yaml
 ```
 
-Similar changes have been applied to `generate-csv`.
+Similar changes have been applied to other commands as well.
 
 ## v2.5.4
 
