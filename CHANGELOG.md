@@ -19,7 +19,7 @@ Read the **Operators** section below to learn how to migrate to this new version
 
 #### Operators
 
-Passing the `psql_dsn`, the `schema` and the `module_name` to the `run` and `setup` commands is no longer accepted via arguments, they need to be written to the `substreams.yaml` file.
+Passing the `schema` and the `module_name` to the `run` and `setup` commands is no longer accepted via arguments, they need to be written to the `substreams.yaml` file.
 
 Before:
 
