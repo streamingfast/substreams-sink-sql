@@ -10,17 +10,19 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/sinker"
+	"github.com/streamingfast/substreams/manifest"
 )
 
 var sinkRunCmd = Command(sinkRunE,
-	"run <endpoint> <manifest> [<start>:<stop>]",
-	"Runs Postgres sink process",
+	"run <dsn> <manifest> [<start>:<stop>]",
+	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags)
 		AddCommonSinkerFlags(flags)
 
 		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
+		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
 	}),
 	OnCommandErrorLogAndExit(zlog),
 )
@@ -31,21 +33,46 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	sink.RegisterMetrics()
 	sinker.RegisterMetrics()
 
-	endpoint := args[0]
+	dsn := args[0]
 	manifestPath := args[1]
 	blockRange := ""
 	if len(args) > 2 {
 		blockRange = args[2]
 	}
 
-	dbLoader, sink, err := newDBLoaderAndBaseSinker(
+	reader, err := manifest.NewReader(manifestPath)
+	if err != nil {
+		return fmt.Errorf("setup manifest reader: %w", err)
+	}
+	pkg, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+
+	endpoint, err := manifest.ExtractNetworkEndpoint(pkg.Network, sflags.MustGetString(cmd, "endpoint"), zlog)
+	if err != nil {
+		return err
+	}
+
+	// "github.com/streamingfast/substreams/manifest"
+	sink, err := sink.NewFromViper(
 		cmd,
-		sflags.MustGetDuration(cmd, "flush-interval"),
-		endpoint, manifestPath, blockRange,
-		zlog, tracer,
+		supportedOutputTypes,
+		endpoint,
+		manifestPath,
+		sink.InferOutputModuleFromPackage,
+		blockRange,
+		zlog,
+		tracer,
+		sink.WithFinalBlocksOnly(),
 	)
 	if err != nil {
-		return fmt.Errorf("instantiate db loader and sink: %w", err)
+		return fmt.Errorf("new base sinker: %w", err)
+	}
+
+	dbLoader, err := newDBLoader(cmd, dsn, sflags.MustGetDuration(cmd, "flush-interval"))
+	if err != nil {
+		return fmt.Errorf("new db loader: %w", err)
 	}
 
 	postgresSinker, err := sinker.New(sink, dbLoader, zlog, tracer)

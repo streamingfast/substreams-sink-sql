@@ -259,11 +259,9 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 			}
 			tableBundler.Writer().Write(data)
 		case pbdatabase.TableChange_UPDATE:
-			fallthrough
+			return fmt.Errorf("This substreams cannot be written to CSV because it performs 'UPDATE' operations on the %q store. Generate-CSV only supports inserts (CREATE)", change.Table)
 		case pbdatabase.TableChange_DELETE:
-			fallthrough
-		default:
-			return fmt.Errorf("currently, we only support append only databases (performing only inserts)")
+			return fmt.Errorf("This substreams cannot be written to CSV because it performs 'DELETE' operations on the %q store. Generate-CSV only supports inserts (CREATE)", change.Table)
 		}
 	}
 

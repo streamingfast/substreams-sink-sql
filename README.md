@@ -8,15 +8,6 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
 
     > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-sql/cmd/substreams-sink-sql@latest`.
 
-1. Start Docker Compose:
-
-    ```bash
-    # from the root of this repository
-    docker compose up
-    ```
-
-    > **Note** Feel free to skip this step if you already have a running Postgres instance accessible
-
 1. Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project:
 
     ```bash
@@ -33,19 +24,28 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
    ```yaml
    sink:
      module: blockmeta:db_out
-     type: sf.substreams.sink.sql.v1beta1.GenericService
+     type: sf.substreams.sink.sql.v1.Service
      config:
        schema: "../eth-block-meta/schema.sql"
-       dsn: "psql://dev-node:$PGPASSWORD@localhost:5432/dev-node?sslmode=disable"
    ```
 
-   > **Note** You can environment variables here, like PGPASSWORD, they are expanded when used.
+1. Start Docker Compose in the background:
+
+    > **Note** Feel free to skip this step if you already have a running Postgres instance accessible
+
+    ```bash
+    # from the root of this repository
+    rm -rf ./devel/data/postgres # clean up previous data
+    docker-compose up -d
+    ```
+
+    > **Note** You now have a postgres instance accessible at `postgres://dev-node:insecure-change-me-in-prod@postgres:5432/dev-node?sslmode=disable`
 
 1. Run the setup command:
 
     ```bash
     # that password comes from the default config in `docker-compose.yml`
-    export PGPASSWORD=insecure-change-me-in-prod
+    export DSN="postgres://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
     substreams-sink-sql setup docs/tutorial/substreams.yaml
     ```
 
@@ -58,11 +58,19 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
     Now that the code is compiled and the databse is set up, let launch the `sink` process.
 
     > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
+    > **Note** This will connect to the `mainnet.eth.streamingfast.io:443` endpoint, because it is the default endpoint for the `mainnet` network, defined in `docs/tutorial/substreams.yaml`. You can change this either by using the endpoint flag `-e another.endpoint:443` or by setting the environment variable `SUBSTREAMS_ENDPOINTS_CONFIG_MAINNET` to that endpoint. The last part of the environment variable is the name of the network in the manifest, in uppercase.
 
     ```shell
     substreams-sink-sql run \
-        mainnet.eth.streamingfast.io:443 \
+        $DSN \
         docs/tutorial/substreams.yaml
+    ```
+
+1. Tear down your Docker Compose cluster
+
+    ```bash
+    # from the root of this repository
+    docker-compose down
     ```
 
 ### DSN
@@ -134,7 +142,7 @@ The `substreams-sink-sql` contains a fast injection mechanism for cases where bi
 The idea is to first dump the Substreams data to `CSV` files using `substreams-sink-sql generate-csv` command:
 
 ```bash
-substreams-sink-sql generate-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" mainnet.eth.streamingfast.io:443 <spkg> db_out ./data/tables :14490000
+substreams-sink-sql generate-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" --output-dir ./data/tables :14490000
 ```
 
 > [!NOTE]
@@ -168,7 +176,7 @@ This should emit a single line, the `Module <hash>` should fit the for `db_out` 
 Once data has been injected and you validated the `cursors` table, you can then simply start streaming normally using:
 
 ```bash
-substreams-sink-sql run "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" mainnet.eth.streamingfast.io:443 <spkg> db_out
+substreams-sink-sql run "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" <spkg>
 ```
 
 This will start back at the latest block written and will start to handoff streaming to a "live" blocks.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -13,11 +12,10 @@ import (
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	"github.com/streamingfast/logging"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/db"
-	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1beta1"
+	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"
 )
@@ -29,40 +27,28 @@ var (
 var supportedOutputTypes = "sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges"
 
 var (
-	supportedDeployableUnits          []string
-	supportedDeployableGenericService = "sf.substreams.sink.sql.v1beta1.GenericService"
+	supportedDeployableUnits   []string
+	supportedDeployableService = "sf.substreams.sink.sql.v1.Service"
 )
 
 func init() {
 	supportedDeployableUnits = []string{
-		supportedDeployableGenericService,
+		supportedDeployableService,
 	}
 }
 
-func extractSinkConfig(pkg *pbsubstreams.Package) (*pbsql.GenericService, error) {
+func extractSinkConfig(pkg *pbsubstreams.Package) (*pbsql.Service, error) {
 	if pkg.SinkConfig == nil {
 		return nil, fmt.Errorf("no sink config found in spkg")
 	}
 
 	switch pkg.SinkConfig.TypeUrl {
-	case supportedDeployableGenericService:
-		genericService := &pbsql.GenericService{}
-		if err := pkg.SinkConfig.UnmarshalTo(genericService); err != nil {
+	case supportedDeployableService:
+		service := &pbsql.Service{}
+		if err := pkg.SinkConfig.UnmarshalTo(service); err != nil {
 			return nil, fmt.Errorf("failed to proto unmarshal: %w", err)
 		}
-
-		// FIXME: Ultimately, the actual service will probably change how the rest
-		// of the contsruction will be done. We should probably return simply a `Runnable`
-		// object, further refactoring will be needed to make this happen. For now,
-		// we are lazy and return the read config.
-		if genericService.Dsn == "" {
-			return nil, fmt.Errorf("'dsn' needs to be defined in the config")
-		}
-
-		// Resolve variables, for now only `dsn`
-		genericService.Dsn = os.ExpandEnv(genericService.Dsn)
-
-		return genericService, nil
+		return service, nil
 	}
 
 	return nil, fmt.Errorf("invalid config type %q, supported configs are %q", pkg.SinkConfig.TypeUrl, strings.Join(supportedDeployableUnits, ", "))
@@ -96,40 +82,6 @@ func newDBLoader(
 	}
 
 	return dbLoader, nil
-}
-
-func newDBLoaderAndBaseSinker(
-	cmd *cobra.Command,
-	flushInterval time.Duration,
-	endpoint, manifestPath, blockRange string,
-	zlog *zap.Logger,
-	tracer logging.Tracer,
-	opts ...sink.Option,
-) (*db.Loader, *sink.Sinker, error) {
-	// FIXME: Make NewFromViper have a way to validate/extract custom config directly.
-	sink, err := sink.NewFromViper(
-		cmd,
-		supportedOutputTypes,
-		endpoint, manifestPath, sink.InferOutputModuleFromPackage, blockRange,
-		zlog,
-		tracer,
-		opts...,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("new base sinker: %w", err)
-	}
-
-	sinkConfig, err := extractSinkConfig(sink.Package())
-	if err != nil {
-		return nil, nil, fmt.Errorf("extract sink config: %w", err)
-	}
-
-	dbLoader, err := newDBLoader(cmd, sinkConfig.Dsn, flushInterval)
-	if err != nil {
-		return nil, nil, fmt.Errorf("new db loader: %w", err)
-	}
-
-	return dbLoader, sink, nil
 }
 
 // AddCommonSinkerFlags adds the flags common to all command that needs to create a sinker,

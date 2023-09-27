@@ -13,7 +13,7 @@ This release brings a major refactoring enabling support for multiple database d
 
 Now that we support multiple driver, keeping the `substreams-sink-postgres` didn't make sense anymore. As such, we have renamed the project from `substreams-sink-postgresql` to `substreams-sink-sql` since it now supports Clickhouse out of the box. The binary and Go modules have been renamed in consequence.
 
-Another major change brought by this release is the usage of Substreams "Deployable Unit". What we call a "Deployable Unit" is a Substreams manifest that fully defines a deployment packaged as a single artifact. This change how the sink is operated; the SQL schema, output module and DSN are now passed in the "SinkConfig" section of the Substreams manifest instead of being accepted at command line.
+Another major change brought by this release is the usage of Substreams "Deployable Unit". What we call a "Deployable Unit" is a Substreams manifest that fully defines a deployment packaged as a single artifact. This change how the sink is operated; the SQL schema, output module and "Network" identifer are now passed in the "SinkConfig" section of the Substreams manifest instead of being accepted at command line.
 
 Read the **Operators** section below to learn how to migrate to this new version.
 
@@ -39,31 +39,32 @@ package:
   version: v0.0.1
 
 imports:
-  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.0/substreams-sink-sql-protodefs-v1.0.0.spkg
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.1/substreams-sink-sql-protodefs-v1.0.1.spkg
   main: https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg
+
+network: mainnet
 
 sink:
   module: main:db_out
-  type: sf.substreams.sink.sql.v1beta1.GenericService
+  type: sf.substreams.sink.sql.v1.Service
   config:
     schema: "./path/to/schema.sql"
-    dsn: "psql://..."
 ```
 
 In this `<name>` is the same name as what `<manifest>` defines was, `https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg` is the current manifest you deploy.
 
-The `./path/to/schema.sql` would point to your schema file (path resolved relative to parent directory of `substreams.prod.yaml`). Also, the `dsn` value can use environment variables, which are resolved at deployment time when reading your config.
+The `./path/to/schema.sql` would point to your schema file (path resolved relative to parent directory of `substreams.prod.yaml`).
 
 * Setup your database:
 
 ```bash
-substreams-sink-sql setup substreams.prod.yaml
+substreams-sink-sql setup <dsn> substreams.prod.yaml
 ```
 
 * Run the sink:
 
 ```bash
-substreams-sink-sql run <endpoint> substreams.prod.yaml
+substreams-sink-sql run <dsn> substreams.prod.yaml
 ```
 
 Similar changes have been applied to other commands as well.

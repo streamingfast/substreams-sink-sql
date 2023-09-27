@@ -10,13 +10,14 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/sinker"
+	"github.com/streamingfast/substreams/manifest"
 )
 
 // lastCursorFilename is the name of the file where the last cursor is stored, no extension as it's added by the store
 const lastCursorFilename = "last_cursor"
 
 var generateCsvCmd = Command(generateCsvE,
-	"generate-csv <endpoint> <dest-folder> <manifest> [start]:<stop>",
+	"generate-csv <dsn> <manifest> [start]:<stop>",
 	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
 	Description(`
 		This command command is the first of a multi-step process to bulk insert data into an SQL database.
@@ -31,13 +32,15 @@ var generateCsvCmd = Command(generateCsvE,
 		- Inject the CSVs into the database with the 'inject-csv' command (contains 'cursors' table, double check you injected it correctly!)
 		- Start streaming with the 'run' command
 	`),
-	ExactArgs(4),
+	ExactArgs(3),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags, sink.FlagIgnore("final-blocks-only"))
 		AddCommonSinkerFlags(flags)
 
 		flags.Uint64("bundle-size", 10000, "Size of output bundle, in blocks")
 		flags.String("working-dir", "./workdir", "Path to local folder used as working directory")
+		flags.String("output-dir", "./csv-output", "Path to local folder used as destination for CSV")
+		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
 		flags.Uint64("buffer-max-size", 4*1024*1024, FlagDescription(`
 			Amount of memory bytes to allocate to the buffered writer. If your data set is small enough that every is hold in memory, we are going to avoid
 			the local I/O operation(s) and upload accumulated content in memory directly to final storage location.
@@ -59,27 +62,60 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	sink.RegisterMetrics()
 	sinker.RegisterMetrics()
 
-	endpoint := args[0]
-	destFolder := args[1]
-	manifestPath := args[2]
-	blockRange := args[3]
+	dsn := args[0]
+	manifestPath := args[1]
+	blockRange := args[2]
 
+	outputDir := sflags.MustGetString(cmd, "output-dir")
 	bundleSize := sflags.MustGetUint64(cmd, "bundle-size")
 	bufferMaxSize := sflags.MustGetUint64(cmd, "buffer-max-size")
 	workingDir := sflags.MustGetString(cmd, "working-dir")
 
-	dbLoader, sink, err := newDBLoaderAndBaseSinker(
+	reader, err := manifest.NewReader(manifestPath)
+	if err != nil {
+		return fmt.Errorf("setup manifest reader: %w", err)
+	}
+	pkg, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+
+	endpoint, err := manifest.ExtractNetworkEndpoint(pkg.Network, sflags.MustGetString(cmd, "endpoint"), zlog)
+	if err != nil {
+		return err
+	}
+
+	sink, err := sink.NewFromViper(
 		cmd,
-		time.Duration(bundleSize),
-		endpoint, manifestPath, blockRange,
-		zlog, tracer,
+		supportedOutputTypes,
+		endpoint,
+		manifestPath,
+		sink.InferOutputModuleFromPackage,
+		blockRange,
+		zlog,
+		tracer,
 		sink.WithFinalBlocksOnly(),
 	)
 	if err != nil {
-		return fmt.Errorf("instantiate db loader and sink: %w", err)
+		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	generateCSVSinker, err := sinker.NewGenerateCSVSinker(sink, destFolder, workingDir, bundleSize, bufferMaxSize, dbLoader, lastCursorFilename, zlog, tracer)
+	dbLoader, err := newDBLoader(cmd, dsn, 0) // flush interval not used in CSV mode
+	if err != nil {
+		return fmt.Errorf("new db loader: %w", err)
+	}
+
+	generateCSVSinker, err := sinker.NewGenerateCSVSinker(
+		sink,
+		outputDir,
+		workingDir,
+		bundleSize,
+		bufferMaxSize,
+		dbLoader,
+		lastCursorFilename,
+		zlog,
+		tracer,
+	)
 	if err != nil {
 		return fmt.Errorf("unable to setup generate csv sinker: %w", err)
 	}

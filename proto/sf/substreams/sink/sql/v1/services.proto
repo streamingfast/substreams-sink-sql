@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package sf.substreams.sink.sql.v1;
+
+option go_package = "github.com/streamingfast/substreams-sink-sql/pb;pbsql";
+
+import "sf/substreams/options.proto";
+
+message Service {
+  // Containing both create table statements and index creation statements.
+  string schema = 1 [ (sf.substreams.options).load_from_file = true ];
+  optional DBTConfig dbt_config = 2;
+  bool wire_protocol_access = 3;
+  HasuraConfig hasura_frontend = 4;
+  PostgraphileConfig postgraphile_frontend = 5;
+}
+
+message DBTConfig {
+   bytes files = 1  [ (sf.substreams.options).zip_from_folder = true ];
+}
+
+message HasuraConfig {}
+message PostgraphileConfig {}

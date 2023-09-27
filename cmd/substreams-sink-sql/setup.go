@@ -9,14 +9,14 @@ import (
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/db"
+	"github.com/streamingfast/substreams/manifest"
 )
 
 var sinkSetupCmd = Command(sinkSetupE,
-	"setup <manifest>",
+	"setup <dsn> <manifest>",
 	"Setup the required infrastructure to deploy a Substreams SQL deployable unit",
-	ExactArgs(1),
+	ExactArgs(2),
 	Flags(func(flags *pflag.FlagSet) {
 		flags.Bool("ignore-duplicate-table-errors", false, "[Dev] Use this if you want to ignore duplicate table errors, take caution that this means the 'schemal.sql' file will not have run fully!")
 	}),
@@ -25,19 +25,17 @@ var sinkSetupCmd = Command(sinkSetupE,
 func sinkSetupE(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	manifestPath := args[0]
+	dsn := args[0]
+	manifestPath := args[1]
 	ignoreDuplicateTableErrors := sflags.MustGetBool(cmd, "ignore-duplicate-table-errors")
 
-	zlog.Info("getting sink from manifest")
-	pkg, _, _, err := sink.ReadManifestAndModule(
-		manifestPath,
-		nil,
-		sink.InferOutputModuleFromPackage,
-		supportedOutputTypes,
-		false,
-		zlog)
+	reader, err := manifest.NewReader(manifestPath)
 	if err != nil {
-		return fmt.Errorf("read manifest and module: %w", err)
+		return fmt.Errorf("setup manifest reader: %w", err)
+	}
+	pkg, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
 	}
 
 	sinkConfig, err := extractSinkConfig(pkg)
@@ -45,12 +43,12 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("extract sink config: %w", err)
 	}
 
-	dbLoader, err := db.NewLoader(sinkConfig.Dsn, 0, db.OnModuleHashMismatchError, zlog, tracer)
+	dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}
 
-	err = dbLoader.SetupFromBytes(ctx, sinkConfig.Schema)
+	err = dbLoader.SetupFromBytes(ctx, []byte(sinkConfig.Schema))
 	if err != nil {
 		if isDuplicateTableError(err) && ignoreDuplicateTableErrors {
 			zlog.Info("received duplicate table error, script dit not executed succesfully completed")

@@ -2,15 +2,14 @@
 specVersion: v0.1.0
 package:
   name: "substreams_eth_block_meta"
-  version: v0.0.1
+  version: v0.0.2
 
 imports:
-  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.0/substreams-sink-sql-protodefs-v1.0.0.spkg
+  sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.1/substreams-sink-sql-protodefs-v1.0.1.spkg
   main: https://github.com/streamingfast/substreams-eth-block-meta/releases/download/v0.5.1/substreams-eth-block-meta-v0.5.1.spkg
 
 sink:
   module: main:db_out
-  type: sf.substreams.sink.sql.v1beta1.GenericService
+  type: sf.substreams.sink.sql.v1.Service
   config:
     schema: "./schema.sql"
-    dsn: "psql://dev-node:$PGPASSWORD@localhost:5432/dev-node?sslmode=disable"
