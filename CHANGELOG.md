@@ -55,6 +55,8 @@ In this `<name>` is the same name as what `<manifest>` defines was, `https://git
 
 The `./path/to/schema.sql` would point to your schema file (path resolved relative to parent directory of `substreams.prod.yaml`).
 
+The 'network: mainnet' will be used to resolve to an endpoint. You can configure each network to have its own endpoint via environment variables `SUBSTREAMS_ENDPOINTS_CONFIG_<NETWORK>` or override this mechanism completely by using the `--endpoint` flag. Most used networks have default endpoints.
+
 * Setup your database:
 
 ```bash
