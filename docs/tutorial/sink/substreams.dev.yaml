@@ -1,4 +1,3 @@
-
 specVersion: v0.1.0
 package:
   name: "substreams_sink_sql_tutorial"
@@ -6,11 +5,13 @@ package:
 
 imports:
   sql: https://github.com/streamingfast/substreams-sink-sql/releases/download/protodefs-v1.0.1/substreams-sink-sql-protodefs-v1.0.1.spkg
-  main: ../../docs/tutorial/substreams.yaml
+  main: ../substreams.yaml
+
+network: 'mainnet'
 
 sink:
   module: main:db_out
   type: sf.substreams.sink.sql.v1.Service
   config:
-    schema: "../../docs/tutorial/schema.sql"
+    schema: "../schema.sql"
     wire_protocol_access: true

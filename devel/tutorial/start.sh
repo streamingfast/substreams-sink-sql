@@ -18,20 +18,25 @@ main() {
   set -e
 
   sink="../substreams-sink-sql"
+  pg_password=${PGPASSWORD:-"insecure-change-me-in-prod"}
+  pg_dsn="psql://dev-node:${pg_password}@127.0.0.1:5432/substreams_example?sslmode=disable"
 
   if [[ "$clean" == "true" ]]; then
     echo "Cleaning up existing tables"
-    PGPASSWORD=${PGPASSWORD:?"The PGPASSWORD must be set"} psql -h localhost -U dev-node -d dev-node -c '\i clean.sql'
+    PGPASSWORD=${pg_password} psql -h localhost -U dev-node -d dev-node -c 'drop database substreams_example;'
   fi
 
   if [[ "$clean" == "true" || "$bootstrap" == "true" ]]; then
     echo "Creating tables"
-    $sink setup ./substreams.dev.yaml
+    set -e
+    PGPASSWORD=${pg_password} psql -h localhost -U dev-node -d dev-node -c 'create database substreams_example;'
+    set +e
+    $sink setup "$pg_dsn" ../../docs/tutorial/sink/substreams.dev.yaml
   fi
 
   $sink run \
-    "${SUBSTREAMS_ENDPOINT:-"mainnet.eth.streamingfast.io:443"}" \
-    ./substreams.dev.yaml \
+    "$pg_dsn" \
+    ../../docs/tutorial/sink/substreams.dev.yaml \
     "$@"
 }
 
