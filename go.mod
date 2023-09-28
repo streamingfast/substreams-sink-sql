@@ -13,7 +13,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
-	github.com/streamingfast/substreams v1.1.15-0.20230927193646-391f24ae4ece
+	github.com/streamingfast/substreams v1.1.15-0.20230928192347-9b87d5038604
 	github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
 	github.com/stretchr/testify v1.8.3
