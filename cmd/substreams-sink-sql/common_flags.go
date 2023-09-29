@@ -73,7 +73,7 @@ func newDBLoader(
 			fmt.Printf("Error validating the cursors table: %s\n", e)
 			fmt.Println("You can use the following sql schema to create a cursors table")
 			fmt.Println()
-			fmt.Println(dbLoader.GetCreateCursorsTableSQL())
+			fmt.Println(dbLoader.GetCreateCursorsTableSQL(false))
 			fmt.Println()
 			return nil, fmt.Errorf("invalid cursors table")
 		}

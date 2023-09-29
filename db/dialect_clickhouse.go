@@ -81,7 +81,8 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 	return entryCount, nil
 }
 
-func (d clickhouseDialect) GetCreateCursorQuery(schema string) string {
+func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
+    _ = withPostgraphile // TODO: see if this can work
 	return fmt.Sprintf(cli.Dedent(`
 	CREATE TABLE IF NOT EXISTS %s.%s
 	(

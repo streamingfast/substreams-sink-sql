@@ -240,32 +240,32 @@ func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 
 // Setup creates the schema and the cursors table where the <schemaFile> is a local file
 // on disk.
-func (l *Loader) Setup(ctx context.Context, schemaFile string) error {
+func (l *Loader) Setup(ctx context.Context, schemaFile string, withPostgraphile bool) error {
 	b, err := os.ReadFile(schemaFile)
 	if err != nil {
 		return fmt.Errorf("read schema file: %w", err)
 	}
 
-	return l.SetupFromBytes(ctx, b)
+	return l.SetupFromBytes(ctx, b, withPostgraphile)
 }
 
 // SetupFromBytes creates the schema and the cursors table where the <schemaBytes> is a byte array
 // taken from somewhere.
-func (l *Loader) SetupFromBytes(ctx context.Context, schemaBytes []byte) error {
+func (l *Loader) SetupFromBytes(ctx context.Context, schemaBytes []byte, withPostgraphile bool) error {
 	schemaSql := string(schemaBytes)
 	if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
 		return fmt.Errorf("exec schema: %w", err)
 	}
 
-	if err := l.setupCursorTable(ctx); err != nil {
+	if err := l.setupCursorTable(ctx, withPostgraphile); err != nil {
 		return fmt.Errorf("setup cursor table: %w", err)
 	}
 
 	return nil
 }
 
-func (l *Loader) setupCursorTable(ctx context.Context) error {
-	_, err := l.ExecContext(ctx, l.GetCreateCursorsTableSQL())
+func (l *Loader) setupCursorTable(ctx context.Context, withPostgraphile bool) error {
+	_, err := l.ExecContext(ctx, l.GetCreateCursorsTableSQL(withPostgraphile))
 
 	if err != nil {
 		return fmt.Errorf("creating cursor table: %w", err)
@@ -274,8 +274,8 @@ func (l *Loader) setupCursorTable(ctx context.Context) error {
 	return nil
 }
 
-func (l *Loader) GetCreateCursorsTableSQL() string {
-	return l.getDialect().GetCreateCursorQuery(l.schema)
+func (l *Loader) GetCreateCursorsTableSQL(withPostgraphile bool) string {
+	return l.getDialect().GetCreateCursorQuery(l.schema, withPostgraphile)
 }
 
 func (l *Loader) getDialect() dialect {

@@ -18,6 +18,7 @@ var sinkSetupCmd = Command(sinkSetupE,
 	"Setup the required infrastructure to deploy a Substreams SQL deployable unit",
 	ExactArgs(2),
 	Flags(func(flags *pflag.FlagSet) {
+		flags.Bool("postgraphile", false, "Will append the necessary 'comments' on cursors table to fully support postgraphile")
 		flags.Bool("ignore-duplicate-table-errors", false, "[Dev] Use this if you want to ignore duplicate table errors, take caution that this means the 'schemal.sql' file will not have run fully!")
 	}),
 )
@@ -48,7 +49,7 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new psql loader: %w", err)
 	}
 
-	err = dbLoader.SetupFromBytes(ctx, []byte(sinkConfig.Schema))
+	err = dbLoader.SetupFromBytes(ctx, []byte(sinkConfig.Schema), sflags.MustGetBool(cmd, "postgraphile"))
 	if err != nil {
 		if isDuplicateTableError(err) && ignoreDuplicateTableErrors {
 			zlog.Info("received duplicate table error, script dit not executed succesfully completed")
@@ -56,7 +57,6 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("setup: %w", err)
 		}
 	}
-
 	zlog.Info("setup completed successfully")
 	return nil
 }

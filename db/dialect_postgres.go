@@ -48,8 +48,8 @@ func (d postgresDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outpu
 	return rowCount, nil
 }
 
-func (d postgresDialect) GetCreateCursorQuery(schema string) string {
-	return fmt.Sprintf(cli.Dedent(`
+func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
+	out := fmt.Sprintf(cli.Dedent(`
 		create table if not exists %s.%s
 		(
 			id         text not null constraint cursor_pk primary key,
@@ -58,6 +58,11 @@ func (d postgresDialect) GetCreateCursorQuery(schema string) string {
 			block_id   text
 		);
 		`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+	if withPostgraphile {
+		out += fmt.Sprintf("COMMENT ON TABLE %s.%s IS E'@omit';",
+			EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+	}
+	return out
 }
 
 func (d postgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
