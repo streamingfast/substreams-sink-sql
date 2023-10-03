@@ -21,7 +21,7 @@ import (
 type clickhouseDialect struct{}
 
 // Clickhouse should be used to insert a lot of data in batches. The current official clickhouse
-// driver doesn't support Transactions for multiple tables. The only way to add in batches is 
+// driver doesn't support Transactions for multiple tables. The only way to add in batches is
 // creating a transaction for a table, adding all rows and commiting it.
 func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
 	var entryCount int
@@ -82,7 +82,7 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 }
 
 func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
-    _ = withPostgraphile // TODO: see if this can work
+	_ = withPostgraphile // TODO: see if this can work
 	return fmt.Sprintf(cli.Dedent(`
 	CREATE TABLE IF NOT EXISTS %s.%s
 	(
@@ -124,7 +124,6 @@ func (d clickhouseDialect) OnlyInserts() bool {
 	return true
 }
 
-
 func convertOpToClickhouseValues(o *Operation) ([]any, error) {
 	columns := make([]string, len(o.data))
 	i := 0
@@ -144,7 +143,6 @@ func convertOpToClickhouseValues(o *Operation) ([]any, error) {
 	return values, nil
 }
 
-
 func convertToType(value string, valueType reflect.Type) (any, error) {
 	switch valueType.Kind() {
 	case reflect.String:
@@ -153,13 +151,34 @@ func convertToType(value string, valueType reflect.Type) (any, error) {
 		return value, nil
 	case reflect.Bool:
 		return strconv.ParseBool(value)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return strconv.ParseInt(value, 10, 0)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint64:
-		return strconv.ParseUint(value, 10, 0)
+	case reflect.Int:
+		v, err := strconv.ParseInt(value, 10, 0)
+		return int(v), err
+	case reflect.Int8:
+		v, err := strconv.ParseInt(value, 10, 8)
+		return int8(v), err
+	case reflect.Int16:
+		v, err := strconv.ParseInt(value, 10, 16)
+		return int16(v), err
+	case reflect.Int32:
+		v, err := strconv.ParseInt(value, 10, 32)
+		return int32(v), err
+	case reflect.Int64:
+		return strconv.ParseInt(value, 10, 64)
+	case reflect.Uint:
+		v, err := strconv.ParseUint(value, 10, 0)
+		return uint(v), err
+	case reflect.Uint8:
+		v, err := strconv.ParseUint(value, 10, 8)
+		return uint(v), err
+	case reflect.Uint16:
+		v, err := strconv.ParseUint(value, 10, 16)
+		return uint(v), err
 	case reflect.Uint32:
 		v, err := strconv.ParseUint(value, 10, 32)
 		return uint32(v), err
+	case reflect.Uint64:
+		return strconv.ParseUint(value, 10, 0)
 	case reflect.Float32, reflect.Float64:
 		return strconv.ParseFloat(value, 10)
 	case reflect.Struct:
