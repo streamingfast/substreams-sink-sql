@@ -13,7 +13,7 @@ message Service {
   bool wire_protocol_access = 3;
   HasuraFrontend hasura_frontend = 4;
   PostgraphileFrontend postgraphile_frontend = 5;
-  PGWebFronted pgweb_fronted = 6;
+  PGWebFrontend pgweb_frontend = 6;
 }
 
 message DBTConfig {
@@ -28,6 +28,6 @@ message PostgraphileFrontend {
     bool enabled = 1;
 }
 
-message PGWebFronted {
+message PGWebFrontend {
     bool enabled = 1;
 }

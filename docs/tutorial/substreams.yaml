@@ -44,3 +44,5 @@ sink:
     wire_protocol_access: true
     postgraphile_frontend:
       enabled: true
+    pgweb_frontend:
+      enabled: true
