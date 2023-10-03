@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 * Added `--postgraphile` flag to `setup`, which will add a @skip comment on cursor table so Postgraphile doesn't try to serve cursors (it resulted in a name collision with Postgraphile internal names)
+* Fixed a bug with Clickhouse driver where different integer sizes need explicit conversion
 
 ## v3.0.1
 
