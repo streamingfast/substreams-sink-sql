@@ -11,13 +11,23 @@ message Service {
   string schema = 1 [ (sf.substreams.options).load_from_file = true ];
   optional DBTConfig dbt_config = 2;
   bool wire_protocol_access = 3;
-  HasuraConfig hasura_frontend = 4;
-  PostgraphileConfig postgraphile_frontend = 5;
+  HasuraFrontend hasura_frontend = 4;
+  PostgraphileFrontend postgraphile_frontend = 5;
+  PGWebFronted pgweb_fronted = 6;
 }
 
 message DBTConfig {
    bytes files = 1  [ (sf.substreams.options).zip_from_folder = true ];
 }
 
-message HasuraConfig {}
-message PostgraphileConfig {}
+message HasuraFrontend {
+    bool enabled = 1;
+}
+
+message PostgraphileFrontend {
+    bool enabled = 1;
+}
+
+message PGWebFronted {
+    bool enabled = 1;
+}
