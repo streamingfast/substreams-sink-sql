@@ -1195,8 +1195,8 @@ github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28 h1:wmQg8T0rIF
 github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28/go.mod h1:huKwfgTGFIFZMKSVbD5TywClM7zAeBUG/zePZMqvXQQ=
 github.com/streamingfast/shutter v1.5.0 h1:NpzDYzj0HVpSiDJVO/FFSL6QIK/YKOxY0gJAtyaTOgs=
 github.com/streamingfast/shutter v1.5.0/go.mod h1:B/T6efqdeMGbGwjzPS1ToXzYZI4kDzI5/u4I+7qbjY8=
-github.com/streamingfast/substreams v1.1.15-0.20231005154645-51c29cea1b70 h1:z1kWH9bBqm4eiKO6DtFXvVMguLyKBiwh9GVHK4SV8Zg=
-github.com/streamingfast/substreams v1.1.15-0.20231005154645-51c29cea1b70/go.mod h1:fFJ8YYBXhzKTKBcC7vRQU6xZl/9KAfVfzuEB8C9hUVw=
+github.com/streamingfast/substreams v1.1.15-0.20231005155216-0f07427759df h1:GPV+0Nn3PMoHzIPKAB5W1l4Nabvo/nmWxHq1UDoHVcQ=
+github.com/streamingfast/substreams v1.1.15-0.20231005155216-0f07427759df/go.mod h1:fFJ8YYBXhzKTKBcC7vRQU6xZl/9KAfVfzuEB8C9hUVw=
 github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645 h1:ZbYLft0R5hJBLhMFAdp7noAD9YrKC+r0nsU7Z5IDcfM=
 github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645/go.mod h1:nBPwmsjz+CV0HT5Vmp0XTiu+RjP8CbdhD5u+uC3lo84=
 github.com/streamingfast/substreams-sink-database-changes v1.1.3 h1:rXeGb/V2mjC8FftumRkMQxG2jtdLfHdLx9UQVUtAqS8=
