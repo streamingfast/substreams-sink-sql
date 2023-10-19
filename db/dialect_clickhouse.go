@@ -170,10 +170,10 @@ func convertToType(value string, valueType reflect.Type) (any, error) {
 		return uint(v), err
 	case reflect.Uint8:
 		v, err := strconv.ParseUint(value, 10, 8)
-		return uint(v), err
+		return uint8(v), err
 	case reflect.Uint16:
 		v, err := strconv.ParseUint(value, 10, 16)
-		return uint(v), err
+		return uint16(v), err
 	case reflect.Uint32:
 		v, err := strconv.ParseUint(value, 10, 32)
 		return uint32(v), err
