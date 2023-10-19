@@ -168,4 +168,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/jimsmart/schema => github.com/semiotic-ai/schema v0.0.0-20230727171059-24e630184512
+replace github.com/jimsmart/schema => github.com/semiotic-ai/schema v0.0.0-20231013140230-ca2e893c4ab1

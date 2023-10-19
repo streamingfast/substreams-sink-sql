@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 * Fixed missing uint8 and uint16 cast for clickhouse driver conversion
+* Bump version of `schema` dependency to fix errors with Clickhouse 23.9 enums being updated to String representation and not numbers.
 
 ## v3.0.2
 
