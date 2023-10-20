@@ -14,6 +14,14 @@ message Service {
   HasuraFrontend hasura_frontend = 4;
   PostgraphileFrontend postgraphile_frontend = 5;
   PGWebFrontend pgweb_frontend = 6;
+
+  enum Engine {
+    unset = 0;
+    postgres = 1;
+    clickhouse = 2;
+  }
+
+  Engine engine = 7;
 }
 
 message DBTConfig {
