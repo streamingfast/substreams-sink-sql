@@ -40,9 +40,11 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		l.logger.Debug("primary key entry never existed for table, adding insert operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	// We need to make sure to add the primary key(s) in the data so that those column get created correctly
+	// We need to make sure to add the primary key(s) in the data so that those column get created correctly, but only if there is data
 	for _, primary := range l.tables[tableName].primaryColumns {
-		data[primary.name] = primaryKey[primary.name]
+		if dataFromPrimaryKey, ok := primaryKey[primary.name]; ok {
+			data[primary.name] = dataFromPrimaryKey
+		}
 	}
 
 	entry.Set(uniqueID, l.newInsertOperation(table, primaryKey, data))
@@ -78,14 +80,10 @@ func createRowUniqueID(m map[string]string) string {
 
 func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, error) {
 	primaryKeyColumns := l.tables[tableName].primaryColumns
-	if len(primaryKeyColumns) > 1 {
-		return nil, fmt.Errorf("your Substreams sent a primary key but your database definition for table %q is using a composite primary key", tableName)
-	}
 
-	// There can be only 0 or 1 column here as we check above for > 1 and return.
-	// If there is 0, there is no primary key column in which case we return the
-	// received primary key as is under and "" (empty) column name.
-	if len(primaryKeyColumns) == 0 {
+	// If there is exactly one primary key column, we assume that we should populate this column with the id of the "primary_key" field.
+	// If there is no primary key or a composite key, we simply ignore the primary_key input as we don't know where to write it.
+	if len(primaryKeyColumns) != 1 {
 		return map[string]string{"": pk}, nil
 	}
 
@@ -164,7 +162,7 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
 		return fmt.Errorf("unknown table %q", tableName)
 	}
 
-	if len(table.primaryColumns) == 0 {
+	if len(table.primaryColumns) != 1 {
 		return fmt.Errorf("trying to perform a DELETE operation but table %q don't have a primary key(s) set, this is not accepted", tableName)
 	}
 

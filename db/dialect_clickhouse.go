@@ -136,7 +136,7 @@ func convertOpToClickhouseValues(o *Operation) ([]any, error) {
 	for i, v := range columns {
 		convertedType, err := convertToType(o.data[v], o.table.columnsByName[v].scanType)
 		if err != nil {
-			return nil, fmt.Errorf("converting value %q to type %q: %w", o.data[v], o.table.columnsByName[v].scanType, err)
+			return nil, fmt.Errorf("converting value %q to type %q in column %q: %w", o.data[v], o.table.columnsByName[v].scanType, v, err)
 		}
 		values[i] = convertedType
 	}
