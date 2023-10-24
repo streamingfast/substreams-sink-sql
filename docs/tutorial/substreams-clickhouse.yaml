@@ -42,8 +42,8 @@ sink:
   config:
     schema: "./schema.sql"
     wire_protocol_access: true
-    engine: postgres
+    engine: clickhouse
     postgraphile_frontend:
-      enabled: true
+      enabled: false
     pgweb_frontend:
-      enabled: true
+      enabled: false
