@@ -64,7 +64,6 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		blockRange,
 		zlog,
 		tracer,
-		sink.WithFinalBlocksOnly(),
 	)
 	if err != nil {
 		return fmt.Errorf("new base sinker: %w", err)
