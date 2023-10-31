@@ -94,6 +94,36 @@ func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 	`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
 }
 
+func (d clickhouseDialect) GetCreateSubstreamsHistoryTableQuery(schema string) string {
+	out := fmt.Sprintf(cli.Dedent(`
+		create table if not exists %s.%s
+		(
+            table_name      text,
+			id              text,
+			block_num       bigint
+		) Engine = ReplacingMergeTree() ORDER BY block_num;
+		create table if not exists %s.%s
+		(
+            table_name      text,
+			id              text,
+            prev_value      text,
+			block_num       bigint
+		) Engine = ReplacingMergeTree() ORDER BY block_num;
+		create table if not exists %s.%s
+		(
+            table_name      text,
+			id              text,
+            prev_value      text,
+			block_num       bigint
+		) Engine = ReplacingMergeTree() ORDER BY block_num;
+		`),
+		EscapeIdentifier(schema), EscapeIdentifier("inserts_history"),
+		EscapeIdentifier(schema), EscapeIdentifier("updates_history"),
+		EscapeIdentifier(schema), EscapeIdentifier("deletes_history"),
+	)
+	return out
+}
+
 func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
 	for _, query := range strings.Split(schemaSql, ";") {
 		if len(strings.TrimSpace(query)) == 0 {

@@ -278,6 +278,10 @@ func (l *Loader) GetCreateCursorsTableSQL(withPostgraphile bool) string {
 	return l.getDialect().GetCreateCursorQuery(l.schema, withPostgraphile)
 }
 
+func (l *Loader) GetCreateSubstreamsHistoryTableSQL() string {
+	return l.getDialect().GetCreateSubstreamsHistoryTableQuery(l.schema)
+}
+
 func (l *Loader) getDialect() dialect {
 	d, _ := l.tryDialect()
 	return d

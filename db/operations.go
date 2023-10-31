@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -27,35 +28,39 @@ type Operation struct {
 	opType     OperationType
 	primaryKey map[string]string
 	data       map[string]string
+	blockNum   uint64
 }
 
 func (o *Operation) String() string {
 	return fmt.Sprintf("%s/%s (%s)", o.table.identifier, createRowUniqueID(o.primaryKey), strings.ToLower(string(o.opType)))
 }
 
-func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
+func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string, blockNum uint64) *Operation {
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeInsert,
 		primaryKey: primaryKey,
 		data:       data,
+		blockNum:   blockNum,
 	}
 }
 
-func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
+func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string, blockNum uint64) *Operation {
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeUpdate,
 		primaryKey: primaryKey,
 		data:       data,
+		blockNum:   blockNum,
 	}
 }
 
-func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string) *Operation {
+func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string, blockNum uint64) *Operation {
 	return &Operation{
 		table:      table,
 		opType:     OperationTypeDelete,
 		primaryKey: primaryKey,
+		blockNum:   blockNum,
 	}
 }
 
@@ -87,4 +92,23 @@ func escapeStringValue(valueToEscape string) string {
 	}
 
 	return `'` + valueToEscape + `'`
+}
+
+// to store in an history table
+func primaryKeyToJSON(primaryKey map[string]string) string {
+	m, err := json.Marshal(primaryKey)
+	if err != nil {
+		panic(err) // should never happen with map[string]string
+	}
+	return string(m)
+}
+
+// to store in an history table
+func jsonToPrimaryKey(in string) (map[string]string, error) {
+	out := make(map[string]string)
+	err := json.Unmarshal([]byte(in), &out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

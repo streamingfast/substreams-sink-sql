@@ -29,7 +29,7 @@ func (d postgresDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outpu
 		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
 			entry := entryPair.Value
 
-			query, err := d.prepareStatement(entry)
+			query, err := d.prepareStatement(l.schema, entry)
 			if err != nil {
 				return 0, fmt.Errorf("failed to prepare statement: %w", err)
 			}
@@ -65,6 +65,36 @@ func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bo
 	return out
 }
 
+func (d postgresDialect) GetCreateSubstreamsHistoryTableQuery(schema string) string {
+	out := fmt.Sprintf(cli.Dedent(`
+		create table if not exists %s
+		(
+            table_name      text,
+			id              text,
+			block_num       bigint
+		);
+		create table if not exists %s
+		(
+            table_name      text,
+			id              text,
+            prev_value      text,
+			block_num       bigint
+		);
+		create table if not exists %s
+		(
+            table_name      text,
+			id              text,
+            prev_value      text,
+			block_num       bigint
+		);
+		`),
+		d.insertsTable(schema),
+		d.updatesTable(schema),
+		d.deletesTable(schema),
+	)
+	return out
+}
+
 func (d postgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
 	if _, err := l.ExecContext(ctx, schemaSql); err != nil {
 		return fmt.Errorf("exec schema: %w", err)
@@ -90,7 +120,57 @@ func (d postgresDialect) OnlyInserts() bool {
 	return false
 }
 
-func (d *postgresDialect) prepareStatement(o *Operation) (string, error) {
+func (d postgresDialect) insertsTable(schema string) string {
+	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("inserts_history"))
+}
+
+func (d postgresDialect) saveInsert(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
+	return fmt.Sprintf(`INSERT INTO %s (table_name, id, block_num) values (%s, %s, %d);`,
+		d.insertsTable(schema),
+		escapeStringValue(table),
+		escapeStringValue(primaryKeyToJSON(primaryKey)),
+		blockNum,
+	)
+}
+
+func (d postgresDialect) updatesTable(schema string) string {
+	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("updates_history"))
+}
+
+func (d postgresDialect) saveUpdate(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow(table, d.updatesTable(schema), primaryKey, blockNum)
+}
+
+func (d postgresDialect) deletesTable(schema string) string {
+	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("deletes_history"))
+}
+
+func (d postgresDialect) saveDelete(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow(table, d.deletesTable(schema), primaryKey, blockNum)
+}
+
+func (d postgresDialect) saveRow(table string, targetTable string, primaryKey map[string]string, blockNum uint64) string {
+	// insert into deletes_history (table_name, id, prev_value, block_num)
+	// select 'ownership_transferred',
+	// '["evt_tx_hash":"00006614dade7f56557b84e5fe674a264a50e83eec52ccec62c9fff4c2de4a2a","evt_index":"132"]',
+	// row_to_json(ownership_transferred),
+	// 12345678 from ownership_transferred
+	// where evt_tx_hash = '22199329b0aa1aa68902a78e3b32ca327c872fab166c7a2838273de6ad383eba' and evt_index = 249
+
+	return fmt.Sprintf(`INSERT INTO %s (table_name, id, prev_value, block_num)
+        SELECT %s, %s, row_to_json(%s), %d
+        FROM %s
+        WHERE %s`,
+
+		targetTable,
+		escapeStringValue(table), escapeStringValue(primaryKeyToJSON(primaryKey)), EscapeIdentifier(table), blockNum,
+		EscapeIdentifier(table),
+		getPrimaryKeyWhereClause(primaryKey),
+	)
+
+}
+
+func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
@@ -109,11 +189,11 @@ func (d *postgresDialect) prepareStatement(o *Operation) (string, error) {
 
 	switch o.opType {
 	case OperationTypeInsert:
-		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
 			o.table.identifier,
 			strings.Join(columns, ","),
 			strings.Join(values, ","),
-		), nil
+		) + d.saveInsert(schema, o.table.identifier, o.primaryKey, o.blockNum), nil
 
 	case OperationTypeUpdate:
 		updates := make([]string, len(columns))
@@ -122,18 +202,21 @@ func (d *postgresDialect) prepareStatement(o *Operation) (string, error) {
 		}
 
 		primaryKeySelector := getPrimaryKeyWhereClause(o.primaryKey)
-		return fmt.Sprintf("UPDATE %s SET %s WHERE %s",
-			o.table.identifier,
-			strings.Join(updates, ", "),
-			primaryKeySelector,
-		), nil
+
+		return d.saveUpdate(schema, o.table.identifier, o.primaryKey, o.blockNum) +
+			fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+				o.table.identifier,
+				strings.Join(updates, ", "),
+				primaryKeySelector,
+			), nil
 
 	case OperationTypeDelete:
 		primaryKeyWhereClause := getPrimaryKeyWhereClause(o.primaryKey)
-		return fmt.Sprintf("DELETE FROM %s WHERE %s",
-			o.table.identifier,
-			primaryKeyWhereClause,
-		), nil
+		return d.saveDelete(schema, o.table.identifier, o.primaryKey, o.blockNum) +
+			fmt.Sprintf("DELETE FROM %s WHERE %s",
+				o.table.identifier,
+				primaryKeyWhereClause,
+			), nil
 
 	default:
 		panic(fmt.Errorf("unknown operation type %q", o.opType))

@@ -96,6 +96,7 @@ func (s *SQLSinker) Run(ctx context.Context) {
 
 func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
+	blockNum := cursor.Block().Num()
 
 	if output.Name != s.OutputModuleName() {
 		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
@@ -114,11 +115,11 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		return fmt.Errorf("unmarshal database changes: %w", err)
 	}
 
-	if err := s.applyDatabaseChanges(dbChanges); err != nil {
+	if err := s.applyDatabaseChanges(dbChanges, blockNum); err != nil {
 		return fmt.Errorf("apply database changes: %w", err)
 	}
 
-	if cursor.Block().Num()%s.batchBlockModulo(data, isLive) == 0 {
+	if blockNum%s.batchBlockModulo(data, isLive) == 0 {
 		flushStart := time.Now()
 		rowFlushedCount, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor)
 		if err != nil {
@@ -146,7 +147,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 	return nil
 }
 
-func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) error {
+func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, blockNum uint64) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
@@ -178,17 +179,17 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) 
 
 		switch change.Operation {
 		case pbdatabase.TableChange_CREATE:
-			err := s.loader.Insert(change.Table, primaryKeys, changes)
+			err := s.loader.Insert(change.Table, primaryKeys, changes, blockNum)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
 		case pbdatabase.TableChange_UPDATE:
-			err := s.loader.Update(change.Table, primaryKeys, changes)
+			err := s.loader.Update(change.Table, primaryKeys, changes, blockNum)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
 		case pbdatabase.TableChange_DELETE:
-			err := s.loader.Delete(change.Table, primaryKeys)
+			err := s.loader.Delete(change.Table, primaryKeys, blockNum)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)
 			}
