@@ -10,11 +10,11 @@ import (
 	"go.uber.org/zap"
 )
 
-func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sink.Cursor) (rowFlushedCount int, err error) {
+func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sink.Cursor, lastFinalBlock uint64) (rowFlushedCount int, err error) {
 	ctx = clickhouse.Context(context.Background(), clickhouse.WithStdAsync(false))
 
 	startAt := time.Now()
-	tx, err := l.DB.BeginTx(ctx, nil)
+	tx, err := l.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to being db transaction: %w", err)
 	}
@@ -26,7 +26,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 		}
 	}()
 
-	rowFlushedCount, err = l.getDialect().Flush(tx, ctx, l, outputModuleHash, cursor)
+	rowFlushedCount, err = l.getDialect().Flush(tx, ctx, l, outputModuleHash, lastFinalBlock)
 	if err != nil {
 		return 0, fmt.Errorf("dialect flush: %w", err)
 	}

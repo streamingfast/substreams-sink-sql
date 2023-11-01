@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +17,7 @@ import (
 
 type postgresDialect struct{}
 
-func (d postgresDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
+func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
 	var rowCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		tableName := entriesPair.Key
@@ -45,7 +45,23 @@ func (d postgresDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outpu
 		rowCount += entries.Len()
 	}
 
+	if err := d.pruneReversibleSegment(tx, ctx, l.schema, lastFinalBlock); err != nil {
+		return 0, err
+	}
+
 	return rowCount, nil
+}
+
+func (d postgresDialect) pruneReversibleSegment(tx Tx, ctx context.Context, schema string, highestFinalBlock uint64) error {
+	pruneInserts := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.insertsTable(schema), highestFinalBlock)
+	pruneUpdates := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.updatesTable(schema), highestFinalBlock)
+	pruneDeletes := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.deletesTable(schema), highestFinalBlock)
+	query := pruneInserts + pruneUpdates + pruneDeletes
+
+	if _, err := tx.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("executing prune query %q: %w", query, err)
+	}
+	return nil
 }
 
 func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
@@ -189,11 +205,15 @@ func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string,
 
 	switch o.opType {
 	case OperationTypeInsert:
-		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
+		insertQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
 			o.table.identifier,
 			strings.Join(columns, ","),
 			strings.Join(values, ","),
-		) + d.saveInsert(schema, o.table.identifier, o.primaryKey, o.blockNum), nil
+		)
+		if o.reversibleBlockNum != nil {
+			return d.saveInsert(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
+		}
+		return insertQuery, nil
 
 	case OperationTypeUpdate:
 		updates := make([]string, len(columns))
@@ -203,20 +223,27 @@ func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string,
 
 		primaryKeySelector := getPrimaryKeyWhereClause(o.primaryKey)
 
-		return d.saveUpdate(schema, o.table.identifier, o.primaryKey, o.blockNum) +
-			fmt.Sprintf("UPDATE %s SET %s WHERE %s",
-				o.table.identifier,
-				strings.Join(updates, ", "),
-				primaryKeySelector,
-			), nil
+		updateQuery := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+			o.table.identifier,
+			strings.Join(updates, ", "),
+			primaryKeySelector,
+		)
+
+		if o.reversibleBlockNum != nil {
+			return d.saveUpdate(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + updateQuery, nil
+		}
+		return updateQuery, nil
 
 	case OperationTypeDelete:
 		primaryKeyWhereClause := getPrimaryKeyWhereClause(o.primaryKey)
-		return d.saveDelete(schema, o.table.identifier, o.primaryKey, o.blockNum) +
-			fmt.Sprintf("DELETE FROM %s WHERE %s",
-				o.table.identifier,
-				primaryKeyWhereClause,
-			), nil
+		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE %s",
+			o.table.identifier,
+			primaryKeyWhereClause,
+		)
+		if o.reversibleBlockNum != nil {
+			return d.saveDelete(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + deleteQuery, nil
+		}
+		return deleteQuery, nil
 
 	default:
 		panic(fmt.Errorf("unknown operation type %q", o.opType))
@@ -232,7 +259,14 @@ func (d *postgresDialect) prepareColValues(table *TableInfo, colValues map[strin
 	values = make([]string, len(colValues))
 
 	i := 0
-	for columnName, value := range colValues {
+	for colName := range colValues {
+		columns[i] = colName
+		i++
+	}
+	sort.Strings(columns) // sorted for determinism in tests
+
+	for i, columnName := range columns {
+		value := colValues[columnName]
 		columnInfo, found := table.columnsByName[columnName]
 		if !found {
 			return nil, nil, fmt.Errorf("cannot find column %q for table %q (valid columns are %q)", columnName, table.identifier, strings.Join(maps.Keys(table.columnsByName), ", "))
@@ -243,10 +277,7 @@ func (d *postgresDialect) prepareColValues(table *TableInfo, colValues map[strin
 			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", table.identifier, columnName, value, err)
 		}
 
-		columns[i] = columnInfo.escapedName
 		values[i] = normalizedValue
-
-		i++
 	}
 	return
 }

@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -23,7 +22,7 @@ type clickhouseDialect struct{}
 // Clickhouse should be used to insert a lot of data in batches. The current official clickhouse
 // driver doesn't support Transactions for multiple tables. The only way to add in batches is
 // creating a transaction for a table, adding all rows and commiting it.
-func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
+func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
 	var entryCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		tableName := entriesPair.Key
@@ -77,6 +76,7 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 		}
 		entryCount += entries.Len()
 	}
+	// TODO: implement pruning
 
 	return entryCount, nil
 }

@@ -44,6 +44,8 @@ type Loader struct {
 
 	logger *zap.Logger
 	tracer logging.Tracer
+
+	testTx *TestTx // used for testing: if non-nil, 'loader.BeginTx()' will return this object instead of a real *sql.Tx
 }
 
 func NewLoader(
@@ -90,6 +92,23 @@ func NewLoader(
 	}
 
 	return l, nil
+}
+
+type Tx interface {
+	Rollback() error
+	Commit() error
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func (l *Loader) Begin() (Tx, error) {
+	return l.BeginTx(context.Background(), nil)
+}
+
+func (l *Loader) BeginTx(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+	if l.testTx != nil {
+		return l.testTx, nil
+	}
+	return l.DB.BeginTx(ctx, opts)
 }
 
 func (l *Loader) FlushInterval() time.Duration {
