@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,6 +88,72 @@ func TestJSONToPrimaryKey(t *testing.T) {
 			out, err := jsonToPrimaryKey(test.in)
 			require.NoError(t, err)
 			assert.Equal(t, test.expect, out)
+		})
+	}
+
+}
+
+func TestRevertOp(t *testing.T) {
+
+	type row struct {
+		op         string
+		schema     string
+		table_name string
+		pk         string
+		prev_value string
+	}
+
+	tests := []struct {
+		name   string
+		row    row
+		expect string
+	}{
+		{
+			name: "rollback insert row",
+			row: row{
+				op:         "I",
+				schema:     "testschema",
+				table_name: "xfer",
+				pk:         `{"id":"2345"}`,
+				prev_value: "", // unused
+			},
+			expect: `DELETE FROM "testschema"."xfer" WHERE "id" = '2345';`,
+		},
+		{
+			name: "rollback delete row",
+			row: row{
+				op:         "D",
+				schema:     "testschema",
+				table_name: "xfer",
+				pk:         `{"id":"2345"}`,
+				prev_value: `{"id":"2345","sender":"0xdead","receiver":"0xbeef"}`,
+			},
+			expect: `INSERT INTO "testschema"."xfer" SELECT * FROM json_populate_record(null:"testschema"."xfer",` +
+				`'{"id":"2345","sender":"0xdead","receiver":"0xbeef"}');`,
+		},
+		{
+			name: "rollback update row",
+			row: row{
+				op:         "U",
+				schema:     "testschema",
+				table_name: "xfer",
+				pk:         `{"id":"2345"}`,
+				prev_value: `{"id":"2345","sender":"0xdead","receiver":"0xbeef"}`,
+			},
+			expect: `UPDATE "testschema"."xfer" SET("id","receiver","sender")=((SELECT "id","receiver","sender" FROM json_populate_record(null:"testschema"."xfer",` +
+				`'{"id":"2345","sender":"0xdead","receiver":"0xbeef"}'))) WHERE "id" = '2345';`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tx := &TestTx{}
+			ctx := context.Background()
+			pd := postgresDialect{}
+
+			row := test.row
+			err := pd.revertOp(tx, ctx, row.op, row.schema, row.table_name, row.pk, row.prev_value, 9999)
+			require.NoError(t, err)
+			assert.Equal(t, []string{test.expect}, tx.Results())
 		})
 	}
 

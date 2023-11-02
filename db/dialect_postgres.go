@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -18,8 +19,42 @@ import (
 type postgresDialect struct{}
 
 func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
-	//	query := ""
-	return nil
+	query := fmt.Sprintf(`SELECT (op,table_name,pk,prev_value,block_num) FROM %s WHERE "block_num" > %d ORDER BY "block_num" DESC`,
+		d.historyTable(l.schema),
+		lastValidFinalBlock,
+	)
+
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return err
+	}
+
+	if rows != nil { // rows will be nil with no error only in testing scenarios
+		defer rows.Close()
+		for rows.Next() {
+			var op string
+			var table_name string
+			var pk string
+			var prev_value string
+			var block_num uint64
+			if err := rows.Scan(&op, &table_name, &pk, &prev_value, &block_num); err != nil {
+				return err
+			}
+			if err := d.revertOp(tx, ctx, op, l.schema, table_name, pk, prev_value, block_num); err != nil {
+				return err
+			}
+		}
+		if rows.Err() != nil {
+			return err
+		}
+	}
+	pruneHistory := fmt.Sprintf(`DELETE FROM %s WHERE "block_num" > %d;`,
+		d.historyTable(l.schema),
+		lastValidFinalBlock,
+	)
+
+	_, err = tx.ExecContext(ctx, pruneHistory)
+	return err
 }
 
 func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
@@ -57,12 +92,73 @@ func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 	return rowCount, nil
 }
 
-func (d postgresDialect) pruneReversibleSegment(tx Tx, ctx context.Context, schema string, highestFinalBlock uint64) error {
-	pruneInserts := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.insertsTable(schema), highestFinalBlock)
-	pruneUpdates := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.updatesTable(schema), highestFinalBlock)
-	pruneDeletes := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.deletesTable(schema), highestFinalBlock)
-	query := pruneInserts + pruneUpdates + pruneDeletes
+func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, schema, table_name, pk, prev_value string, block_num uint64) error {
 
+	pkmap := make(map[string]string)
+	if err := json.Unmarshal([]byte(pk), &pkmap); err != nil {
+		return err
+	}
+	switch op {
+	case "I":
+		query := fmt.Sprintf(`DELETE FROM %s.%s WHERE %s;`,
+			EscapeIdentifier(schema),
+			EscapeIdentifier(table_name),
+			getPrimaryKeyWhereClause(pkmap),
+		)
+		if _, err := tx.ExecContext(ctx, query); err != nil {
+			return fmt.Errorf("executing revert query %q: %w", query, err)
+		}
+	case "D":
+		query := fmt.Sprintf(`INSERT INTO %s.%s SELECT * FROM json_populate_record(null:%s.%s,%s);`,
+			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+			escapeStringValue(prev_value),
+		)
+		if _, err := tx.ExecContext(ctx, query); err != nil {
+			return fmt.Errorf("executing revert query %q: %w", query, err)
+		}
+
+	case "U":
+		columns, err := sqlColumnNamesFromJSON(prev_value)
+		if err != nil {
+			return err
+		}
+
+		query := fmt.Sprintf(`UPDATE %s.%s SET(%s)=((SELECT %s FROM json_populate_record(null:%s.%s,%s))) WHERE %s;`,
+			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+			columns,
+			columns,
+			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+			escapeStringValue(prev_value),
+			getPrimaryKeyWhereClause(pkmap),
+		)
+		if _, err := tx.ExecContext(ctx, query); err != nil {
+			return fmt.Errorf("executing revert query %q: %w", query, err)
+		}
+	default:
+		panic("invalid op in revert command")
+	}
+	return nil
+}
+
+func sqlColumnNamesFromJSON(in string) (string, error) {
+	valueMap := make(map[string]string)
+	if err := json.Unmarshal([]byte(in), &valueMap); err != nil {
+		return "", err
+	}
+	escapedNames := make([]string, len(valueMap))
+	i := 0
+	for k := range valueMap {
+		escapedNames[i] = EscapeIdentifier(k)
+		i++
+	}
+	sort.Strings(escapedNames)
+
+	return strings.Join(escapedNames, ","), nil
+}
+
+func (d postgresDialect) pruneReversibleSegment(tx Tx, ctx context.Context, schema string, highestFinalBlock uint64) error {
+	query := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.historyTable(schema), highestFinalBlock)
 	if _, err := tx.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("executing prune query %q: %w", query, err)
 	}
@@ -86,32 +182,19 @@ func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bo
 	return out
 }
 
-func (d postgresDialect) GetCreateSubstreamsHistoryTableQuery(schema string) string {
+func (d postgresDialect) GetCreateHistoryQuery(schema string) string {
 	out := fmt.Sprintf(cli.Dedent(`
 		create table if not exists %s
 		(
-            table_name      text,
-			id              text,
-			block_num       bigint
-		);
-		create table if not exists %s
-		(
-            table_name      text,
-			id              text,
-            prev_value      text,
-			block_num       bigint
-		);
-		create table if not exists %s
-		(
-            table_name      text,
-			id              text,
-            prev_value      text,
-			block_num       bigint
+            id           SERIAL PRIMARY KEY,
+            op           char,
+            table_name   text,
+			pk           text,
+            prev_value   text,
+			block_num    bigint
 		);
 		`),
-		d.insertsTable(schema),
-		d.updatesTable(schema),
-		d.deletesTable(schema),
+		d.historyTable(schema),
 	)
 	return out
 }
@@ -141,51 +224,33 @@ func (d postgresDialect) OnlyInserts() bool {
 	return false
 }
 
-func (d postgresDialect) insertsTable(schema string) string {
-	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("inserts_history"))
+func (d postgresDialect) historyTable(schema string) string {
+	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("history"))
 }
 
 func (d postgresDialect) saveInsert(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
-	return fmt.Sprintf(`INSERT INTO %s (table_name, id, block_num) values (%s, %s, %d);`,
-		d.insertsTable(schema),
+	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,block_num) values (%s,%s,%s,%d);`,
+		d.historyTable(schema),
+		escapeStringValue("I"),
 		escapeStringValue(table),
 		escapeStringValue(primaryKeyToJSON(primaryKey)),
 		blockNum,
 	)
 }
 
-func (d postgresDialect) updatesTable(schema string) string {
-	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("updates_history"))
+func (d postgresDialect) saveUpdate(schema string, escapedTable string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow("U", schema, escapedTable, primaryKey, blockNum)
 }
 
-func (d postgresDialect) saveUpdate(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
-	return d.saveRow(table, d.updatesTable(schema), primaryKey, blockNum)
+func (d postgresDialect) saveDelete(schema string, escapedTable string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow("D", schema, escapedTable, primaryKey, blockNum)
 }
 
-func (d postgresDialect) deletesTable(schema string) string {
-	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("deletes_history"))
-}
-
-func (d postgresDialect) saveDelete(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
-	return d.saveRow(table, d.deletesTable(schema), primaryKey, blockNum)
-}
-
-func (d postgresDialect) saveRow(table string, targetTable string, primaryKey map[string]string, blockNum uint64) string {
-	// insert into deletes_history (table_name, id, prev_value, block_num)
-	// select 'ownership_transferred',
-	// '["evt_tx_hash":"00006614dade7f56557b84e5fe674a264a50e83eec52ccec62c9fff4c2de4a2a","evt_index":"132"]',
-	// row_to_json(ownership_transferred),
-	// 12345678 from ownership_transferred
-	// where evt_tx_hash = '22199329b0aa1aa68902a78e3b32ca327c872fab166c7a2838273de6ad383eba' and evt_index = 249
-
-	return fmt.Sprintf(`INSERT INTO %s (table_name, id, prev_value, block_num)
-        SELECT %s, %s, row_to_json(%s), %d
-        FROM %s
-        WHERE %s`,
-
-		targetTable,
-		escapeStringValue(table), escapeStringValue(primaryKeyToJSON(primaryKey)), EscapeIdentifier(table), blockNum,
-		EscapeIdentifier(table),
+func (d postgresDialect) saveRow(op, schema, escapedTable string, primaryKey map[string]string, blockNum uint64) string {
+	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,prev_value,block_num) SELECT %s,%s,%s,row_to_json(%s),%d FROM %s WHERE %s;`,
+		d.historyTable(schema),
+		escapeStringValue(op), escapeStringValue(escapedTable), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTable, blockNum,
+		escapedTable,
 		getPrimaryKeyWhereClause(primaryKey),
 	)
 
@@ -300,6 +365,7 @@ func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
 	for key, value := range primaryKey {
 		reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
 	}
+	sort.Strings(reg)
 
 	return strings.Join(reg[:], " AND ")
 }

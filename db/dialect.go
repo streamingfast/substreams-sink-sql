@@ -18,7 +18,7 @@ func (e UnknownDriverError) Error() string {
 
 type dialect interface {
 	GetCreateCursorQuery(schema string, withPostgraphile bool) string
-	GetCreateSubstreamsHistoryTableQuery(schema string) string
+	GetCreateHistoryQuery(schema string) string
 	ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error
 	DriverSupportRowsAffected() bool
 	GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string

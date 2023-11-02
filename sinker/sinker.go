@@ -205,7 +205,7 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 }
 
 func (s *SQLSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
-	return s.loader.Revert(ctx, cursor, data.LastValidBlock.Number)
+	return s.loader.Revert(ctx, s.OutputModuleHash(), cursor, data.LastValidBlock.Number)
 }
 
 func (s *SQLSinker) batchBlockModulo(blockData *pbsubstreamsrpc.BlockScopedData, isLive *bool) uint64 {

@@ -2,6 +2,7 @@ package sinker
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -15,14 +16,20 @@ import (
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	_ "github.com/lib/pq"
 )
 
-func TestInserts(t *testing.T) {
+var logger *zap.Logger
+var tracer logging.Tracer
 
-	logger, tracer := logging.ApplicationLogger("test", "test")
+func init() {
+	logger, tracer = logging.ApplicationLogger("test", "test")
+}
+
+func TestInserts(t *testing.T) {
 
 	type event struct {
 		blockNum     uint64
@@ -32,9 +39,10 @@ func TestInserts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		events    []event
-		expectSQL []string
+		name           string
+		events         []event
+		expectSQL      []string
+		queryResponses []*sql.Rows
 	}{
 		{
 			name: "insert final block",
@@ -47,7 +55,7 @@ func TestInserts(t *testing.T) {
 			},
 			expectSQL: []string{
 				`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
-				pruneBelow(10),
+				`DELETE FROM "testschema"."history" WHERE block_num <= 10;`,
 				`UPDATE "testschema"."cursors" set cursor = 'bN7dsAhRyo44yl_ykkjA36WwLpc_DFtvXwrlIBBBj4r2', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
 				`COMMIT`,
 			},
@@ -68,15 +76,95 @@ func TestInserts(t *testing.T) {
 			},
 			expectSQL: []string{
 				`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
-				pruneBelow(10),
+				`DELETE FROM "testschema"."history" WHERE block_num <= 10;`,
 				`UPDATE "testschema"."cursors" set cursor = 'bN7dsAhRyo44yl_ykkjA36WwLpc_DFtvXwrlIBBBj4r2', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
 				`COMMIT`,
 				`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender2','2345','receiver2');`,
-				pruneBelow(11),
+				`DELETE FROM "testschema"."history" WHERE block_num <= 11;`,
 				`UPDATE "testschema"."cursors" set cursor = 'dR5-m-1v1TQvlVRfIM9SXaWwLpc_DFtuXwrkIBBAj4r3', block_num = 11, block_id = '11' WHERE id = '756e75736564';`,
 				`COMMIT`,
 			},
 		},
+		{
+			name: "insert a reversible blocks",
+			events: []event{
+				{
+					blockNum:     10,
+					libNum:       5,
+					tableChanges: []*pbdatabase.TableChange{insertRowSinglePK("xfer", "1234", "from", "sender1", "to", "receiver1")},
+				},
+			},
+			expectSQL: []string{
+				`INSERT INTO "testschema"."history" (op,table_name,pk,block_num) values ('I','"testschema"."xfer"','{"id":"1234"}',10);` +
+					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
+				`DELETE FROM "testschema"."history" WHERE block_num <= 5;`,
+				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
+				`COMMIT`,
+			},
+		},
+		{
+			name: "insert, then update",
+			events: []event{
+				{
+					blockNum:     10,
+					libNum:       5,
+					tableChanges: []*pbdatabase.TableChange{insertRowMultiplePK("xfer", map[string]string{"id": "1234", "idx": "3"}, "from", "sender1", "to", "receiver1")},
+				},
+				{
+					blockNum: 11,
+					libNum:   6,
+					tableChanges: []*pbdatabase.TableChange{
+						updateRowMultiplePK("xfer", map[string]string{"id": "2345", "idx": "3"}, "from", "sender2", "to", "receiver2"),
+					},
+				},
+			},
+			expectSQL: []string{
+				`INSERT INTO "testschema"."history" (op,table_name,pk,block_num) values ('I','"testschema"."xfer"','{"id":"1234","idx":"3"}',10);` +
+					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
+				`DELETE FROM "testschema"."history" WHERE block_num <= 5;`,
+				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
+				`COMMIT`,
+				`INSERT INTO "testschema"."history" (op,table_name,pk,prev_value,block_num) SELECT 'U','"testschema"."xfer"','{"id":"2345","idx":"3"}',row_to_json("testschema"."xfer"),11 FROM "testschema"."xfer" WHERE "id" = '2345' AND "idx" = '3';` +
+					`UPDATE "testschema"."xfer" SET "from"='sender2', "to"='receiver2' WHERE "id" = '2345' AND "idx" = '3'`,
+				`DELETE FROM "testschema"."history" WHERE block_num <= 6;`,
+				`UPDATE "testschema"."cursors" set cursor = 'LamYQ1PoEJyzLTRd7kdEiKWwLpcyB1tlVArvLBtH', block_num = 11, block_id = '11' WHERE id = '756e75736564';`,
+				`COMMIT`,
+			},
+		},
+
+		{
+			name: "insert, then update, then delete (update disappears)",
+			events: []event{
+				{
+					blockNum:     10,
+					libNum:       5,
+					tableChanges: []*pbdatabase.TableChange{insertRowMultiplePK("xfer", map[string]string{"id": "1234", "idx": "3"}, "from", "sender1", "to", "receiver1")},
+				},
+				{
+					blockNum: 11,
+					libNum:   6,
+					tableChanges: []*pbdatabase.TableChange{
+						updateRowMultiplePK("xfer", map[string]string{"id": "2345", "idx": "3"}, "from", "sender2", "to", "receiver2"),
+						deleteRowMultiplePK("xfer", map[string]string{"id": "2345", "idx": "3"}),
+					},
+				},
+			},
+			expectSQL: []string{
+				`INSERT INTO "testschema"."history" (op,table_name,pk,block_num) values ('I','"testschema"."xfer"','{"id":"1234","idx":"3"}',10);` +
+					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
+				`DELETE FROM "testschema"."history" WHERE block_num <= 5;`,
+				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
+				`COMMIT`,
+				//`INSERT INTO "testschema"."history" (op,table_name,pk,prev_value,block_num) SELECT 'U','"testschema"."xfer"','{"id":"2345","idx":"3"}',row_to_json("testschema"."xfer"),11 FROM "testschema"."xfer" WHERE "id" = '2345' AND "idx" = '3';` +
+				//	`UPDATE "testschema"."xfer" SET "from"='sender2', "to"='receiver2' WHERE "id" = '2345' AND "idx" = '3'`,
+				`INSERT INTO "testschema"."history" (op,table_name,pk,prev_value,block_num) SELECT 'D','"testschema"."xfer"','{"id":"2345","idx":"3"}',row_to_json("testschema"."xfer"),11 FROM "testschema"."xfer" WHERE "id" = '2345' AND "idx" = '3';` +
+					`DELETE FROM "testschema"."xfer" WHERE "id" = '2345' AND "idx" = '3'`,
+				`DELETE FROM "testschema"."history" WHERE block_num <= 6;`,
+				`UPDATE "testschema"."cursors" set cursor = 'LamYQ1PoEJyzLTRd7kdEiKWwLpcyB1tlVArvLBtH', block_num = 11, block_id = '11' WHERE id = '756e75736564';`,
+				`COMMIT`,
+			},
+		},
+
 		{
 			name: "insert two reversible blocks, then UNDO last",
 			events: []event{
@@ -97,20 +185,21 @@ func TestInserts(t *testing.T) {
 				},
 			},
 			expectSQL: []string{
-				`INSERT INTO "testschema"."inserts_history" (table_name, id, block_num) values ('"testschema"."xfer"', '{"id":"1234"}', 10);` +
+				`INSERT INTO "testschema"."history" (op,table_name,pk,block_num) values ('I','"testschema"."xfer"','{"id":"1234"}',10);` +
 					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
-				pruneBelow(5),
+				`DELETE FROM "testschema"."history" WHERE block_num <= 5;`,
 				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
 				`COMMIT`,
-				`INSERT INTO "testschema"."inserts_history" (table_name, id, block_num) values ('"testschema"."xfer"', '{"id":"2345"}', 11);` +
+				`INSERT INTO "testschema"."history" (op,table_name,pk,block_num) values ('I','"testschema"."xfer"','{"id":"2345"}',11);` +
 					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender2','2345','receiver2');`,
-				pruneBelow(5),
+				`DELETE FROM "testschema"."history" WHERE block_num <= 5;`,
 				`UPDATE "testschema"."cursors" set cursor = 'Euaqz6R-ylLG0gbdej7Me6WwLpcyB1tlVArvLxtE', block_num = 11, block_id = '11' WHERE id = '756e75736564';`,
 				`COMMIT`,
-				// UNDO above block 10
-				`DELETE FROM "testschema"."xfer" WHERE "id" = "2345";`,
+				`SELECT (op,table_name,pk,prev_value,block_num) FROM "testschema"."history" WHERE "block_num" > 10 ORDER BY "block_num" DESC`,
+
+				//`DELETE FROM "testschema"."xfer" WHERE "id" = "2345";`, // this mechanism is tested in db.revertOp
+				`DELETE FROM "testschema"."history" WHERE "block_num" > 10;`,
 				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
-				pruneAbove(10),
 				`COMMIT`,
 			},
 		},
@@ -203,9 +292,45 @@ func insertRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbda
 		PrimaryKey: &pbdatabase.TableChange_Pk{
 			Pk: pk,
 		},
-		Ordinal:   0,
 		Operation: pbdatabase.TableChange_CREATE,
 		Fields:    getFields(fieldsAndValues...),
+	}
+}
+
+func insertRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...string) *pbdatabase.TableChange {
+	return &pbdatabase.TableChange{
+		Table: table,
+		PrimaryKey: &pbdatabase.TableChange_CompositePk{
+			CompositePk: &pbdatabase.CompositePrimaryKey{
+				Keys: pk,
+			},
+		},
+		Operation: pbdatabase.TableChange_CREATE,
+		Fields:    getFields(fieldsAndValues...),
+	}
+}
+
+func updateRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...string) *pbdatabase.TableChange {
+	return &pbdatabase.TableChange{
+		Table: table,
+		PrimaryKey: &pbdatabase.TableChange_CompositePk{
+			CompositePk: &pbdatabase.CompositePrimaryKey{
+				Keys: pk,
+			},
+		},
+		Operation: pbdatabase.TableChange_UPDATE,
+		Fields:    getFields(fieldsAndValues...),
+	}
+}
+func deleteRowMultiplePK(table string, pk map[string]string) *pbdatabase.TableChange {
+	return &pbdatabase.TableChange{
+		Table: table,
+		PrimaryKey: &pbdatabase.TableChange_CompositePk{
+			CompositePk: &pbdatabase.CompositePrimaryKey{
+				Keys: pk,
+			},
+		},
+		Operation: pbdatabase.TableChange_DELETE,
 	}
 }
 

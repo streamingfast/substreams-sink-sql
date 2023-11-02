@@ -99,32 +99,19 @@ func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 	`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
 }
 
-func (d clickhouseDialect) GetCreateSubstreamsHistoryTableQuery(schema string) string {
+func (d clickhouseDialect) GetCreateHistoryQuery(schema string) string {
 	out := fmt.Sprintf(cli.Dedent(`
 		create table if not exists %s.%s
 		(
+            id              SERIAL PRIMARY KEY,
+            op              char,
             table_name      text,
-			id              text,
-			block_num       bigint
-		) Engine = ReplacingMergeTree() ORDER BY block_num;
-		create table if not exists %s.%s
-		(
-            table_name      text,
-			id              text,
-            prev_value      text,
-			block_num       bigint
-		) Engine = ReplacingMergeTree() ORDER BY block_num;
-		create table if not exists %s.%s
-		(
-            table_name      text,
-			id              text,
+			pk              text,
             prev_value      text,
 			block_num       bigint
 		) Engine = ReplacingMergeTree() ORDER BY block_num;
 		`),
-		EscapeIdentifier(schema), EscapeIdentifier("inserts_history"),
-		EscapeIdentifier(schema), EscapeIdentifier("updates_history"),
-		EscapeIdentifier(schema), EscapeIdentifier("deletes_history"),
+		EscapeIdentifier(schema), EscapeIdentifier("history"),
 	)
 	return out
 }

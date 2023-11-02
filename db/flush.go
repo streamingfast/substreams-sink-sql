@@ -46,7 +46,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	return rowFlushedCount, nil
 }
 
-func (l *Loader) Revert(ctx context.Context, cursor *sink.Cursor, lastFinalBlock uint64) error {
+func (l *Loader) Revert(ctx context.Context, outputModuleHash string, cursor *sink.Cursor, lastValidBlock uint64) error {
 	tx, err := l.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to being db transaction: %w", err)
@@ -59,7 +59,20 @@ func (l *Loader) Revert(ctx context.Context, cursor *sink.Cursor, lastFinalBlock
 		}
 	}()
 
-	return l.getDialect().Revert(tx, ctx, l, lastFinalBlock)
+	if err := l.getDialect().Revert(tx, ctx, l, lastValidBlock); err != nil {
+		return err
+	}
+
+	if err := l.UpdateCursor(ctx, tx, outputModuleHash, cursor); err != nil {
+		return fmt.Errorf("update cursor after revert: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit db transaction: %w", err)
+	}
+
+	l.logger.Debug("reverted changes to database", zap.Uint64("last_valid_block", lastValidBlock))
+	return nil
 }
 
 func (l *Loader) reset() {

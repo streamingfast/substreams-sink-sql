@@ -281,25 +281,29 @@ func (l *Loader) SetupFromBytes(ctx context.Context, schemaBytes []byte, withPos
 		return fmt.Errorf("setup cursor table: %w", err)
 	}
 
+	if err := l.setupHistoryTable(ctx); err != nil {
+		return fmt.Errorf("setup history table: %w", err)
+	}
+
 	return nil
 }
 
 func (l *Loader) setupCursorTable(ctx context.Context, withPostgraphile bool) error {
 	_, err := l.ExecContext(ctx, l.GetCreateCursorsTableSQL(withPostgraphile))
+	return err
+}
 
-	if err != nil {
-		return fmt.Errorf("creating cursor table: %w", err)
-	}
-
-	return nil
+func (l *Loader) setupHistoryTable(ctx context.Context) error {
+	_, err := l.ExecContext(ctx, l.GetCreateHistoryTableSQL())
+	return err
 }
 
 func (l *Loader) GetCreateCursorsTableSQL(withPostgraphile bool) string {
 	return l.getDialect().GetCreateCursorQuery(l.schema, withPostgraphile)
 }
 
-func (l *Loader) GetCreateSubstreamsHistoryTableSQL() string {
-	return l.getDialect().GetCreateSubstreamsHistoryTableQuery(l.schema)
+func (l *Loader) GetCreateHistoryTableSQL() string {
+	return l.getDialect().GetCreateHistoryQuery(l.schema)
 }
 
 func (l *Loader) getDialect() dialect {
