@@ -17,6 +17,11 @@ import (
 
 type postgresDialect struct{}
 
+func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
+	//	query := ""
+	return nil
+}
+
 func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
 	var rowCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
@@ -278,6 +283,7 @@ func (d *postgresDialect) prepareColValues(table *TableInfo, colValues map[strin
 		}
 
 		values[i] = normalizedValue
+		columns[i] = columnInfo.escapedName // escape the column name
 	}
 	return
 }

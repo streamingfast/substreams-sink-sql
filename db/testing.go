@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/streamingfast/logging"
 	"go.uber.org/zap"
@@ -53,6 +54,7 @@ func mustNewTableInfo(schema, name string, pkList []string, columnsByName map[st
 
 type TestTx struct {
 	queries []string
+	next    []*sql.Rows
 }
 
 func (t *TestTx) Rollback() error {
@@ -72,6 +74,20 @@ func (t *TestTx) ExecContext(ctx context.Context, query string, args ...any) (sq
 
 func (t *TestTx) Results() []string {
 	return t.queries
+}
+
+func (t *TestTx) AppendResp(in *sql.Rows) {
+	t.next = append(t.next, in)
+
+}
+
+func (t *TestTx) QueryContext(ctx context.Context, query string, args ...any) (out *sql.Rows, err error) {
+	if len(t.next) == 0 {
+		return nil, fmt.Errorf("testTx queried but no responses were set")
+	}
+
+	out, t.next = t.next[0], t.next[1:]
+	return out, nil
 }
 
 type testResult struct{}

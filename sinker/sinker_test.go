@@ -20,14 +20,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var T = true
-var flushEveryBlock = &T
-
-func pruneQuery(blockNum uint64) string {
-	return fmt.Sprintf(`DELETE FROM "testschema"."inserts_history" WHERE block_num <= %d;DELETE FROM "testschema"."updates_history" WHERE block_num <= %d;DELETE FROM "testschema"."deletes_history" WHERE block_num <= %d;`,
-		blockNum, blockNum, blockNum)
-}
-
 func TestInserts(t *testing.T) {
 
 	logger, tracer := logging.ApplicationLogger("test", "test")
@@ -36,7 +28,7 @@ func TestInserts(t *testing.T) {
 		blockNum     uint64
 		libNum       uint64
 		tableChanges []*pbdatabase.TableChange
-		// undoUpTo uint64
+		undoSignal   bool
 	}
 
 	tests := []struct {
@@ -54,8 +46,8 @@ func TestInserts(t *testing.T) {
 				},
 			},
 			expectSQL: []string{
-				`INSERT INTO "testschema"."xfer" (from,id,to) VALUES ('sender1','1234','receiver1');`,
-				pruneQuery(10),
+				`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
+				pruneBelow(10),
 				`UPDATE "testschema"."cursors" set cursor = 'bN7dsAhRyo44yl_ykkjA36WwLpc_DFtvXwrlIBBBj4r2', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
 				`COMMIT`,
 			},
@@ -75,18 +67,18 @@ func TestInserts(t *testing.T) {
 				},
 			},
 			expectSQL: []string{
-				`INSERT INTO "testschema"."xfer" (from,id,to) VALUES ('sender1','1234','receiver1');`,
-				pruneQuery(10),
+				`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
+				pruneBelow(10),
 				`UPDATE "testschema"."cursors" set cursor = 'bN7dsAhRyo44yl_ykkjA36WwLpc_DFtvXwrlIBBBj4r2', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
 				`COMMIT`,
-				`INSERT INTO "testschema"."xfer" (from,id,to) VALUES ('sender2','2345','receiver2');`,
-				pruneQuery(11),
+				`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender2','2345','receiver2');`,
+				pruneBelow(11),
 				`UPDATE "testschema"."cursors" set cursor = 'dR5-m-1v1TQvlVRfIM9SXaWwLpc_DFtuXwrkIBBAj4r3', block_num = 11, block_id = '11' WHERE id = '756e75736564';`,
 				`COMMIT`,
 			},
 		},
 		{
-			name: "insert two reversible blocks",
+			name: "insert two reversible blocks, then UNDO last",
 			events: []event{
 				{
 					blockNum:     10,
@@ -98,17 +90,27 @@ func TestInserts(t *testing.T) {
 					libNum:       5,
 					tableChanges: []*pbdatabase.TableChange{insertRowSinglePK("xfer", "2345", "from", "sender2", "to", "receiver2")},
 				},
+				{
+					blockNum:   10, // undo everything above 10
+					libNum:     5,
+					undoSignal: true,
+				},
 			},
 			expectSQL: []string{
 				`INSERT INTO "testschema"."inserts_history" (table_name, id, block_num) values ('"testschema"."xfer"', '{"id":"1234"}', 10);` +
-					`INSERT INTO "testschema"."xfer" (from,id,to) VALUES ('sender1','1234','receiver1');`,
-				pruneQuery(5),
+					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender1','1234','receiver1');`,
+				pruneBelow(5),
 				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
 				`COMMIT`,
 				`INSERT INTO "testschema"."inserts_history" (table_name, id, block_num) values ('"testschema"."xfer"', '{"id":"2345"}', 11);` +
-					`INSERT INTO "testschema"."xfer" (from,id,to) VALUES ('sender2','2345','receiver2');`,
-				pruneQuery(5),
+					`INSERT INTO "testschema"."xfer" ("from","id","to") VALUES ('sender2','2345','receiver2');`,
+				pruneBelow(5),
 				`UPDATE "testschema"."cursors" set cursor = 'Euaqz6R-ylLG0gbdej7Me6WwLpcyB1tlVArvLxtE', block_num = 11, block_id = '11' WHERE id = '756e75736564';`,
+				`COMMIT`,
+				// UNDO above block 10
+				`DELETE FROM "testschema"."xfer" WHERE "id" = "2345";`,
+				`UPDATE "testschema"."cursors" set cursor = 'i4tY9gOcWnhKoGjRCl2VUKWwLpcyB1plVAvvLxtE', block_num = 10, block_id = '10' WHERE id = '756e75736564';`,
+				pruneAbove(10),
 				`COMMIT`,
 			},
 		},
@@ -127,6 +129,16 @@ func TestInserts(t *testing.T) {
 			sinker, _ := New(s, l, logger, nil)
 
 			for _, evt := range test.events {
+				if evt.undoSignal {
+					cursor := simpleCursor(evt.blockNum, evt.libNum)
+					err := sinker.HandleBlockUndoSignal(ctx, &pbsubstreamsrpc.BlockUndoSignal{
+						LastValidBlock:  &pbsubstreams.BlockRef{Id: fmt.Sprintf("%d", evt.blockNum), Number: evt.blockNum},
+						LastValidCursor: cursor,
+					}, sink.MustNewCursor(cursor))
+					require.NoError(t, err)
+					continue
+				}
+
 				err := sinker.HandleBlockScopedData(
 					ctx,
 					blockScopedData("db_out", evt.tableChanges, evt.blockNum, evt.libNum),
@@ -143,6 +155,9 @@ func TestInserts(t *testing.T) {
 
 }
 
+var T = true
+var flushEveryBlock = &T
+
 var testPackage = &pbsubstreams.Package{
 	Modules: &pbsubstreams.Modules{
 		Modules: []*pbsubstreams.Module{
@@ -158,6 +173,16 @@ var testPackage = &pbsubstreams.Package{
 }
 
 var testClientConfig = &client.SubstreamsClientConfig{}
+
+func pruneAbove(blockNum uint64) string {
+	return fmt.Sprintf(`DELETE FROM "testschema"."inserts_history" WHERE block_num > %d;DELETE FROM "testschema"."updates_history" WHERE block_num > %d;DELETE FROM "testschema"."deletes_history" WHERE block_num > %d;`,
+		blockNum, blockNum, blockNum)
+}
+
+func pruneBelow(blockNum uint64) string {
+	return fmt.Sprintf(`DELETE FROM "testschema"."inserts_history" WHERE block_num <= %d;DELETE FROM "testschema"."updates_history" WHERE block_num <= %d;DELETE FROM "testschema"."deletes_history" WHERE block_num <= %d;`,
+		blockNum, blockNum, blockNum)
+}
 
 func getFields(fieldsAndValues ...string) (out []*pbdatabase.Field) {
 	if len(fieldsAndValues)%2 != 0 {

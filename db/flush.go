@@ -46,6 +46,22 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	return rowFlushedCount, nil
 }
 
+func (l *Loader) Revert(ctx context.Context, cursor *sink.Cursor, lastFinalBlock uint64) error {
+	tx, err := l.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to being db transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			if err := tx.Rollback(); err != nil {
+				l.logger.Warn("failed to rollback transaction", zap.Error(err))
+			}
+		}
+	}()
+
+	return l.getDialect().Revert(tx, ctx, l, lastFinalBlock)
+}
+
 func (l *Loader) reset() {
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		l.entries.Set(entriesPair.Key, NewOrderedMap[string, *Operation]())

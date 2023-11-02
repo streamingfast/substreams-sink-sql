@@ -81,6 +81,11 @@ func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputMo
 	return entryCount, nil
 }
 
+func (d clickhouseDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
+	// TODO implement revert
+	return nil
+}
+
 func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
 	_ = withPostgraphile // TODO: see if this can work
 	return fmt.Sprintf(cli.Dedent(`

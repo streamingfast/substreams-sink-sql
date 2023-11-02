@@ -98,6 +98,7 @@ type Tx interface {
 	Rollback() error
 	Commit() error
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
 func (l *Loader) Begin() (Tx, error) {
