@@ -22,20 +22,31 @@ message Service {
   }
 
   Engine engine = 7;
+
+  RESTFrontend rest_frontend = 8;
 }
 
+// https://www.getdbt.com/product/what-is-dbt
 message DBTConfig {
    bytes files = 1  [ (sf.substreams.options).zip_from_folder = true ];
 }
 
+// https://hasura.io/docs/latest/index/
 message HasuraFrontend {
     bool enabled = 1;
 }
 
+// https://www.graphile.org/postgraphile/
 message PostgraphileFrontend {
     bool enabled = 1;
 }
 
+// https://github.com/sosedoff/pgweb
 message PGWebFrontend {
+    bool enabled = 1;
+}
+
+// https://github.com/semiotic-ai/sql-wrapper
+message RESTFrontend {
     bool enabled = 1;
 }
