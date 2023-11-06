@@ -97,7 +97,7 @@ func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 	`), EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE))
 }
 
-func (d clickhouseDialect) GetCreateHistoryQuery(schema string) string {
+func (d clickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
 	panic("clickhouse does not support reorg management")
 }
 

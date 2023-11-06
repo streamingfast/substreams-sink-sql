@@ -287,7 +287,7 @@ func (l *Loader) Setup(ctx context.Context, schemaBytes []byte, withPostgraphile
 		return fmt.Errorf("setup cursor table: %w", err)
 	}
 
-	if err := l.setupHistoryTable(ctx); err != nil {
+	if err := l.setupHistoryTable(ctx, withPostgraphile); err != nil {
 		return fmt.Errorf("setup history table: %w", err)
 	}
 
@@ -300,11 +300,11 @@ func (l *Loader) setupCursorTable(ctx context.Context, withPostgraphile bool) er
 	return err
 }
 
-func (l *Loader) setupHistoryTable(ctx context.Context) error {
+func (l *Loader) setupHistoryTable(ctx context.Context, withPostgraphile bool) error {
 	if l.getDialect().OnlyInserts() {
 		return nil
 	}
-	query := l.getDialect().GetCreateHistoryQuery(l.schema)
+	query := l.getDialect().GetCreateHistoryQuery(l.schema, withPostgraphile)
 	_, err := l.ExecContext(ctx, query)
 	return err
 }

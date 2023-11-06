@@ -189,7 +189,7 @@ func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bo
 	return out
 }
 
-func (d postgresDialect) GetCreateHistoryQuery(schema string) string {
+func (d postgresDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
 	out := fmt.Sprintf(cli.Dedent(`
 		create table if not exists %s
 		(
@@ -203,6 +203,10 @@ func (d postgresDialect) GetCreateHistoryQuery(schema string) string {
 		`),
 		d.historyTable(schema),
 	)
+	if withPostgraphile {
+		out += fmt.Sprintf("COMMENT ON TABLE %s.%s IS E'@omit';",
+			EscapeIdentifier(schema), EscapeIdentifier(HISTORY_TABLE))
+	}
 	return out
 }
 
