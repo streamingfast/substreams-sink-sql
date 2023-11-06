@@ -125,7 +125,7 @@ func TestRevertOp(t *testing.T) {
 				pk:         `{"id":"2345"}`,
 				prev_value: `{"id":"2345","sender":"0xdead","receiver":"0xbeef"}`,
 			},
-			expect: `INSERT INTO "testschema"."xfer" SELECT * FROM json_populate_record(null:"testschema"."xfer",` +
+			expect: `INSERT INTO "testschema"."xfer" SELECT * FROM json_populate_record(null::"testschema"."xfer",` +
 				`'{"id":"2345","sender":"0xdead","receiver":"0xbeef"}');`,
 		},
 		{
@@ -136,7 +136,7 @@ func TestRevertOp(t *testing.T) {
 				pk:         `{"id":"2345"}`,
 				prev_value: `{"id":"2345","sender":"0xdead","receiver":"0xbeef"}`,
 			},
-			expect: `UPDATE "testschema"."xfer" SET("id","receiver","sender")=((SELECT "id","receiver","sender" FROM json_populate_record(null:"testschema"."xfer",` +
+			expect: `UPDATE "testschema"."xfer" SET("id","receiver","sender")=((SELECT "id","receiver","sender" FROM json_populate_record(null::"testschema"."xfer",` +
 				`'{"id":"2345","sender":"0xdead","receiver":"0xbeef"}'))) WHERE "id" = '2345';`,
 		},
 	}

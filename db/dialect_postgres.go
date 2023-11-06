@@ -254,9 +254,10 @@ func (d postgresDialect) saveDelete(schema string, escapedTableName string, prim
 }
 
 func (d postgresDialect) saveRow(op, schema, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+	schemaAndTable := fmt.Sprintf("%s.%s", EscapeIdentifier(schema), escapedTableName)
 	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,prev_value,block_num) SELECT %s,%s,%s,row_to_json(%s),%d FROM %s.%s WHERE %s;`,
 		d.historyTable(schema),
-		escapeStringValue(op), escapeStringValue(escapedTableName), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTableName, blockNum,
+		escapeStringValue(op), escapeStringValue(schemaAndTable), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTableName, blockNum,
 		EscapeIdentifier(schema), escapedTableName,
 		getPrimaryKeyWhereClause(primaryKey),
 	)
