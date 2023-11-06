@@ -242,19 +242,19 @@ func (d postgresDialect) saveInsert(schema string, table string, primaryKey map[
 	)
 }
 
-func (d postgresDialect) saveUpdate(schema string, escapedTable string, primaryKey map[string]string, blockNum uint64) string {
-	return d.saveRow("U", schema, escapedTable, primaryKey, blockNum)
+func (d postgresDialect) saveUpdate(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow("U", schema, escapedTableName, primaryKey, blockNum)
 }
 
-func (d postgresDialect) saveDelete(schema string, escapedTable string, primaryKey map[string]string, blockNum uint64) string {
-	return d.saveRow("D", schema, escapedTable, primaryKey, blockNum)
+func (d postgresDialect) saveDelete(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow("D", schema, escapedTableName, primaryKey, blockNum)
 }
 
-func (d postgresDialect) saveRow(op, schema, escapedTable string, primaryKey map[string]string, blockNum uint64) string {
-	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,prev_value,block_num) SELECT %s,%s,%s,row_to_json(%s),%d FROM %s WHERE %s;`,
+func (d postgresDialect) saveRow(op, schema, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,prev_value,block_num) SELECT %s,%s,%s,row_to_json(%s),%d FROM %s.%s WHERE %s;`,
 		d.historyTable(schema),
-		escapeStringValue(op), escapeStringValue(escapedTable), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTable, blockNum,
-		escapedTable,
+		escapeStringValue(op), escapeStringValue(escapedTableName), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTableName, blockNum,
+		EscapeIdentifier(schema), escapedTableName,
 		getPrimaryKeyWhereClause(primaryKey),
 	)
 
@@ -304,7 +304,7 @@ func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string,
 		)
 
 		if o.reversibleBlockNum != nil {
-			return d.saveUpdate(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + updateQuery, nil
+			return d.saveUpdate(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + updateQuery, nil
 		}
 		return updateQuery, nil
 
@@ -315,7 +315,7 @@ func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string,
 			primaryKeyWhereClause,
 		)
 		if o.reversibleBlockNum != nil {
-			return d.saveDelete(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + deleteQuery, nil
+			return d.saveDelete(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + deleteQuery, nil
 		}
 		return deleteQuery, nil
 
