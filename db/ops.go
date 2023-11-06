@@ -81,13 +81,18 @@ func createRowUniqueID(m map[string]string) string {
 func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, error) {
 	primaryKeyColumns := l.tables[tableName].primaryColumns
 
-	// If there is exactly one primary key column, we assume that we should populate this column with the id of the "primary_key" field.
-	// If there is no primary key or a composite key, we simply ignore the primary_key input as we don't know where to write it.
-	if len(primaryKeyColumns) != 1 {
-		return map[string]string{"": pk}, nil
+	switch len(primaryKeyColumns) {
+	case 0:
+		return nil, fmt.Errorf("substreams sent a single primary key, but our sql table has none. This is unsupported.")
+	case 1:
+		return map[string]string{primaryKeyColumns[0].name: pk}, nil
 	}
 
-	return map[string]string{primaryKeyColumns[0].name: pk}, nil
+	cols := make([]string, len(primaryKeyColumns))
+	for i := range primaryKeyColumns {
+		cols[i] = primaryKeyColumns[i].name
+	}
+	return nil, fmt.Errorf("substreams sent a single primary key, but our sql table has a composite primary key (columns: %s). This is unsupported.", strings.Join(cols, ","))
 }
 
 // Update a row in the DB, it is assumed the table exists, you can do a

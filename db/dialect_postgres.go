@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -19,7 +20,7 @@ import (
 type postgresDialect struct{}
 
 func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
-	query := fmt.Sprintf(`SELECT (op,table_name,pk,prev_value,block_num) FROM %s WHERE "block_num" > %d ORDER BY "block_num" DESC`,
+	query := fmt.Sprintf(`SELECT op,table_name,pk,prev_value,block_num FROM %s WHERE "block_num" > %d ORDER BY "block_num" DESC`,
 		d.historyTable(l.schema),
 		lastValidFinalBlock,
 	)
@@ -29,22 +30,26 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 		return err
 	}
 
+	l.logger.Info("reverting forked block block(s)", zap.Uint64("last_valid_final_block", lastValidFinalBlock))
 	if rows != nil { // rows will be nil with no error only in testing scenarios
 		defer rows.Close()
 		for rows.Next() {
 			var op string
 			var table_name string
 			var pk string
-			var prev_value string
+			var prev_value_nullable sql.NullString
 			var block_num uint64
-			if err := rows.Scan(&op, &table_name, &pk, &prev_value, &block_num); err != nil {
+			if err := rows.Scan(&op, &table_name, &pk, &prev_value_nullable, &block_num); err != nil {
 				return err
 			}
-			if err := d.revertOp(tx, ctx, op, l.schema, table_name, pk, prev_value, block_num); err != nil {
+			l.logger.Debug("reverting", zap.String("operation", op), zap.String("table_name", table_name), zap.String("pk", pk), zap.Uint64("block_num", block_num))
+			prev_value := prev_value_nullable.String
+
+			if err := d.revertOp(tx, ctx, op, table_name, pk, prev_value, block_num); err != nil {
 				return err
 			}
 		}
-		if rows.Err() != nil {
+		if err := rows.Err(); err != nil {
 			return err
 		}
 	}
@@ -92,7 +97,7 @@ func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 	return rowCount, nil
 }
 
-func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, schema, table_name, pk, prev_value string, block_num uint64) error {
+func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_name, pk, prev_value string, block_num uint64) error {
 
 	pkmap := make(map[string]string)
 	if err := json.Unmarshal([]byte(pk), &pkmap); err != nil {
@@ -100,18 +105,17 @@ func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, schema, table_
 	}
 	switch op {
 	case "I":
-		query := fmt.Sprintf(`DELETE FROM %s.%s WHERE %s;`,
-			EscapeIdentifier(schema),
-			EscapeIdentifier(table_name),
+		query := fmt.Sprintf(`DELETE FROM %s WHERE %s;`,
+			escaped_table_name,
 			getPrimaryKeyWhereClause(pkmap),
 		)
 		if _, err := tx.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("executing revert query %q: %w", query, err)
 		}
 	case "D":
-		query := fmt.Sprintf(`INSERT INTO %s.%s SELECT * FROM json_populate_record(null:%s.%s,%s);`,
-			EscapeIdentifier(schema), EscapeIdentifier(table_name),
-			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+		query := fmt.Sprintf(`INSERT INTO %s SELECT * FROM json_populate_record(null:%s,%s);`,
+			escaped_table_name,
+			escaped_table_name,
 			escapeStringValue(prev_value),
 		)
 		if _, err := tx.ExecContext(ctx, query); err != nil {
@@ -124,11 +128,11 @@ func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, schema, table_
 			return err
 		}
 
-		query := fmt.Sprintf(`UPDATE %s.%s SET(%s)=((SELECT %s FROM json_populate_record(null:%s.%s,%s))) WHERE %s;`,
-			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+		query := fmt.Sprintf(`UPDATE %s SET(%s)=((SELECT %s FROM json_populate_record(null:%s,%s))) WHERE %s;`,
+			escaped_table_name,
 			columns,
 			columns,
-			EscapeIdentifier(schema), EscapeIdentifier(table_name),
+			escaped_table_name,
 			escapeStringValue(prev_value),
 			getPrimaryKeyWhereClause(pkmap),
 		)
@@ -174,10 +178,10 @@ func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bo
 			block_num  bigint,
 			block_id   text
 		);
-		`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+		`), EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE))
 	if withPostgraphile {
 		out += fmt.Sprintf("COMMENT ON TABLE %s.%s IS E'@omit';",
-			EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+			EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE))
 	}
 	return out
 }
@@ -225,7 +229,7 @@ func (d postgresDialect) OnlyInserts() bool {
 }
 
 func (d postgresDialect) historyTable(schema string) string {
-	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("history"))
+	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("substreams_history"))
 }
 
 func (d postgresDialect) saveInsert(schema string, table string, primaryKey map[string]string, blockNum uint64) string {

@@ -76,14 +76,12 @@ func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputMo
 		}
 		entryCount += entries.Len()
 	}
-	// TODO: implement pruning
 
 	return entryCount, nil
 }
 
 func (d clickhouseDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
-	// TODO implement revert
-	return nil
+	return fmt.Errorf("clickhouse driver does not support reorg management.")
 }
 
 func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
@@ -96,24 +94,11 @@ func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 		block_num  Int64,
 		block_id   String
 	) Engine = ReplacingMergeTree() ORDER BY id;
-	`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+	`), EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE))
 }
 
 func (d clickhouseDialect) GetCreateHistoryQuery(schema string) string {
-	out := fmt.Sprintf(cli.Dedent(`
-		create table if not exists %s.%s
-		(
-            id              SERIAL PRIMARY KEY,
-            op              char,
-            table_name      text,
-			pk              text,
-            prev_value      text,
-			block_num       bigint
-		) Engine = ReplacingMergeTree() ORDER BY block_num;
-		`),
-		EscapeIdentifier(schema), EscapeIdentifier("history"),
-	)
-	return out
+	panic("clickhouse does not support reorg management")
 }
 
 func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {

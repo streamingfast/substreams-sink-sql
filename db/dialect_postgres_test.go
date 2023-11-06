@@ -97,7 +97,6 @@ func TestRevertOp(t *testing.T) {
 
 	type row struct {
 		op         string
-		schema     string
 		table_name string
 		pk         string
 		prev_value string
@@ -112,8 +111,7 @@ func TestRevertOp(t *testing.T) {
 			name: "rollback insert row",
 			row: row{
 				op:         "I",
-				schema:     "testschema",
-				table_name: "xfer",
+				table_name: `"testschema"."xfer"`,
 				pk:         `{"id":"2345"}`,
 				prev_value: "", // unused
 			},
@@ -123,8 +121,7 @@ func TestRevertOp(t *testing.T) {
 			name: "rollback delete row",
 			row: row{
 				op:         "D",
-				schema:     "testschema",
-				table_name: "xfer",
+				table_name: `"testschema"."xfer"`,
 				pk:         `{"id":"2345"}`,
 				prev_value: `{"id":"2345","sender":"0xdead","receiver":"0xbeef"}`,
 			},
@@ -135,8 +132,7 @@ func TestRevertOp(t *testing.T) {
 			name: "rollback update row",
 			row: row{
 				op:         "U",
-				schema:     "testschema",
-				table_name: "xfer",
+				table_name: `"testschema"."xfer"`,
 				pk:         `{"id":"2345"}`,
 				prev_value: `{"id":"2345","sender":"0xdead","receiver":"0xbeef"}`,
 			},
@@ -151,7 +147,7 @@ func TestRevertOp(t *testing.T) {
 			pd := postgresDialect{}
 
 			row := test.row
-			err := pd.revertOp(tx, ctx, row.op, row.schema, row.table_name, row.pk, row.prev_value, 9999)
+			err := pd.revertOp(tx, ctx, row.op, row.table_name, row.pk, row.prev_value, 9999)
 			require.NoError(t, err)
 			assert.Equal(t, []string{test.expect}, tx.Results())
 		})

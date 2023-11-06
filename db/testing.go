@@ -15,14 +15,14 @@ func NewTestLoader(
 	tables map[string]*TableInfo,
 ) (*Loader, *TestTx) {
 
-	loader, err := NewLoader("psql://x:5432/x", 0, OnModuleHashMismatchIgnore, zlog, tracer)
+	loader, err := NewLoader("psql://x:5432/x", 0, OnModuleHashMismatchIgnore, true, zlog, tracer)
 	if err != nil {
 		panic(err)
 	}
 	loader.testTx = &TestTx{}
 	loader.tables = tables
 	loader.schema = schema
-	loader.cursorTable = tables["cursors"]
+	loader.cursorTable = tables[CURSORS_TABLE]
 	return loader, loader.testTx
 
 }
@@ -34,7 +34,7 @@ func TestTables(schema string) map[string]*TableInfo {
 			"from": NewColumnInfo("from", "text", ""),
 			"to":   NewColumnInfo("to", "text", ""),
 		}),
-		"cursors": mustNewTableInfo(schema, "cursors", []string{"id"}, map[string]*ColumnInfo{
+		CURSORS_TABLE: mustNewTableInfo(schema, CURSORS_TABLE, []string{"id"}, map[string]*ColumnInfo{
 			"block_num": NewColumnInfo("id", "int64", ""),
 			"block_id":  NewColumnInfo("from", "text", ""),
 			"cursor":    NewColumnInfo("cursor", "text", ""),

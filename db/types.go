@@ -17,11 +17,11 @@ import (
 type OnModuleHashMismatch uint
 
 type TableInfo struct {
-	schema        string
-	schemaEscaped string
-	name          string
-	nameEscaped   string
-	columnsByName map[string]*ColumnInfo
+	schema         string
+	schemaEscaped  string
+	name           string
+	nameEscaped    string
+	columnsByName  map[string]*ColumnInfo
 	primaryColumns []*ColumnInfo
 
 	// Identifier is equivalent to 'escape(<schema>).escape(<name>)' but pre-computed
@@ -34,7 +34,7 @@ func NewTableInfo(schema, name string, pkList []string, columnsByName map[string
 	nameEscaped := EscapeIdentifier(name)
 	primaryColumns := make([]*ColumnInfo, len(pkList))
 
-	for i, primaryKeyColumnName := range(pkList) {
+	for i, primaryKeyColumnName := range pkList {
 		primaryColumn, found := columnsByName[primaryKeyColumnName]
 		if !found {
 			return nil, fmt.Errorf("primary key column %q not found", primaryKeyColumnName)
@@ -42,15 +42,18 @@ func NewTableInfo(schema, name string, pkList []string, columnsByName map[string
 		primaryColumns[i] = primaryColumn
 
 	}
+	if len(primaryColumns) == 0 {
+		return nil, fmt.Errorf("sql sink requires a primary key in every table, none was found in table %s.%s", schema, name)
+	}
 
 	return &TableInfo{
-		schema:        schema,
-		schemaEscaped: schemaEscaped,
-		name:          name,
-		nameEscaped:   nameEscaped,
-		identifier:    schemaEscaped + "." + nameEscaped,
+		schema:         schema,
+		schemaEscaped:  schemaEscaped,
+		name:           name,
+		nameEscaped:    nameEscaped,
+		identifier:     schemaEscaped + "." + nameEscaped,
 		primaryColumns: primaryColumns,
-		columnsByName: columnsByName,
+		columnsByName:  columnsByName,
 	}, nil
 }
 

@@ -44,12 +44,12 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("extract sink config: %w", err)
 	}
 
-	dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, zlog, tracer)
+	dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, true, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("new psql loader: %w", err)
 	}
 
-	err = dbLoader.SetupFromBytes(ctx, []byte(sinkConfig.Schema), sflags.MustGetBool(cmd, "postgraphile"))
+	err = dbLoader.Setup(ctx, []byte(sinkConfig.Schema), sflags.MustGetBool(cmd, "postgraphile"))
 	if err != nil {
 		if isDuplicateTableError(err) && ignoreDuplicateTableErrors {
 			zlog.Info("received duplicate table error, script dit not executed succesfully completed")
