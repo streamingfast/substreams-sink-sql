@@ -40,17 +40,17 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 			var prev_value_nullable sql.NullString
 			var block_num uint64
 			if err := rows.Scan(&op, &table_name, &pk, &prev_value_nullable, &block_num); err != nil {
-				return err
+				return fmt.Errorf("scanning row: %w", err)
 			}
 			l.logger.Debug("reverting", zap.String("operation", op), zap.String("table_name", table_name), zap.String("pk", pk), zap.Uint64("block_num", block_num))
 			prev_value := prev_value_nullable.String
 
 			if err := d.revertOp(tx, ctx, op, table_name, pk, prev_value, block_num); err != nil {
-				return err
+				return fmt.Errorf("revertOp: %w", err)
 			}
 		}
 		if err := rows.Err(); err != nil {
-			return err
+			return fmt.Errorf("iterating on rows from query %q: %w", query, err)
 		}
 	}
 	pruneHistory := fmt.Sprintf(`DELETE FROM %s WHERE "block_num" > %d;`,
@@ -59,7 +59,10 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 	)
 
 	_, err = tx.ExecContext(ctx, pruneHistory)
-	return err
+	if err != nil {
+		return fmt.Errorf("executing pruneHistory: %w", err)
+	}
+	return nil
 }
 
 func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
@@ -101,7 +104,7 @@ func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_
 
 	pkmap := make(map[string]string)
 	if err := json.Unmarshal([]byte(pk), &pkmap); err != nil {
-		return err
+		return fmt.Errorf("revertOp: unmarshalling %q: %w", pk, err)
 	}
 	switch op {
 	case "I":
@@ -113,7 +116,7 @@ func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_
 			return fmt.Errorf("executing revert query %q: %w", query, err)
 		}
 	case "D":
-		query := fmt.Sprintf(`INSERT INTO %s SELECT * FROM json_populate_record(null:%s,%s);`,
+		query := fmt.Sprintf(`INSERT INTO %s SELECT * FROM json_populate_record(null::%s,%s);`,
 			escaped_table_name,
 			escaped_table_name,
 			escapeStringValue(prev_value),
@@ -128,7 +131,7 @@ func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_
 			return err
 		}
 
-		query := fmt.Sprintf(`UPDATE %s SET(%s)=((SELECT %s FROM json_populate_record(null:%s,%s))) WHERE %s;`,
+		query := fmt.Sprintf(`UPDATE %s SET(%s)=((SELECT %s FROM json_populate_record(null::%s,%s))) WHERE %s;`,
 			escaped_table_name,
 			columns,
 			columns,
@@ -146,9 +149,9 @@ func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_
 }
 
 func sqlColumnNamesFromJSON(in string) (string, error) {
-	valueMap := make(map[string]string)
+	valueMap := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(in), &valueMap); err != nil {
-		return "", err
+		return "", fmt.Errorf("unmarshalling %q into valueMap: %w", in, err)
 	}
 	escapedNames := make([]string, len(valueMap))
 	i := 0
