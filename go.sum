@@ -1167,8 +1167,8 @@ github.com/stefanberger/go-pkcs11uri v0.0.0-20201008174630-78d3cae3a980/go.mod h
 github.com/stoewer/go-strcase v1.2.0/go.mod h1:IBiWB2sKIp3wVVQ3Y035++gc+knqhUQag1KpM8ahLw8=
 github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680 h1:fGJnUx0shX9Y312QOlz+/+yLquihXRhNqctJ26jtZZM=
 github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680/go.mod h1:iISPGAstbUsPgyC3auLLi7PYUTi9lHv5z0COam0OPOY=
-github.com/streamingfast/bstream v0.0.2-0.20230731165201-639b4f347707 h1:hJW+QNNJrR1boQuoEaajlMFjWh0XKt4Fcg33h9hT7Eo=
-github.com/streamingfast/bstream v0.0.2-0.20230731165201-639b4f347707/go.mod h1:Njkx972HcZiz0djWBylxqO/eq686eDGr+egQ1lePj3Q=
+github.com/streamingfast/bstream v0.0.2-0.20230829131224-b9272048dc6a h1:NeCO5JLz38HRK1uaV1Emo9u5gUSRtmtZZGNK8BKyLIE=
+github.com/streamingfast/bstream v0.0.2-0.20230829131224-b9272048dc6a/go.mod h1:Njkx972HcZiz0djWBylxqO/eq686eDGr+egQ1lePj3Q=
 github.com/streamingfast/cli v0.0.4-0.20230825151644-8cc84512cd80 h1:UxJUTcEVkdZy8N77E3exz0iNlgQuxl4m220GPvzdZ2s=
 github.com/streamingfast/cli v0.0.4-0.20230825151644-8cc84512cd80/go.mod h1:QxjVH73Lkqk+mP8bndvhMuQDUINfkgsYhdCH/5TJFKI=
 github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 h1:m/3aIPNXCwZ9m/dfYdOs8ftrS7GJl82ipVr6K2aZiBs=
@@ -1195,8 +1195,8 @@ github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28 h1:wmQg8T0rIF
 github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28/go.mod h1:huKwfgTGFIFZMKSVbD5TywClM7zAeBUG/zePZMqvXQQ=
 github.com/streamingfast/shutter v1.5.0 h1:NpzDYzj0HVpSiDJVO/FFSL6QIK/YKOxY0gJAtyaTOgs=
 github.com/streamingfast/shutter v1.5.0/go.mod h1:B/T6efqdeMGbGwjzPS1ToXzYZI4kDzI5/u4I+7qbjY8=
-github.com/streamingfast/substreams v1.1.15-0.20231005155216-0f07427759df h1:GPV+0Nn3PMoHzIPKAB5W1l4Nabvo/nmWxHq1UDoHVcQ=
-github.com/streamingfast/substreams v1.1.15-0.20231005155216-0f07427759df/go.mod h1:fFJ8YYBXhzKTKBcC7vRQU6xZl/9KAfVfzuEB8C9hUVw=
+github.com/streamingfast/substreams v1.1.18 h1:XRASHrXeWMOe5D7NXVbi+c9IcFB8hbbtI2oqdivNpE8=
+github.com/streamingfast/substreams v1.1.18/go.mod h1:fFJ8YYBXhzKTKBcC7vRQU6xZl/9KAfVfzuEB8C9hUVw=
 github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645 h1:ZbYLft0R5hJBLhMFAdp7noAD9YrKC+r0nsU7Z5IDcfM=
 github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645/go.mod h1:nBPwmsjz+CV0HT5Vmp0XTiu+RjP8CbdhD5u+uC3lo84=
 github.com/streamingfast/substreams-sink-database-changes v1.1.3 h1:rXeGb/V2mjC8FftumRkMQxG2jtdLfHdLx9UQVUtAqS8=

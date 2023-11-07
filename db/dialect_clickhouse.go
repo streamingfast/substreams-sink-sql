@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -23,7 +22,7 @@ type clickhouseDialect struct{}
 // Clickhouse should be used to insert a lot of data in batches. The current official clickhouse
 // driver doesn't support Transactions for multiple tables. The only way to add in batches is
 // creating a transaction for a table, adding all rows and commiting it.
-func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error) {
+func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
 	var entryCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		tableName := entriesPair.Key
@@ -81,6 +80,10 @@ func (d clickhouseDialect) Flush(tx *sql.Tx, ctx context.Context, l *Loader, out
 	return entryCount, nil
 }
 
+func (d clickhouseDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
+	return fmt.Errorf("clickhouse driver does not support reorg management.")
+}
+
 func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
 	_ = withPostgraphile // TODO: see if this can work
 	return fmt.Sprintf(cli.Dedent(`
@@ -91,7 +94,11 @@ func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 		block_num  Int64,
 		block_id   String
 	) Engine = ReplacingMergeTree() ORDER BY id;
-	`), EscapeIdentifier(schema), EscapeIdentifier("cursors"))
+	`), EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE))
+}
+
+func (d clickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
+	panic("clickhouse does not support reorg management")
 }
 
 func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {

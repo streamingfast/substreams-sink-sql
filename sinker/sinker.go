@@ -114,13 +114,13 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		return fmt.Errorf("unmarshal database changes: %w", err)
 	}
 
-	if err := s.applyDatabaseChanges(dbChanges); err != nil {
+	if err := s.applyDatabaseChanges(dbChanges, data.Clock.Number, data.FinalBlockHeight); err != nil {
 		return fmt.Errorf("apply database changes: %w", err)
 	}
 
-	if cursor.Block().Num()%s.batchBlockModulo(data, isLive) == 0 {
+	if data.Clock.Number%s.batchBlockModulo(data, isLive) == 0 {
 		flushStart := time.Now()
-		rowFlushedCount, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor)
+		rowFlushedCount, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor, data.FinalBlockHeight)
 		if err != nil {
 			return fmt.Errorf("failed to flush at block %s: %w", cursor.Block(), err)
 		}
@@ -146,7 +146,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 	return nil
 }
 
-func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) error {
+func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, blockNum, finalBlockNum uint64) error {
 	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
@@ -176,19 +176,24 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) 
 			changes[field.Name] = field.NewValue
 		}
 
+		var reversibleBlockNum *uint64
+		if blockNum > finalBlockNum {
+			reversibleBlockNum = &blockNum
+		}
+
 		switch change.Operation {
 		case pbdatabase.TableChange_CREATE:
-			err := s.loader.Insert(change.Table, primaryKeys, changes)
+			err := s.loader.Insert(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
 		case pbdatabase.TableChange_UPDATE:
-			err := s.loader.Update(change.Table, primaryKeys, changes)
+			err := s.loader.Update(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
 		case pbdatabase.TableChange_DELETE:
-			err := s.loader.Delete(change.Table, primaryKeys)
+			err := s.loader.Delete(change.Table, primaryKeys, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)
 			}
@@ -200,7 +205,7 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges) 
 }
 
 func (s *SQLSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
-	return fmt.Errorf("received undo signal but there is no handling of undo, this is because you used `--undo-buffer-size=0` which is invalid right now")
+	return s.loader.Revert(ctx, s.OutputModuleHash(), cursor, data.LastValidBlock.Number)
 }
 
 func (s *SQLSinker) batchBlockModulo(blockData *pbsubstreamsrpc.BlockScopedData, isLive *bool) uint64 {

@@ -7,12 +7,3 @@ create table block_meta
     parent_hash text,
     timestamp   text
 );
-
-create table if not exists "public"."cursors"
-(
-	id         text not null constraint cursor_pk primary key,
-	cursor     text,
-	block_num  bigint,
-	block_id   text
-);
-

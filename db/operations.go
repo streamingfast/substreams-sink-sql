@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -23,39 +24,43 @@ const (
 )
 
 type Operation struct {
-	table      *TableInfo
-	opType     OperationType
-	primaryKey map[string]string
-	data       map[string]string
+	table              *TableInfo
+	opType             OperationType
+	primaryKey         map[string]string
+	data               map[string]string
+	reversibleBlockNum *uint64 // nil if that block is known to be irreversible
 }
 
 func (o *Operation) String() string {
 	return fmt.Sprintf("%s/%s (%s)", o.table.identifier, createRowUniqueID(o.primaryKey), strings.ToLower(string(o.opType)))
 }
 
-func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
+func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) *Operation {
 	return &Operation{
-		table:      table,
-		opType:     OperationTypeInsert,
-		primaryKey: primaryKey,
-		data:       data,
+		table:              table,
+		opType:             OperationTypeInsert,
+		primaryKey:         primaryKey,
+		data:               data,
+		reversibleBlockNum: reversibleBlockNum,
 	}
 }
 
-func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string) *Operation {
+func (l *Loader) newUpdateOperation(table *TableInfo, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) *Operation {
 	return &Operation{
-		table:      table,
-		opType:     OperationTypeUpdate,
-		primaryKey: primaryKey,
-		data:       data,
+		table:              table,
+		opType:             OperationTypeUpdate,
+		primaryKey:         primaryKey,
+		data:               data,
+		reversibleBlockNum: reversibleBlockNum,
 	}
 }
 
-func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string) *Operation {
+func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]string, reversibleBlockNum *uint64) *Operation {
 	return &Operation{
-		table:      table,
-		opType:     OperationTypeDelete,
-		primaryKey: primaryKey,
+		table:              table,
+		opType:             OperationTypeDelete,
+		primaryKey:         primaryKey,
+		reversibleBlockNum: reversibleBlockNum,
 	}
 }
 
@@ -87,4 +92,23 @@ func escapeStringValue(valueToEscape string) string {
 	}
 
 	return `'` + valueToEscape + `'`
+}
+
+// to store in an history table
+func primaryKeyToJSON(primaryKey map[string]string) string {
+	m, err := json.Marshal(primaryKey)
+	if err != nil {
+		panic(err) // should never happen with map[string]string
+	}
+	return string(m)
+}
+
+// to store in an history table
+func jsonToPrimaryKey(in string) (map[string]string, error) {
+	out := make(map[string]string)
+	err := json.Unmarshal([]byte(in), &out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

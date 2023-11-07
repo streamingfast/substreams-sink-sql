@@ -65,7 +65,7 @@ var sinkToolsCmd = Group(
 )
 
 func toolsReadCursorE(cmd *cobra.Command, _ []string) error {
-	loader := toolsCreateLoader(true)
+	loader := toolsCreateLoader()
 
 	out, err := loader.GetAllCursors(cmd.Context())
 	cli.NoError(err, "Unable to get all cursors")
@@ -83,7 +83,7 @@ func toolsReadCursorE(cmd *cobra.Command, _ []string) error {
 }
 
 func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
-	loader := toolsCreateLoader(true)
+	loader := toolsCreateLoader()
 
 	moduleHash := args[0]
 	opaqueCursor := args[1]
@@ -114,7 +114,7 @@ func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
 }
 
 func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
-	loader := toolsCreateLoader(true)
+	loader := toolsCreateLoader()
 
 	moduleHash := ""
 	if !viper.GetBool("tools-cursor-delete-all") {
@@ -143,18 +143,17 @@ func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func toolsCreateLoader(enforceCursorTable bool) *db.Loader {
+func toolsCreateLoader() *db.Loader {
 	dsn := viper.GetString("tools-global-dsn")
-	loader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchIgnore, zlog, tracer)
+	loader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchIgnore, true, zlog, tracer)
 	cli.NoError(err, "Unable to instantiate database manager from DSN %q", dsn)
 
 	if err := loader.LoadTables(); err != nil {
-		var cursorError *db.CursorError
-		if errors.As(err, &cursorError) {
-			if enforceCursorTable {
-				fmt.Println("It seems the 'cursors' table does not exit on this database, unable to retrieve DB loader")
-				os.Exit(1)
-			}
+		var systemTableError *db.SystemTableError
+		if errors.As(err, &systemTableError) {
+			fmt.Printf("Error validating the system table: %s\n", systemTableError)
+			fmt.Println("Did you run setup ?")
+			os.Exit(1)
 		}
 
 		cli.NoError(err, "Unable to load table information from database")

@@ -58,24 +58,22 @@ func newDBLoader(
 	cmd *cobra.Command,
 	psqlDSN string,
 	flushInterval time.Duration,
+	handleReorgs bool,
 ) (*db.Loader, error) {
 	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, onModuleHashMistmatchFlag))
 	cli.NoError(err, "invalid mistmatch mode")
 
-	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, moduleMismatchMode, zlog, tracer)
+	dbLoader, err := db.NewLoader(psqlDSN, flushInterval, moduleMismatchMode, handleReorgs, zlog, tracer)
 	if err != nil {
 		return nil, fmt.Errorf("new psql loader: %w", err)
 	}
 
 	if err := dbLoader.LoadTables(); err != nil {
-		var e *db.CursorError
+		var e *db.SystemTableError
 		if errors.As(err, &e) {
-			fmt.Printf("Error validating the cursors table: %s\n", e)
-			fmt.Println("You can use the following sql schema to create a cursors table")
-			fmt.Println()
-			fmt.Println(dbLoader.GetCreateCursorsTableSQL(false))
-			fmt.Println()
-			return nil, fmt.Errorf("invalid cursors table")
+			fmt.Printf("Error validating the system table: %s\n", e)
+			fmt.Println("Did you run setup ?")
+			return nil, e
 		}
 
 		return nil, fmt.Errorf("load psql table: %w", err)

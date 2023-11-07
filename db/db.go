@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/jimsmart/schema"
@@ -15,6 +14,7 @@ import (
 )
 
 const CURSORS_TABLE = "cursors"
+const HISTORY_TABLE = "substreams_history"
 
 // Make the typing a bit easier
 type OrderedMap[K comparable, V any] struct {
@@ -25,7 +25,7 @@ func NewOrderedMap[K comparable, V any]() *OrderedMap[K, V] {
 	return &OrderedMap[K, V]{OrderedMap: orderedmap.New[K, V]()}
 }
 
-type CursorError struct {
+type SystemTableError struct {
 	error
 }
 
@@ -39,17 +39,21 @@ type Loader struct {
 	tables       map[string]*TableInfo
 	cursorTable  *TableInfo
 
+	handleReorgs       bool
 	flushInterval      time.Duration
 	moduleMismatchMode OnModuleHashMismatch
 
 	logger *zap.Logger
 	tracer logging.Tracer
+
+	testTx *TestTx // used for testing: if non-nil, 'loader.BeginTx()' will return this object instead of a real *sql.Tx
 }
 
 func NewLoader(
 	psqlDsn string,
 	flushInterval time.Duration,
 	moduleMismatchMode OnModuleHashMismatch,
+	handleReorgs bool,
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*Loader, error) {
@@ -63,15 +67,6 @@ func NewLoader(
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
 
-	logger.Debug("created new DB loader",
-		zap.Duration("flush_interval", flushInterval),
-		zap.String("database", dsn.database),
-		zap.String("schema", dsn.schema),
-		zap.String("host", dsn.host),
-		zap.Int64("port", dsn.port),
-		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
-	)
-
 	l := &Loader{
 		DB:                 db,
 		database:           dsn.database,
@@ -83,13 +78,47 @@ func NewLoader(
 		logger:             logger,
 		tracer:             tracer,
 	}
-
 	_, err = l.tryDialect()
 	if err != nil {
 		return nil, fmt.Errorf("dialect not found: %s", err)
 	}
 
+	if handleReorgs && l.getDialect().OnlyInserts() {
+		return nil, fmt.Errorf("driver %s does not support reorg handling. You must use set a non-zero undo-buffer-size", dsn.driver)
+	}
+	l.handleReorgs = handleReorgs
+
+	logger.Info("created new DB loader",
+		zap.Duration("flush_interval", flushInterval),
+		zap.String("driver", dsn.driver),
+		zap.String("database", dsn.database),
+		zap.String("schema", dsn.schema),
+		zap.String("host", dsn.host),
+		zap.Int64("port", dsn.port),
+		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
+		zap.Bool("handle_reorgs", l.handleReorgs),
+		zap.String("dialect", fmt.Sprintf("%t", l.getDialect())),
+	)
+
 	return l, nil
+}
+
+type Tx interface {
+	Rollback() error
+	Commit() error
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func (l *Loader) Begin() (Tx, error) {
+	return l.BeginTx(context.Background(), nil)
+}
+
+func (l *Loader) BeginTx(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
+	if l.testTx != nil {
+		return l.testTx, nil
+	}
+	return l.DB.BeginTx(ctx, opts)
 }
 
 func (l *Loader) FlushInterval() time.Duration {
@@ -103,6 +132,7 @@ func (l *Loader) LoadTables() error {
 	}
 
 	seenCursorTable := false
+	seenHistoryTable := false
 	for schemaTableName, columns := range schemaTables {
 		schemaName := schemaTableName[0]
 		tableName := schemaTableName[1]
@@ -121,6 +151,9 @@ func (l *Loader) LoadTables() error {
 			}
 
 			seenCursorTable = true
+		}
+		if tableName == HISTORY_TABLE {
+			seenHistoryTable = true
 		}
 
 		columnByName := make(map[string]*ColumnInfo, len(columns))
@@ -145,8 +178,12 @@ func (l *Loader) LoadTables() error {
 	}
 
 	if !seenCursorTable {
-		return &CursorError{fmt.Errorf(`%s.%s table is not found`, EscapeIdentifier(l.schema), CURSORS_TABLE)}
+		return &SystemTableError{fmt.Errorf(`%s.%s table is not found`, EscapeIdentifier(l.schema), CURSORS_TABLE)}
 	}
+	if l.handleReorgs && !seenHistoryTable {
+		return &SystemTableError{fmt.Errorf("%s.%s table is not found and reorgs handling is enabled.", EscapeIdentifier(l.schema), HISTORY_TABLE)}
+	}
+
 	l.cursorTable = l.tables[CURSORS_TABLE]
 
 	return nil
@@ -154,7 +191,7 @@ func (l *Loader) LoadTables() error {
 
 func (l *Loader) validateCursorTables(columns []*sql.ColumnType) (err error) {
 	if len(columns) != 4 {
-		return &CursorError{fmt.Errorf("table requires 4 columns ('id', 'cursor', 'block_num', 'block_id')")}
+		return &SystemTableError{fmt.Errorf("table requires 4 columns ('id', 'cursor', 'block_num', 'block_id')")}
 	}
 	columnsCheck := map[string]string{
 		"block_num": "int64",
@@ -165,29 +202,29 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType) (err error) {
 	for _, f := range columns {
 		columnName := f.Name()
 		if _, found := columnsCheck[columnName]; !found {
-			return &CursorError{fmt.Errorf("unexpected column %q in cursors table", columnName)}
+			return &SystemTableError{fmt.Errorf("unexpected column %q in cursors table", columnName)}
 		}
 		expectedType := columnsCheck[columnName]
 		actualType := f.ScanType().Kind().String()
 		if expectedType != actualType {
-			return &CursorError{fmt.Errorf("column %q has invalid type, expected %q has %q", columnName, expectedType, actualType)}
+			return &SystemTableError{fmt.Errorf("column %q has invalid type, expected %q has %q", columnName, expectedType, actualType)}
 		}
 		delete(columnsCheck, columnName)
 	}
 	if len(columnsCheck) != 0 {
 		for k := range columnsCheck {
-			return &CursorError{fmt.Errorf("missing column %q from cursors", k)}
+			return &SystemTableError{fmt.Errorf("missing column %q from cursors", k)}
 		}
 	}
 	key, err := schema.PrimaryKey(l.DB, l.schema, CURSORS_TABLE)
 	if err != nil {
-		return &CursorError{fmt.Errorf("failed getting primary key: %w", err)}
+		return &SystemTableError{fmt.Errorf("failed getting primary key: %w", err)}
 	}
 	if len(key) == 0 {
-		return &CursorError{fmt.Errorf("primary key not found: %w", err)}
+		return &SystemTableError{fmt.Errorf("primary key not found: %w", err)}
 	}
 	if key[0] != "id" {
-		return &CursorError{fmt.Errorf("column 'id' should be primary key not %q", key[0])}
+		return &SystemTableError{fmt.Errorf("column 'id' should be primary key not %q", key[0])}
 	}
 	return nil
 }
@@ -238,44 +275,39 @@ func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 	return nil
 }
 
-// Setup creates the schema and the cursors table where the <schemaFile> is a local file
-// on disk.
-func (l *Loader) Setup(ctx context.Context, schemaFile string, withPostgraphile bool) error {
-	b, err := os.ReadFile(schemaFile)
-	if err != nil {
-		return fmt.Errorf("read schema file: %w", err)
-	}
-
-	return l.SetupFromBytes(ctx, b, withPostgraphile)
-}
-
-// SetupFromBytes creates the schema and the cursors table where the <schemaBytes> is a byte array
+// Setup creates the schema, cursors and history table where the <schemaBytes> is a byte array
 // taken from somewhere.
-func (l *Loader) SetupFromBytes(ctx context.Context, schemaBytes []byte, withPostgraphile bool) error {
-	schemaSql := string(schemaBytes)
-	if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
-		return fmt.Errorf("exec schema: %w", err)
+func (l *Loader) Setup(ctx context.Context, schemaSql string, withPostgraphile bool) error {
+	if schemaSql != "" {
+		if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
+			return fmt.Errorf("exec schema: %w", err)
+		}
 	}
 
 	if err := l.setupCursorTable(ctx, withPostgraphile); err != nil {
 		return fmt.Errorf("setup cursor table: %w", err)
 	}
 
-	return nil
-}
-
-func (l *Loader) setupCursorTable(ctx context.Context, withPostgraphile bool) error {
-	_, err := l.ExecContext(ctx, l.GetCreateCursorsTableSQL(withPostgraphile))
-
-	if err != nil {
-		return fmt.Errorf("creating cursor table: %w", err)
+	if err := l.setupHistoryTable(ctx, withPostgraphile); err != nil {
+		return fmt.Errorf("setup history table: %w", err)
 	}
 
 	return nil
 }
 
-func (l *Loader) GetCreateCursorsTableSQL(withPostgraphile bool) string {
-	return l.getDialect().GetCreateCursorQuery(l.schema, withPostgraphile)
+func (l *Loader) setupCursorTable(ctx context.Context, withPostgraphile bool) error {
+	query := l.getDialect().GetCreateCursorQuery(l.schema, withPostgraphile)
+	_, err := l.ExecContext(ctx, query)
+	return err
+}
+
+func (l *Loader) setupHistoryTable(ctx context.Context, withPostgraphile bool) error {
+	if l.getDialect().OnlyInserts() {
+		return nil
+	}
+	query := l.getDialect().GetCreateHistoryQuery(l.schema, withPostgraphile)
+	_, err := l.ExecContext(ctx, query)
+	return err
 }
 
 func (l *Loader) getDialect() dialect {
