@@ -277,10 +277,11 @@ func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 
 // Setup creates the schema, cursors and history table where the <schemaBytes> is a byte array
 // taken from somewhere.
-func (l *Loader) Setup(ctx context.Context, schemaBytes []byte, withPostgraphile bool) error {
-	schemaSql := string(schemaBytes)
-	if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
-		return fmt.Errorf("exec schema: %w", err)
+func (l *Loader) Setup(ctx context.Context, schemaSql string, withPostgraphile bool) error {
+	if schemaSql != "" {
+		if err := l.getDialect().ExecuteSetupScript(ctx, l, schemaSql); err != nil {
+			return fmt.Errorf("exec schema: %w", err)
+		}
 	}
 
 	if err := l.setupCursorTable(ctx, withPostgraphile); err != nil {

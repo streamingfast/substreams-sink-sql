@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * A change in your SQL schema may be required to keep existing substreams:SQL integrations working:
   * The presence of a primary key (single key or composite) is now *MANDATORY* on every table.
   * The `sf.substreams.sink.database.v1.TableChange` message, generated inside substreams, must now exactly match its primary key with the one in the SQL schema.
-  * You will need to re-run `setup` on your existing PostgreSQL databases to add the `substreams_history` table.
+  * You will need to re-run `setup` on your existing PostgreSQL databases to add the `substreams_history` table. You can use the new `--system-tables-only` flag to perform only that.
 
 * Since reorgs management is not yet supported on Clickhouse, users will have to set `--undo-buffer-size` to a non-zero value (`12` was the previous default)
 
