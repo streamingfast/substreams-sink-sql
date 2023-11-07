@@ -29,7 +29,7 @@ message Service {
 // https://www.getdbt.com/product/what-is-dbt
 message DBTConfig {
    bytes files = 1  [ (sf.substreams.options).zip_from_folder = true ];
-   int32 run_interval = 2; // in seconds
+   int32 run_interval_seconds = 2;
 }
 
 // https://hasura.io/docs/latest/index/
