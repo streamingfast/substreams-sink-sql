@@ -53,7 +53,7 @@ func NewLoader(
 	psqlDsn string,
 	flushInterval time.Duration,
 	moduleMismatchMode OnModuleHashMismatch,
-	handleReorgs bool,
+	handleReorgs *bool,
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*Loader, error) {
@@ -83,10 +83,16 @@ func NewLoader(
 		return nil, fmt.Errorf("dialect not found: %s", err)
 	}
 
-	if handleReorgs && l.getDialect().OnlyInserts() {
+	if handleReorgs == nil {
+		// automatic detection
+		l.handleReorgs = !l.getDialect().OnlyInserts()
+	} else {
+		l.handleReorgs = *handleReorgs
+	}
+
+	if l.handleReorgs && l.getDialect().OnlyInserts() {
 		return nil, fmt.Errorf("driver %s does not support reorg handling. You must use set a non-zero undo-buffer-size", dsn.driver)
 	}
-	l.handleReorgs = handleReorgs
 
 	logger.Info("created new DB loader",
 		zap.Duration("flush_interval", flushInterval),
