@@ -13,7 +13,6 @@ message Service {
   bool wire_protocol_access = 3;
   HasuraFrontend hasura_frontend = 4;
   PostgraphileFrontend postgraphile_frontend = 5;
-  PGWebFrontend pgweb_frontend = 6;
 
   enum Engine {
     unset = 0;
@@ -30,6 +29,7 @@ message Service {
 message DBTConfig {
    bytes files = 1  [ (sf.substreams.options).zip_from_folder = true ];
    int32 run_interval_seconds = 2;
+   bool enabled = 3;
 }
 
 // https://hasura.io/docs/latest/index/
