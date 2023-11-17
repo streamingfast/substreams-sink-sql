@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: substreams_sink_sql_protodefs
-  version: v1.0.5
+  version: v1.0.6
   url: https://github.com/streamingfast/substreams-sink-sql
   doc: |
     Protobuf definitions for Substreams SQL Sink modules.
