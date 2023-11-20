@@ -10,7 +10,6 @@ message Service {
   // Containing both create table statements and index creation statements.
   string schema = 1 [ (sf.substreams.options).load_from_file = true ];
   optional DBTConfig dbt_config = 2;
-  bool wire_protocol_access = 3;
   HasuraFrontend hasura_frontend = 4;
   PostgraphileFrontend postgraphile_frontend = 5;
 
