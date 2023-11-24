@@ -235,11 +235,11 @@ func (d postgresDialect) OnlyInserts() bool {
 	return false
 }
 
-func (d postgresDialect) CreateUser(ctx context.Context, username, password string, database string, readOnly bool) string {
+func (d postgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error {
 	user, pass, db := EscapeIdentifier(username), EscapeIdentifier(password), EscapeIdentifier(database)
+	var q string
 	if readOnly {
-		// SQL statements for creating a read-only user
-		return fmt.Sprintf(`
+		q = fmt.Sprintf(`
             CREATE USER %s WITH PASSWORD '%s';
             GRANT CONNECT ON DATABASE %s TO %s;
             GRANT USAGE ON SCHEMA public TO %s;
@@ -247,9 +247,15 @@ func (d postgresDialect) CreateUser(ctx context.Context, username, password stri
             ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %s;
         `, user, pass, db, user, user, user, user)
 	} else {
-		// SQL statement for creating a read-write user
-		return fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'; GRANT ALL PRIVILEGES ON DATABASE %s TO %s;", user, pass, db, user)
+		q = fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'; GRANT ALL PRIVILEGES ON DATABASE %s TO %s;", user, pass, db, user)
 	}
+
+	_, err := tx.ExecContext(ctx, q)
+	if err != nil {
+		return fmt.Errorf("executing query %q: %w", q, err)
+	}
+
+	return nil
 }
 
 func (d postgresDialect) historyTable(schema string) string {

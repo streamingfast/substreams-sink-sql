@@ -131,20 +131,27 @@ func (d clickhouseDialect) OnlyInserts() bool {
 	return true
 }
 
-func (d clickhouseDialect) CreateUser(ctx context.Context, username, password, _database string, readOnly bool) string {
+func (d clickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, _database string, readOnly bool) error {
+	user, pass := EscapeIdentifier(username), EscapeIdentifier(password)
+	var q string
 	if readOnly {
-		// SQL statements for creating a read-only user in ClickHouse
-		return fmt.Sprintf(`
+		q = fmt.Sprintf(`
             CREATE USER %s IDENTIFIED BY '%s';
             GRANT SELECT ON *.* TO %s;
-        `, username, password, username)
+        `, user, pass, user)
 	} else {
-		// SQL statement for creating a read-write user in ClickHouse
-		return fmt.Sprintf(`
+		q = fmt.Sprintf(`
             CREATE USER %s IDENTIFIED BY '%s';
             GRANT ALL ON *.* TO %s;
-        `, username, password, username)
+        `, user, pass, user)
 	}
+
+	_, err := tx.ExecContext(ctx, q)
+	if err != nil {
+		return fmt.Errorf("executing query %q: %w", q, err)
+	}
+
+	return nil
 }
 
 func convertOpToClickhouseValues(o *Operation) ([]any, error) {

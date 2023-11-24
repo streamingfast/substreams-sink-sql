@@ -26,7 +26,7 @@ type dialect interface {
 	Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error)
 	Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error
 	OnlyInserts() bool
-	CreateUser(ctx context.Context, username string, password string, database string, readOnly bool) string
+	CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error
 }
 
 var driverDialect = map[string]dialect{
