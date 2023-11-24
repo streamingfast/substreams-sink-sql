@@ -235,6 +235,23 @@ func (d postgresDialect) OnlyInserts() bool {
 	return false
 }
 
+func (d postgresDialect) CreateUser(ctx context.Context, username, password string, database string, readOnly bool) string {
+	user, pass, db := EscapeIdentifier(username), EscapeIdentifier(password), EscapeIdentifier(database)
+	if readOnly {
+		// SQL statements for creating a read-only user
+		return fmt.Sprintf(`
+            CREATE USER %s WITH PASSWORD '%s';
+            GRANT CONNECT ON DATABASE %s TO %s;
+            GRANT USAGE ON SCHEMA public TO %s;
+            GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s;
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %s;
+        `, user, pass, db, user, user, user, user)
+	} else {
+		// SQL statement for creating a read-write user
+		return fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'; GRANT ALL PRIVILEGES ON DATABASE %s TO %s;", user, pass, db, user)
+	}
+}
+
 func (d postgresDialect) historyTable(schema string) string {
 	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier("substreams_history"))
 }
