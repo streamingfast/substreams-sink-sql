@@ -119,6 +119,8 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 	}
 
 	if data.Clock.Number%s.batchBlockModulo(data, isLive) == 0 {
+		s.logger.Debug("flushing to database", zap.Stringer("block", cursor.Block()), zap.Bool("is_live", *isLive))
+
 		flushStart := time.Now()
 		rowFlushedCount, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor, data.FinalBlockHeight)
 		if err != nil {

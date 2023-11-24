@@ -119,6 +119,7 @@ func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cu
 // ErrCursorNotFound. If the update was not successful on the database, returns an error.
 // You can use tx=nil to run the query outside of a transaction.
 func (l *Loader) UpdateCursor(ctx context.Context, tx Tx, moduleHash string, c *sink.Cursor) error {
+	l.logger.Debug("updating cursor", zap.String("module_hash", moduleHash), zap.Stringer("cursor", c))
 	_, err := l.runModifiyQuery(ctx, tx, "update", l.getDialect().GetUpdateCursorQuery(
 		l.cursorTable.identifier, moduleHash, c, c.Block().Num(), c.Block().ID(),
 	))
