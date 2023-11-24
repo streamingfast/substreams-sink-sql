@@ -100,7 +100,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	dbLoader, err := newDBLoader(cmd, dsn, 0) // flush interval not used in CSV mode
+	dbLoader, err := newDBLoader(cmd, dsn, 0, false) // flush interval not used in CSV mode
 	if err != nil {
 		return fmt.Errorf("new db loader: %w", err)
 	}

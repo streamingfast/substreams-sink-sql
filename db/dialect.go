@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	sink "github.com/streamingfast/substreams-sink"
@@ -19,11 +18,13 @@ func (e UnknownDriverError) Error() string {
 
 type dialect interface {
 	GetCreateCursorQuery(schema string, withPostgraphile bool) string
+	GetCreateHistoryQuery(schema string, withPostgraphile bool) string
 	ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error
 	DriverSupportRowsAffected() bool
 	GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string
 	ParseDatetimeNormalization(value string) string
-	Flush(tx *sql.Tx, ctx context.Context, l *Loader, outputModuleHash string, cursor *sink.Cursor) (int, error)
+	Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error)
+	Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error
 	OnlyInserts() bool
 }
 

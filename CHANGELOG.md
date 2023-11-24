@@ -5,7 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.0.0-rc.1
+
+### Fixes
+
+* Fix an issue preventing the `setup` command from running on a clickhouse backend because of the reorg settings.
+
+## v4.0.0-beta
+
+### Highlights
+
+* This release brings support for managing reorgs in Postgres database, enabled by default when `--undo-buffer-size` to 0.
+
+### Breaking changes
+
+* A change in your SQL schema may be required to keep existing substreams:SQL integrations working:
+  * The presence of a primary key (single key or composite) is now *MANDATORY* on every table.
+  * The `sf.substreams.sink.database.v1.TableChange` message, generated inside substreams, must now exactly match its primary key with the one in the SQL schema.
+  * You will need to re-run `setup` on your existing PostgreSQL databases to add the `substreams_history` table. You can use the new `--system-tables-only` flag to perform only that.
+
+* Since reorgs management is not yet supported on Clickhouse, users will have to set `--undo-buffer-size` to a non-zero value (`12` was the previous default)
+
+## Protodefs v1.0.4
+
+* Added support for `rest_frontend` field with `enabled` boolean flag, aimed at this backend implementation: https://github.com/semiotic-ai/sql-wrapper
+
+## v3.0.5
+
+* Fixed regression: `run` command was incorrectly only processing blocks staying behind the "FinalBlocks" cliff.
+
+## v3.0.4
+
+* Fixed support for tables with primary keys misaligned with `database_changes`'s keys (fixing Clickhouse use case)
+
+## Protodefs v1.0.3
+
+* Added support for selecting engine `postgres` or `clickhouse` to sinkconfig protobuf definition
+
+## v3.0.3
 
 * Fixed missing uint8 and uint16 cast for clickhouse driver conversion
 * Bump version of `schema` dependency to fix errors with Clickhouse 23.9 enums being updated to String representation and not numbers.

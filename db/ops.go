@@ -10,7 +10,7 @@ import (
 
 // Insert a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]string) error {
+func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
 	uniqueID := createRowUniqueID(primaryKey)
 
 	if l.tracer.Enabled() {
@@ -40,12 +40,14 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		l.logger.Debug("primary key entry never existed for table, adding insert operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	// We need to make sure to add the primary key(s) in the data so that those column get created correctly
+	// We need to make sure to add the primary key(s) in the data so that those column get created correctly, but only if there is data
 	for _, primary := range l.tables[tableName].primaryColumns {
-		data[primary.name] = primaryKey[primary.name]
+		if dataFromPrimaryKey, ok := primaryKey[primary.name]; ok {
+			data[primary.name] = dataFromPrimaryKey
+		}
 	}
 
-	entry.Set(uniqueID, l.newInsertOperation(table, primaryKey, data))
+	entry.Set(uniqueID, l.newInsertOperation(table, primaryKey, data, reversibleBlockNum))
 	l.entriesCount++
 	return nil
 }
@@ -78,23 +80,24 @@ func createRowUniqueID(m map[string]string) string {
 
 func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, error) {
 	primaryKeyColumns := l.tables[tableName].primaryColumns
-	if len(primaryKeyColumns) > 1 {
-		return nil, fmt.Errorf("your Substreams sent a primary key but your database definition for table %q is using a composite primary key", tableName)
+
+	switch len(primaryKeyColumns) {
+	case 0:
+		return nil, fmt.Errorf("substreams sent a single primary key, but our sql table has none. This is unsupported.")
+	case 1:
+		return map[string]string{primaryKeyColumns[0].name: pk}, nil
 	}
 
-	// There can be only 0 or 1 column here as we check above for > 1 and return.
-	// If there is 0, there is no primary key column in which case we return the
-	// received primary key as is under and "" (empty) column name.
-	if len(primaryKeyColumns) == 0 {
-		return map[string]string{"": pk}, nil
+	cols := make([]string, len(primaryKeyColumns))
+	for i := range primaryKeyColumns {
+		cols[i] = primaryKeyColumns[i].name
 	}
-
-	return map[string]string{primaryKeyColumns[0].name: pk}, nil
+	return nil, fmt.Errorf("substreams sent a single primary key, but our sql table has a composite primary key (columns: %s). This is unsupported.", strings.Join(cols, ","))
 }
 
 // Update a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string) error {
+func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
 	if l.getDialect().OnlyInserts() {
 		return fmt.Errorf("update operation is not supported by the current database")
 	}
@@ -143,13 +146,13 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 		l.logger.Debug("primary key entry never existed for table, adding update operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	entry.Set(uniqueID, l.newUpdateOperation(table, primaryKey, data))
+	entry.Set(uniqueID, l.newUpdateOperation(table, primaryKey, data, reversibleBlockNum))
 	return nil
 }
 
 // Delete a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
+func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversibleBlockNum *uint64) error {
 	if l.getDialect().OnlyInserts() {
 		return fmt.Errorf("delete operation is not supported by the current database")
 	}
@@ -164,7 +167,7 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
 		return fmt.Errorf("unknown table %q", tableName)
 	}
 
-	if len(table.primaryColumns) == 0 {
+	if len(table.primaryColumns) != 1 {
 		return fmt.Errorf("trying to perform a DELETE operation but table %q don't have a primary key(s) set, this is not accepted", tableName)
 	}
 
@@ -190,6 +193,6 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string) error {
 		l.logger.Debug("adding deleting operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey))
+	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey, reversibleBlockNum))
 	return nil
 }

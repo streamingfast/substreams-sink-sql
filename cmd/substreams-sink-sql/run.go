@@ -13,14 +13,21 @@ import (
 	"github.com/streamingfast/substreams/manifest"
 )
 
+type ignoreUndoBufferSize struct{}
+
+func (i ignoreUndoBufferSize) IsIgnored(in string) bool {
+	return in == "undo-buffer-size"
+}
+
 var sinkRunCmd = Command(sinkRunE,
 	"run <dsn> <manifest> [<start>:<stop>]",
 	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags)
+		sink.AddFlagsToSet(flags, ignoreUndoBufferSize{})
 		AddCommonSinkerFlags(flags)
 
+		flags.Int("undo-buffer-size", 0, "If non-zero, handling of reorgs in the database is disabled. Instead, a buffer is introduced to only process a blocks once it has been confirmed by that many blocks, introducing a latency but slightly reducing the load on the database when close to head.")
 		flags.Int("flush-interval", 1000, "When in catch up mode, flush every N blocks")
 		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
 	}),
@@ -54,7 +61,8 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// "github.com/streamingfast/substreams/manifest"
+	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") == 0
+
 	sink, err := sink.NewFromViper(
 		cmd,
 		supportedOutputTypes,
@@ -64,13 +72,12 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		blockRange,
 		zlog,
 		tracer,
-		sink.WithFinalBlocksOnly(),
 	)
 	if err != nil {
 		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	dbLoader, err := newDBLoader(cmd, dsn, sflags.MustGetDuration(cmd, "flush-interval"))
+	dbLoader, err := newDBLoader(cmd, dsn, sflags.MustGetDuration(cmd, "flush-interval"), handleReorgs)
 	if err != nil {
 		return fmt.Errorf("new db loader: %w", err)
 	}
