@@ -24,6 +24,7 @@ func main() {
 		sinkToolsCmd,
 		generateCsvCmd,
 		injectCSVCmd,
+		createUserCmd,
 
 		ConfigureViper("SINK_SQL"),
 		ConfigureVersion(version),
