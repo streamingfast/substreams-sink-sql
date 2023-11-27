@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/streamingfast/cli/sflags"
 
@@ -17,6 +19,7 @@ var createUserCmd = Command(createUserE,
 	"Create a user in the database",
 	ExactArgs(2),
 	Flags(func(flags *pflag.FlagSet) {
+		flags.Int("retries", 3, "Number of retries to attempt when a connection error occurs")
 		flags.Bool("read-only", false, "Create a read-only user")
 		flags.String("password-env", "", "Name of the environment variable containing the password")
 	}),
@@ -40,15 +43,49 @@ func createUserE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("non-empty password is required")
 	}
 
-	dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, nil, zlog, tracer)
-	if err != nil {
-		return fmt.Errorf("new psql loader: %w", err)
+	createFunc := func(ctx context.Context) error {
+		dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, nil, zlog, tracer)
+		if err != nil {
+			return fmt.Errorf("new psql loader: %w", err)
+		}
+
+		err = dbLoader.CreateUser(ctx, username, password, "substreams", readOnly)
+		if err != nil {
+			return fmt.Errorf("create user: %w", err)
+		}
+
+		return nil
 	}
 
-	err = dbLoader.CreateUser(ctx, username, password, "substreams", readOnly)
-	if err != nil {
+	if err := retry(ctx, func(ctx context.Context) error {
+		dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, nil, zlog, tracer)
+		if err != nil {
+			return fmt.Errorf("new psql loader: %w", err)
+		}
+
+		err = dbLoader.CreateUser(ctx, username, password, "substreams", readOnly)
+		if err != nil {
+			return fmt.Errorf("create user: %w", err)
+		}
+
+		return nil
+	}, sflags.MustGetInt(cmd, "retries")); err != nil {
 		return fmt.Errorf("create user: %w", err)
 	}
 
 	return nil
+}
+
+func retry(ctx context.Context, f func(ctx context.Context) error, reties int) error {
+	var err error
+
+	for i := 0; i < reties; i++ {
+		err = f(ctx)
+		if err == nil {
+			return nil
+		}
+		time.Sleep(5*time.Duration(i)*time.Second + 1*time.Second)
+	}
+
+	return err
 }
