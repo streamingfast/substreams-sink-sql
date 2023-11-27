@@ -134,7 +134,7 @@ func (d clickhouseDialect) OnlyInserts() bool {
 func (d clickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, _database string, readOnly bool) error {
 	user, pass := EscapeIdentifier(username), EscapeIdentifier(password)
 
-	createUserQ := fmt.Sprintf("CREATE USER %s IDENTIFIED BY '%s';", user, pass)
+	createUserQ := fmt.Sprintf("CREATE USER IF NOT EXISTS %s IDENTIFIED BY '%s';", user, pass)
 	_, err := tx.ExecContext(ctx, createUserQ)
 	if err != nil {
 		return fmt.Errorf("executing query %q: %w", createUserQ, err)
