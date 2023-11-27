@@ -133,22 +133,27 @@ func (d clickhouseDialect) OnlyInserts() bool {
 
 func (d clickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, _database string, readOnly bool) error {
 	user, pass := EscapeIdentifier(username), EscapeIdentifier(password)
-	var q string
-	if readOnly {
-		q = fmt.Sprintf(`
-            CREATE USER %s IDENTIFIED BY '%s';
-            GRANT SELECT ON *.* TO %s;
-        `, user, pass, user)
-	} else {
-		q = fmt.Sprintf(`
-            CREATE USER %s IDENTIFIED BY '%s';
-            GRANT ALL ON *.* TO %s;
-        `, user, pass, user)
+
+	createUserQ := fmt.Sprintf("CREATE USER %s IDENTIFIED BY '%s';", user, pass)
+	_, err := tx.ExecContext(ctx, createUserQ)
+	if err != nil {
+		return fmt.Errorf("executing query %q: %w", createUserQ, err)
 	}
 
-	_, err := tx.ExecContext(ctx, q)
+	var grantQ string
+	if readOnly {
+		grantQ = fmt.Sprintf(`
+            GRANT SELECT ON *.* TO %s;
+        `, user)
+	} else {
+		grantQ = fmt.Sprintf(`
+            GRANT ALL ON *.* TO %s;
+        `, user)
+	}
+
+	_, err = tx.ExecContext(ctx, grantQ)
 	if err != nil {
-		return fmt.Errorf("executing query %q: %w", q, err)
+		return fmt.Errorf("executing query %q: %w", grantQ, err)
 	}
 
 	return nil
