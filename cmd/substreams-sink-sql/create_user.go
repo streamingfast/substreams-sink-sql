@@ -15,9 +15,9 @@ import (
 )
 
 var createUserCmd = Command(createUserE,
-	"create-user <dsn> <username>",
+	"create-user <dsn> <username> <database>",
 	"Create a user in the database",
-	ExactArgs(2),
+	ExactArgs(3),
 	Flags(func(flags *pflag.FlagSet) {
 		flags.Int("retries", 3, "Number of retries to attempt when a connection error occurs")
 		flags.Bool("read-only", false, "Create a read-only user")
@@ -30,6 +30,7 @@ func createUserE(cmd *cobra.Command, args []string) error {
 
 	dsn := args[0]
 	username := args[1]
+	database := args[2]
 
 	readOnly := sflags.MustGetBool(cmd, "read-only")
 	passwordEnv := sflags.MustGetString(cmd, "password-env")
@@ -49,7 +50,7 @@ func createUserE(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("new psql loader: %w", err)
 		}
 
-		err = dbLoader.CreateUser(ctx, username, password, "substreams", readOnly)
+		err = dbLoader.CreateUser(ctx, username, password, database, readOnly)
 		if err != nil {
 			return fmt.Errorf("create user: %w", err)
 		}
