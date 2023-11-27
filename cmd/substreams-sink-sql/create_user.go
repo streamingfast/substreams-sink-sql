@@ -43,20 +43,6 @@ func createUserE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("non-empty password is required")
 	}
 
-	createFunc := func(ctx context.Context) error {
-		dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, nil, zlog, tracer)
-		if err != nil {
-			return fmt.Errorf("new psql loader: %w", err)
-		}
-
-		err = dbLoader.CreateUser(ctx, username, password, "substreams", readOnly)
-		if err != nil {
-			return fmt.Errorf("create user: %w", err)
-		}
-
-		return nil
-	}
-
 	if err := retry(ctx, func(ctx context.Context) error {
 		dbLoader, err := db.NewLoader(dsn, 0, db.OnModuleHashMismatchError, nil, zlog, tracer)
 		if err != nil {
