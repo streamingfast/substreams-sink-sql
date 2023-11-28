@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.0.0-rc.2
+
+* Support more networks with default mappings (ex: solana, soon: optimism, soon: bitcoin)
+* Add command "create-user <dsn> <username> <database>" to help creating more SQL users, read-only or otherwise
+* add 'enabled' field under "DBTConfig"
+* Removed PgwebFrontend and WireProtocolAccess fields from the SinkConfig message: they will now be deployed when on a development environment, so they are not mentionned here anymore.
+
 ## v4.0.0-rc.1
 
 ### Fixes
