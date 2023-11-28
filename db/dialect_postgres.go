@@ -236,18 +236,18 @@ func (d postgresDialect) OnlyInserts() bool {
 }
 
 func (d postgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error {
-	user, pass, db := EscapeIdentifier(username), EscapeIdentifier(password), EscapeIdentifier(database)
+	user, pass, db := EscapeIdentifier(username), password, EscapeIdentifier(database)
 	var q string
 	if readOnly {
 		q = fmt.Sprintf(`
-            CREATE ROLE %s LOGIN PASSWORD %s;
+            CREATE ROLE %s LOGIN PASSWORD '%s';
             GRANT CONNECT ON DATABASE %s TO %s;
             GRANT USAGE ON SCHEMA public TO %s;
             ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %s
             GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s;
         `, user, pass, db, user, user, user, user)
 	} else {
-		q = fmt.Sprintf("CREATE USER %s WITH PASSWORD %s; GRANT ALL PRIVILEGES ON DATABASE %s TO %s;", user, pass, db, user)
+		q = fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'; GRANT ALL PRIVILEGES ON DATABASE %s TO %s;", user, pass, db, user)
 	}
 
 	_, err := tx.ExecContext(ctx, q)
