@@ -132,7 +132,7 @@ func (d clickhouseDialect) OnlyInserts() bool {
 }
 
 func (d clickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, _database string, readOnly bool) error {
-	user, pass := EscapeIdentifier(username), EscapeIdentifier(password)
+	user, pass := EscapeIdentifier(username), escapeStringValue(password)
 
 	createUserQ := fmt.Sprintf("CREATE USER IF NOT EXISTS %s IDENTIFIED WITH plaintext_password BY %s;", user, pass)
 	_, err := tx.ExecContext(ctx, createUserQ)
