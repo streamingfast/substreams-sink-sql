@@ -240,7 +240,7 @@ func (d postgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, usern
 	var q string
 	if readOnly {
 		q = fmt.Sprintf(`
-            CREATE ROLE %s LOGIN PASSWORD '%s';
+            CREATE ROLE %s LOGIN PASSWORD %s;
             GRANT CONNECT ON DATABASE %s TO %s;
             GRANT USAGE ON SCHEMA public TO %s;
             ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %s
