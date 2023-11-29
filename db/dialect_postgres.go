@@ -30,6 +30,7 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 		return err
 	}
 
+	var reversions []func() error
 	l.logger.Info("reverting forked block block(s)", zap.Uint64("last_valid_final_block", lastValidFinalBlock))
 	if rows != nil { // rows will be nil with no error only in testing scenarios
 		defer rows.Close()
@@ -45,12 +46,22 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 			l.logger.Debug("reverting", zap.String("operation", op), zap.String("table_name", table_name), zap.String("pk", pk), zap.Uint64("block_num", block_num))
 			prev_value := prev_value_nullable.String
 
-			if err := d.revertOp(tx, ctx, op, table_name, pk, prev_value, block_num); err != nil {
-				return fmt.Errorf("revertOp: %w", err)
-			}
+			// we can't call revertOp inside this loop, because it calls tx.ExecContext,
+			// which can't run while this query is "active" or it will silently discard the remaining rows!
+			reversions = append(reversions, func() error {
+				if err := d.revertOp(tx, ctx, op, table_name, pk, prev_value, block_num); err != nil {
+					return fmt.Errorf("revertOp: %w", err)
+				}
+				return nil
+			})
 		}
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("iterating on rows from query %q: %w", query, err)
+		}
+		for _, reversion := range reversions {
+			if err := reversion(); err != nil {
+				return fmt.Errorf("execution revert operation: %w", err)
+			}
 		}
 	}
 	pruneHistory := fmt.Sprintf(`DELETE FROM %s WHERE "block_num" > %d;`,

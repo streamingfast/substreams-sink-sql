@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## v4.0.0-rc.3
+
+* Fix a critical bug breaking the reorg management when more than one row needs to be reverted.
+
 ## v4.0.0-rc.2
+
+> :warning: This release candidate contains a critical bug in the reorg management and should not be used. Upgrade immediately to v4.0.0-rc.3
 
 * Support more networks with default mappings (ex: solana, soon: optimism, soon: bitcoin)
 * Add command "create-user <dsn> <username> <database>" to help creating more SQL users, read-only or otherwise
@@ -14,11 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v4.0.0-rc.1
 
+> :warning: This release candidate contains a critical bug in the reorg management and should not be used. Upgrade immediately to v4.0.0-rc.3
+
 ### Fixes
 
 * Fix an issue preventing the `setup` command from running on a clickhouse backend because of the reorg settings.
 
 ## v4.0.0-beta
+
+> :warning: This release candidate contains a critical bug in the reorg management and should not be used. Upgrade immediately to v4.0.0-rc.3
 
 ### Highlights
 
