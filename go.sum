@@ -1116,6 +1116,8 @@ github.com/semiotic-ai/schema v0.0.0-20230727171059-24e630184512 h1:OYGti3Jz92zL
 github.com/semiotic-ai/schema v0.0.0-20230727171059-24e630184512/go.mod h1:dwA6tLbVjXHg8H9yXxUTdmwo77miO9m8NBqyhlGK074=
 github.com/semiotic-ai/schema v0.0.0-20231013140230-ca2e893c4ab1 h1:j672F1H/pZAmTiJVF8f2oxdKhWvtKkRfSZHY5rs42/E=
 github.com/semiotic-ai/schema v0.0.0-20231013140230-ca2e893c4ab1/go.mod h1:dwA6tLbVjXHg8H9yXxUTdmwo77miO9m8NBqyhlGK074=
+github.com/semiotic-ai/schema v0.0.0-20231204185452-913e2b1c41d6 h1:SS6C0GUr75PJoMp6OHxGjPiiLJqWTM+QsQAg4ucsrDQ=
+github.com/semiotic-ai/schema v0.0.0-20231204185452-913e2b1c41d6/go.mod h1:dwA6tLbVjXHg8H9yXxUTdmwo77miO9m8NBqyhlGK074=
 github.com/sethvargo/go-retry v0.2.3 h1:oYlgvIvsju3jNbottWABtbnoLC+GDtLdBHxKWxQm/iU=
 github.com/sethvargo/go-retry v0.2.3/go.mod h1:1afjQuvh7s4gflMObvjLPaWgluLLyhA1wmVZ6KLpICw=
 github.com/shirou/gopsutil v2.19.11+incompatible/go.mod h1:5b4v6he4MtMOwMlS0TUMTu2PcXUg8+E1lC7eC3UO/RA=

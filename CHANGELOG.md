@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+* Bump version of `schema` dependency to fix errors with newere Clickhouse versions now using `system.tables` table instead of `information_schema.tables` view. 
 
 ## v4.0.0-rc.3
 
@@ -63,7 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## v3.0.3
 
 * Fixed missing uint8 and uint16 cast for clickhouse driver conversion
-* Bump version of `schema` dependency to fix errors with Clickhouse 23.9 enums being updated to String representation and not numbers.
 
 ## v3.0.2
 
