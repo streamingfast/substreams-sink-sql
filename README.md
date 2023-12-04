@@ -40,18 +40,20 @@ This is a command line tool to quickly sync a Substreams with a PostgreSQL datab
     ```
 
     > **Note** You now have a postgres instance accessible at `postgres://dev-node:insecure-change-me-in-prod@postgres:5432/dev-node?sslmode=disable`
+    > **Note** You also have a clickhouse instance accessible at `clickhouse://default:default@localhost:9000/default`
 
 1. Run the setup command:
 
     ```bash
-    # that password comes from the default config in `docker-compose.yml`
+    # the passwords come from the default config in `docker-compose.yml`
     export DSN="postgres://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
-    substreams-sink-sql setup docs/tutorial/substreams.yaml
+    #export DSN="clickhouse://default:default@localhost:9000/default"
+    substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
     ```
 
-    This will connect to the database and create the schema, using the values from `sink.config.schema` and `sink.config.dsn`
+    This will connect to the database and create the schema, using the values from `sink.config.schema`
 
-    > **Note** For the sake of idempotency, we recommend that the schema file only contain `create table if not exists` statements.
+    > **Note** For the sake of idempotency, we recommend that the schema file only contain `create (...) if not exists` statements.
 
 1. Run the sink
 

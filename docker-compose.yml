@@ -35,7 +35,7 @@ services:
       - postgres
   database:
     container_name: clickhouse-ssp
-    image: clickhouse/clickhouse-server
+    image: clickhouse/clickhouse-server:23.9
     user: "101:101"
     hostname: clickhouse
     volumes:
