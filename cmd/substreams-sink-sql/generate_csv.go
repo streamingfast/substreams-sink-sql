@@ -18,9 +18,9 @@ const lastCursorFilename = "last_cursor"
 
 var generateCsvCmd = Command(generateCsvE,
 	"generate-csv <dsn> <manifest> [start]:<stop>",
-	"Generates CSVs for each table so it can be bulk inserted with `inject-csv`",
+	"Generates CSVs for each table so it can be bulk inserted with `inject-csv` (for postgresql only)",
 	Description(`
-		This command command is the first of a multi-step process to bulk insert data into an SQL database.
+		This command command is the first of a multi-step process to bulk insert data into a PostgreSQL database.
 		It creates a folder for each table and generates CSVs for block ranges. This files can be used with
 		the 'inject-csv' command to bulk insert data into the database.
 

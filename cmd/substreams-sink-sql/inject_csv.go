@@ -23,7 +23,7 @@ import (
 
 var injectCSVCmd = Command(injectCSVE,
 	"inject-csv <psql_dsn> <input_path> <table> <start>:<stop>",
-	"Injects generated CSV rows for <table> into the database pointed by <psql_dsn> argument.",
+	"Injects generated CSV rows for <table> into the database pointed by <psql_dsn> argument. (postgresql-only)",
 	Description(`
 		Can be run in parallel for multiple rows up to the same <stop>, the <start> and <stop> block must be provided explicitely.
 
@@ -47,6 +47,10 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 	sqlDSN, err := db.ParseDSN(psqlDSN)
 	if err != nil {
 		return fmt.Errorf("invalid sql DSN %q: %w", psqlDSN, err)
+	}
+
+	if sqlDSN.Driver() != "postgres" {
+		return fmt.Errorf("inject-csv only supports postgresql DSNs, got %q", sqlDSN.Driver())
 	}
 
 	zlog.Info("connecting to input store")

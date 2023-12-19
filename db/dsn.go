@@ -99,6 +99,10 @@ func ParseDSN(dsn string) (*DSN, error) {
 	return d, nil
 }
 
+func (c *DSN) Driver() string {
+	return c.driver
+}
+
 func (c *DSN) ConnString() string {
 	if c.driver == "clickhouse" {
 		return c.original
