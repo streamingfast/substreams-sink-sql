@@ -13,8 +13,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
-	github.com/streamingfast/substreams v1.1.22-0.20231128151246-665a9437c4b3
-	github.com/streamingfast/substreams-sink v0.3.3-0.20230901183759-218c1d9ec645
+	github.com/streamingfast/substreams v1.3.0
+	github.com/streamingfast/substreams-sink v0.3.3-0.20231222213313-af36d45db340
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
 	github.com/stretchr/testify v1.8.4
 	github.com/wk8/go-ordered-map/v2 v2.1.7
@@ -118,7 +118,6 @@ require (
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chzyer/readline v1.5.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -138,16 +137,15 @@ require (
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.0 // indirect
-	github.com/streamingfast/atm v0.0.0-20220131151839-18c87005e680 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20230829131224-b9272048dc6a
+	github.com/streamingfast/bstream v0.0.2-0.20231121211820-e45c1b42f472
 	github.com/streamingfast/cli v0.0.4-0.20230825151644-8cc84512cd80
-	github.com/streamingfast/dbin v0.0.0-20210809205249-73d5eca35dc5 // indirect
+	github.com/streamingfast/dbin v0.9.1-0.20231117225723-59790c798e2c // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20230929132851-893fc52687fa // indirect
 	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
 	github.com/streamingfast/dmetrics v0.0.0-20230919161904-206fa8ebd545
 	github.com/streamingfast/dstore v0.1.1-0.20230620124109-3924b3b36c77
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect
-	github.com/streamingfast/pbgo v0.0.6-0.20221020131607-255008258d28 // indirect
+	github.com/streamingfast/pbgo v0.0.6-0.20231120172814-537d034aad5e // indirect
 	github.com/streamingfast/shutter v1.5.0
 	github.com/yourbasic/graph v0.0.0-20210606180040-8ecfec1c2869 // indirect
 	go.opencensus.io v0.24.0 // indirect
@@ -169,4 +167,3 @@ require (
 )
 
 replace github.com/jimsmart/schema => github.com/semiotic-ai/schema v0.0.0-20231204185452-913e2b1c41d6
-

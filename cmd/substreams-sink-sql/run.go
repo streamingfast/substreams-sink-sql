@@ -47,18 +47,25 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		blockRange = args[2]
 	}
 
-	reader, err := manifest.NewReader(manifestPath)
-	if err != nil {
-		return fmt.Errorf("setup manifest reader: %w", err)
-	}
-	pkg, err := reader.Read()
-	if err != nil {
-		return fmt.Errorf("read manifest: %w", err)
-	}
-
-	endpoint, err := manifest.ExtractNetworkEndpoint(pkg.Network, sflags.MustGetString(cmd, "endpoint"), zlog)
-	if err != nil {
-		return err
+	endpoint := sflags.MustGetString(cmd, "endpoint")
+	if endpoint == "" {
+		network := sflags.MustGetString(cmd, "network")
+		if network == "" {
+			reader, err := manifest.NewReader(manifestPath)
+			if err != nil {
+				return fmt.Errorf("setup manifest reader: %w", err)
+			}
+			pkg, _, err := reader.Read()
+			if err != nil {
+				return fmt.Errorf("read manifest: %w", err)
+			}
+			network = pkg.Network
+		}
+		var err error
+		endpoint, err = manifest.ExtractNetworkEndpoint(network, sflags.MustGetString(cmd, "endpoint"), zlog)
+		if err != nil {
+			return err
+		}
 	}
 
 	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") == 0
