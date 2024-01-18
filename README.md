@@ -1,6 +1,7 @@
 # Substreams Sink SQL
 
-This is a command line tool to quickly sync a Substreams with a PostgreSQL database.
+The Substreams:SQL sink helps you quickly and easily sync Substreams modules to
+a PostgreSQL or Clickhouse database.
 
 ### Quickstart
 
