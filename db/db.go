@@ -99,6 +99,8 @@ func NewLoader(
 		zap.String("driver", dsn.driver),
 		zap.String("database", dsn.database),
 		zap.String("schema", dsn.schema),
+		zap.String("user", dsn.username),
+		zap.Stringer("password", obfuscatedString(dsn.password)),
 		zap.String("host", dsn.host),
 		zap.Int64("port", dsn.port),
 		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
@@ -187,7 +189,7 @@ func (l *Loader) LoadTables() error {
 		return &SystemTableError{fmt.Errorf(`%s.%s table is not found`, EscapeIdentifier(l.schema), CURSORS_TABLE)}
 	}
 	if l.handleReorgs && !seenHistoryTable {
-		return &SystemTableError{fmt.Errorf("%s.%s table is not found and reorgs handling is enabled.", EscapeIdentifier(l.schema), HISTORY_TABLE)}
+		return &SystemTableError{fmt.Errorf("%s.%s table is not found and reorgs handling is enabled", EscapeIdentifier(l.schema), HISTORY_TABLE)}
 	}
 
 	l.cursorTable = l.tables[CURSORS_TABLE]
@@ -328,4 +330,14 @@ func (l *Loader) tryDialect() (dialect, error) {
 		return nil, UnknownDriverError{Driver: dt}
 	}
 	return d, nil
+}
+
+type obfuscatedString string
+
+func (s obfuscatedString) String() string {
+	if len(s) == 0 {
+		return "<unset>"
+	}
+
+	return "********"
 }

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-* Bump version of `schema` dependency to fix errors with newere Clickhouse versions now using `system.tables` table instead of `information_schema.tables` view. 
+* Bump version of `schema` dependency to fix errors with new Clickhouse versions now using `system.tables` table instead of `information_schema.tables` view.
 * Add `--network` flag to override the default value in the manifest or spkg
 
 ## v4.0.0-rc.3
