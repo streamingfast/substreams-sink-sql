@@ -5,14 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.0.1
 
 * Fixed the timestamp parsing in Clickhouse dialect.
 * Fixed the schema in the tutorial for clickhouse.
-* Bump version of `schema` dependency to fix errors with new Clickhouse versions now using `system.tables` table instead of `information_schema.tables` view.
 * Add `--network` flag to override the default value in the manifest or spkg
 
 ## v4.0.0
+
+* Bump version of `schema` dependency to fix errors with new Clickhouse versions now using `system.tables` table instead of `information_schema.tables` view.
+
+## v4.0.0-rc.3
 
 * Fix a critical bug breaking the reorg management when more than one row needs to be reverted.
 
