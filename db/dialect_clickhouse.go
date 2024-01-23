@@ -227,7 +227,13 @@ func convertToType(value string, valueType reflect.Type) (any, error) {
 				return int64(i), nil
 			}
 
-			v, err := time.Parse("2006-01-02T15:04:05Z", value)
+			var v time.Time
+			var err error
+			if strings.Contains(value, "T") && strings.HasSuffix(value, "Z") {
+				v, err = time.Parse("2006-01-02T15:04:05Z", value)
+			} else {
+				v, err = time.Parse("2006-01-02 15:04:05", value)
+			}
 			if err != nil {
 				return "", fmt.Errorf("could not convert %s to time: %w", value, err)
 			}
