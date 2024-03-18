@@ -7,18 +7,17 @@ a PostgreSQL or Clickhouse database.
 
 1. Install `substreams-sink-sql` by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-sql/releases). Extract `substreams-sink-sql` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable.
 
-    > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-sql/cmd/substreams-sink-sql@latest`.
+   > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-sql/cmd/substreams-sink-sql@latest`.
 
 1. Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project:
 
-    ```bash
-    cd docs/tutorial
-    cargo build --target wasm32-unknown-unknown --release
-    cd ../..
-    ```
+   ```bash
+   cd docs/tutorial
+   cargo build --target wasm32-unknown-unknown --release
+   cd ../..
+   ```
 
-    This creates the following WASM file: `target/wasm32-unknown-unknown/release/substreams_postgresql_sink_tutorial.wasm` 
-
+   This creates the following WASM file: `target/wasm32-unknown-unknown/release/substreams_postgresql_sink_tutorial.wasm`
 
 1. Observe the "Sink Config" section of the [substreams manifest in the tutorial](docs/tutorial/substreams.yaml), changing the DSN if needed.
 
@@ -27,54 +26,53 @@ a PostgreSQL or Clickhouse database.
      module: blockmeta:db_out
      type: sf.substreams.sink.sql.v1.Service
      config:
-       schema: "../eth-block-meta/schema.sql"
+       schema: "./schema.sql"
    ```
 
 1. Start Docker Compose in the background:
 
-    > **Note** Feel free to skip this step if you already have a running Postgres instance accessible
+   > **Note** Feel free to skip this step if you already have a running Postgres instance accessible
 
-    ```bash
-    # from the root of this repository
-    rm -rf ./devel/data/postgres # clean up previous data
-    docker-compose up -d
-    ```
+   ```bash
+   # from the root of this repository
+   rm -rf ./devel/data/postgres # clean up previous data
+   docker-compose up -d
+   ```
 
-    > **Note** You now have a postgres instance accessible at `postgres://dev-node:insecure-change-me-in-prod@postgres:5432/dev-node?sslmode=disable`
-    > **Note** You also have a clickhouse instance accessible at `clickhouse://default:default@localhost:9000/default`
+   > **Note** You now have a postgres instance accessible at `postgres://dev-node:insecure-change-me-in-prod@postgres:5432/dev-node?sslmode=disable` > **Note** You also have a clickhouse instance accessible at `clickhouse://default:default@localhost:9000/default`
 
 1. Run the setup command:
 
-    ```bash
-    # the passwords come from the default config in `docker-compose.yml`
-    export DSN="postgres://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
-    #export DSN="clickhouse://default:default@localhost:9000/default"
-    substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
-    ```
+   ```bash
+   # the passwords come from the default config in `docker-compose.yml`
+   export DSN="postgres://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
+   #export DSN="clickhouse://default:default@localhost:9000/default"
+   substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
+   ```
 
-    This will connect to the database and create the schema, using the values from `sink.config.schema`
+   This will connect to the database and create the schema, using the values from `sink.config.schema`
 
-    > **Note** For the sake of idempotency, we recommend that the schema file only contain `create (...) if not exists` statements.
+   > **Note** For the sake of idempotency, we recommend that the schema file only contain `create (...) if not exists` statements.
 
 1. Run the sink
 
-    Now that the code is compiled and the databse is set up, let launch the `sink` process.
+   Now that the code is compiled and the databse is set up, let launch the `sink` process.
 
-    > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
-    > **Note** This will connect to the `mainnet.eth.streamingfast.io:443` endpoint, because it is the default endpoint for the `mainnet` network, defined in `docs/tutorial/substreams.yaml`. You can change this either by using the endpoint flag `-e another.endpoint:443` or by setting the environment variable `SUBSTREAMS_ENDPOINTS_CONFIG_MAINNET` to that endpoint. The last part of the environment variable is the name of the network in the manifest, in uppercase.
+   > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
+   > **Note** This will connect to the `mainnet.eth.streamingfast.io:443` endpoint, because it is the default endpoint for the `mainnet` network, defined in `docs/tutorial/substreams.yaml`. You can change this either by using the endpoint flag `-e another.endpoint:443` or by setting the environment variable `SUBSTREAMS_ENDPOINTS_CONFIG_MAINNET` to that endpoint. The last part of the environment variable is the name of the network in the manifest, in uppercase.
 
-    ```shell
-    substreams-sink-sql run \
-        $DSN \
-        docs/tutorial/substreams.yaml
-    ```
+   ```shell
+   substreams-sink-sql run \
+       $DSN \
+       docs/tutorial/substreams.yaml
+   ```
 
 1. Tear down your Docker Compose cluster
 
-    ```bash
-    # from the root of this repository
-    docker-compose down
-    ```
+   ```bash
+   # from the root of this repository
+   docker-compose down
+   ```
 
 ### DSN
 
@@ -122,16 +120,16 @@ Only `psql` and `clickhouse` are supported today, adding support for a new _dial
 ### Output Module
 
 To be accepted by `substreams-sink-sql`, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
+
 - [substreams-eth-block-meta](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) (some helpers found in [db_out.rs](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6))
 
 By convention, we name the `map` module that emits [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) output `db_out`.
 
-> Note that using prior versions (0.2.0, 0.1.*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
-
+> Note that using prior versions (0.2.0, 0.1.\*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
 
 ### Protobuf models
 
-* protobuf bindings are generated using `buf generate` at the root of this repo. See https://buf.build/docs/installation to install buf.
+- protobuf bindings are generated using `buf generate` at the root of this repo. See https://buf.build/docs/installation to install buf.
 
 ### Advanced Topics
 
@@ -189,6 +187,7 @@ This will start back at the latest block written and will start to handoff strea
 When generating the CSV files, optimally choosing the `--buffer-max-size` configuration value can drastically increase your write throughput locally but even more if your target store is an Amazon S3, Google Cloud Storage or Azure bucket. The flag controls how many bytes of the files is to be held in memory. By having bigger amount of buffered bytes, data is transferred in big chunk to the storage layer leading to improve performance. In lots of cases, the full file can be held in memory leading to a single "upload" call being performed having even better performance.
 
 When choosing this value you should consider 2 things:
+
 - One buffer exist by table in your schema, so if there is 12 tables and you have a 128 MiB buffer, you could have up to 1.536 GiB (`128 MiB * 12`) of RAM allocated to those buffers.
 - Amount of RAM you want to allocate.
 
