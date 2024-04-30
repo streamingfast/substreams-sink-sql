@@ -5,10 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.0.3
 
+* Fix another case where 'infinite-retry' would not work and the program would stop on an error.
 * Enable multiple Substreams authentication methods (API key, JWT), using flags `--api-key-envvar` and `--api-token-envvar`.
-
 * Deprecates the use of `SF_API_TOKEN` environment variable, now use default `SUBSTREAMS_API_TOKEN` or set your own using `--api-token-envvar`.
 
 ## v4.0.2
