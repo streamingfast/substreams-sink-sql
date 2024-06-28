@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.2.0
+
+* Added the --cursor-table and --history-table flags to allow running to sinks on the same database (be careful that you have no collision in table names)
+* bumped substreams to v1.8.2, add some default network endpoints
+
 ## v4.1.0
 
 * Bumped substreams to v1.7.3
