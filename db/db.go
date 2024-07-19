@@ -1,11 +1,13 @@
 package db
 
 import (
+	"crypto/tls"
 	"context"
 	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jimsmart/schema"
 	"github.com/streamingfast/logging"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
@@ -62,9 +64,31 @@ func NewLoader(
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
 
-	db, err := sql.Open(dsn.driver, dsn.ConnString())
-	if err != nil {
-		return nil, fmt.Errorf("open db connection: %w", err)
+	var db *sql.DB
+	fmt.Println(dsn.driver)
+	if dsn.driver == "clickhouse" {
+		conn_str := fmt.Sprintf("%s:%s", dsn.host, dsn.port)
+		conn := clickhouse.OpenDB(&clickhouse.Options{
+			Addr: []string{conn_str},
+			Auth: clickhouse.Auth{
+				Database: dsn.database,
+				Username: dsn.username,
+				Password: dsn.password,
+			},
+			TLS: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			Settings: clickhouse.Settings{
+				"max_execution_time": 60,
+			},
+			Debug: true,
+		})
+		db = conn
+	} else {
+		db, err = sql.Open(dsn.driver, dsn.ConnString())
+		if err != nil {
+			return nil, fmt.Errorf("open db connection: %w", err)
+		}
 	}
 
 	l := &Loader{
@@ -175,12 +199,12 @@ func (l *Loader) LoadTables() error {
 		}
 
 		key, err := schema.PrimaryKey(l.DB, schemaName, tableName)
-		if err != nil {
+		if (err != nil) {
 			return fmt.Errorf("get primary key: %w", err)
 		}
 
 		l.tables[tableName], err = NewTableInfo(schemaName, tableName, key, columnByName)
-		if err != nil {
+		if (err != nil) {
 			return fmt.Errorf("invalid table: %w", err)
 		}
 	}
@@ -225,7 +249,7 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType) (err error) {
 		}
 	}
 	key, err := schema.PrimaryKey(l.DB, l.schema, CURSORS_TABLE)
-	if err != nil {
+	if (err != nil) {
 		return &SystemTableError{fmt.Errorf("failed getting primary key: %w", err)}
 	}
 	if len(key) == 0 {
