@@ -534,8 +534,8 @@ github.com/streamingfast/schema v0.0.0-20240621180609-1de2e05fe3bd h1:P96NMUr1jD
 github.com/streamingfast/schema v0.0.0-20240621180609-1de2e05fe3bd/go.mod h1:XuHkKh98QevgA9M3oWB5Y5Tm6w7iNJ5P3a3ao7UnnfI=
 github.com/streamingfast/shutter v1.5.0 h1:NpzDYzj0HVpSiDJVO/FFSL6QIK/YKOxY0gJAtyaTOgs=
 github.com/streamingfast/shutter v1.5.0/go.mod h1:B/T6efqdeMGbGwjzPS1ToXzYZI4kDzI5/u4I+7qbjY8=
-github.com/streamingfast/substreams v1.8.3-0.20240628134338-5c9843eeef98 h1:fDo2+v07xEbR0J0sRe8m/W7pnPDYq7dFIAdcHElMNDg=
-github.com/streamingfast/substreams v1.8.3-0.20240628134338-5c9843eeef98/go.mod h1:XtL4RgQawes9/a9iM9d6bAABacfIuekY+jceszF7u2c=
+github.com/streamingfast/substreams v1.9.3-0.20240724192119-4163f825c7b5 h1:4BosCGSTKlo0A+/EuxRLT9+HcvKsdCH/MrqZdOWoou4=
+github.com/streamingfast/substreams v1.9.3-0.20240724192119-4163f825c7b5/go.mod h1:XtL4RgQawes9/a9iM9d6bAABacfIuekY+jceszF7u2c=
 github.com/streamingfast/substreams-sink v0.4.0 h1:sU/E9Q4zXTfKxaGUgQ4OMFC+/NBH5VdZx6SOcBVp7P0=
 github.com/streamingfast/substreams-sink v0.4.0/go.mod h1:wlF6pAQTBXQGA9k5R1yKg6enHdtXjz1pMlAs4lhZOac=
 github.com/streamingfast/substreams-sink-database-changes v1.1.3 h1:rXeGb/V2mjC8FftumRkMQxG2jtdLfHdLx9UQVUtAqS8=
