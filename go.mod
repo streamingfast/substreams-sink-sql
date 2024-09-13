@@ -150,5 +150,3 @@ require (
 )
 
 replace github.com/jimsmart/schema => github.com/streamingfast/schema v0.0.0-20240621180609-1de2e05fe3bd
-
-
