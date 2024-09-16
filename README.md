@@ -46,7 +46,7 @@ a PostgreSQL or Clickhouse database.
    ```bash
    # the passwords come from the default config in `docker-compose.yml`
    export DSN="postgres://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
-   #export DSN="clickhouse://default:default@localhost:9000/default"
+   #export DSN="clickhouse://default:@localhost:9000/default"
    substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
    ```
 
