@@ -18,10 +18,10 @@ import (
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
-	"github.com/streamingfast/substreams-sink-sql/bundler"
-	"github.com/streamingfast/substreams-sink-sql/bundler/writer"
-	"github.com/streamingfast/substreams-sink-sql/db"
-	"github.com/streamingfast/substreams-sink-sql/state"
+	bundler2 "github.com/streamingfast/substreams-sink-sql/db_changes/bundler"
+	writer2 "github.com/streamingfast/substreams-sink-sql/db_changes/bundler/writer"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
+	state2 "github.com/streamingfast/substreams-sink-sql/db_changes/state"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -31,16 +31,16 @@ type GenerateCSVSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
 
-	bundlersByTable    map[string]*bundler.Bundler
+	bundlersByTable    map[string]*bundler2.Bundler
 	cursorsTableStore  dstore.Store
 	lastCursorFilename string
 	stopBlock          uint64
 
 	// cursor
-	stateStore state.Store
+	stateStore state2.Store
 	bundleSize uint64
 
-	loader *db.Loader
+	loader *db2.Loader
 	logger *zap.Logger
 	tracer logging.Tracer
 
@@ -53,7 +53,7 @@ func NewGenerateCSVSinker(
 	workingDir string,
 	bundleSize uint64,
 	bufferSize uint64,
-	loader *db.Loader,
+	loader *db2.Loader,
 	lastCursorFilename string,
 	logger *zap.Logger,
 	tracer logging.Tracer,
@@ -74,7 +74,7 @@ func NewGenerateCSVSinker(
 	if err != nil {
 		return nil, err
 	}
-	stateStore, err := state.NewFileStateStore(stateStorePath, stateDStore, logger)
+	stateStore, err := state2.NewFileStateStore(stateStorePath, stateDStore, logger)
 	if err != nil {
 		return nil, fmt.Errorf("new file state store: %w", err)
 	}
@@ -84,7 +84,7 @@ func NewGenerateCSVSinker(
 		return nil, err
 	}
 
-	cursorsStore, err := csvOutputStore.SubStore(db.CURSORS_TABLE)
+	cursorsStore, err := csvOutputStore.SubStore(db2.CURSORS_TABLE)
 	if err != nil {
 		return nil, fmt.Errorf("cursors sub store: %w", err)
 	}
@@ -93,7 +93,7 @@ func NewGenerateCSVSinker(
 		Shutter: shutter.New(),
 		Sinker:  sink,
 
-		bundlersByTable:    make(map[string]*bundler.Bundler),
+		bundlersByTable:    make(map[string]*bundler2.Bundler),
 		cursorsTableStore:  cursorsStore,
 		lastCursorFilename: lastCursorFilename,
 		stopBlock:          *blockRange.EndBlock(),
@@ -125,7 +125,7 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 	s.stateStore.Start(ctx)
 	s.stateStore.OnTerminating(s.Shutdown)
 	cursor, err := s.stateStore.ReadCursor(ctx)
-	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
+	if err != nil && !errors.Is(err, db2.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
 	}
@@ -252,7 +252,7 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 				fields[field.Name] = field.NewValue
 			}
 
-			data, _ := bundler.CSVEncode(fields)
+			data, _ := bundler2.CSVEncode(fields)
 			if !tableBundler.HeaderWritten {
 				tableBundler.Writer().Write(tableBundler.Header)
 				tableBundler.HeaderWritten = true
@@ -276,10 +276,10 @@ func (s *GenerateCSVSinker) rollAllBundlers(ctx context.Context, blockNum uint64
 	for table, entityBundler := range s.bundlersByTable {
 		wg.Add(1)
 
-		go func(table string, eb *bundler.Bundler) {
+		go func(table string, eb *bundler2.Bundler) {
 			rolled, err := eb.Roll(ctx, blockNum)
 			if err != nil {
-				if errors.Is(err, bundler.ErrStopBlockReached) {
+				if errors.Is(err, bundler2.ErrStopBlockReached) {
 					// We will terminated after all bundles have completed because have "cursors" table to write
 					reachedEndBlock.Store(true)
 				} else {
@@ -322,11 +322,11 @@ func (s *GenerateCSVSinker) HandleBlockUndoSignal(ctx context.Context, data *pbs
 	return fmt.Errorf("received undo signal but there is no handling of undo, this is because you used `--undo-buffer-size=0` which is invalid right now")
 }
 
-func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint64, baseOutputStore dstore.Store, workingDir string, logger *zap.Logger, columns []string) (*bundler.Bundler, error) {
-	boundaryWriter := writer.NewBufferedIO(
+func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint64, baseOutputStore dstore.Store, workingDir string, logger *zap.Logger, columns []string) (*bundler2.Bundler, error) {
+	boundaryWriter := writer2.NewBufferedIO(
 		bufferSize,
 		filepath.Join(workingDir, table),
-		writer.FileTypeCSV,
+		writer2.FileTypeCSV,
 		logger.With(zap.String("table_name", table)),
 	)
 	subStore, err := baseOutputStore.SubStore(table)
@@ -337,7 +337,7 @@ func getBundler(table string, startBlock, stopBlock, bundleSize, bufferSize uint
 	sort.Strings(columns)
 
 	header := []byte(strings.Join(columns, ",") + "\n")
-	fb, err := bundler.New(bundleSize, stopBlock, boundaryWriter, subStore, logger, header)
+	fb, err := bundler2.New(bundleSize, stopBlock, boundaryWriter, subStore, logger, header)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +362,7 @@ func (s *GenerateCSVSinker) HandleBlockRangeCompletion(ctx context.Context, curs
 func (s *GenerateCSVSinker) writeCursorsTable(ctx context.Context, lastCursor *sink.Cursor) error {
 	buffer := bytes.NewBuffer(make([]byte, 0, 1024))
 
-	columns := s.loader.GetColumnsForTable(db.CURSORS_TABLE)
+	columns := s.loader.GetColumnsForTable(db2.CURSORS_TABLE)
 	sort.Strings(columns)
 	buffer.WriteString(strings.Join(columns, ","))
 	buffer.WriteString("\n")

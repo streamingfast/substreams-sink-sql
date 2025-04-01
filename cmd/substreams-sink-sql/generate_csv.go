@@ -9,7 +9,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/sinker"
+	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
 	"github.com/streamingfast/substreams/manifest"
 )
 
@@ -60,7 +60,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	app := NewApplication(cmd.Context())
 
 	sink.RegisterMetrics()
-	sinker.RegisterMetrics()
+	sinker2.RegisterMetrics()
 
 	dsn := args[0]
 	manifestPath := args[1]
@@ -112,7 +112,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new db loader: %w", err)
 	}
 
-	generateCSVSinker, err := sinker.NewGenerateCSVSinker(
+	generateCSVSinker, err := sinker2.NewGenerateCSVSinker(
 		sink,
 		outputDir,
 		workingDir,

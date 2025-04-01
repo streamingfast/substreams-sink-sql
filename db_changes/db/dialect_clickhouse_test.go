@@ -2,10 +2,11 @@ package db
 
 import (
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_convertToType(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
-	"github.com/streamingfast/substreams-sink-sql/db"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams/client"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
@@ -208,11 +208,11 @@ func TestInserts(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			l, tx := db.NewTestLoader(
+			l, tx := db2.NewTestLoader(
 				logger,
 				tracer,
 				"testschema",
-				db.TestTables("testschema"),
+				db2.TestTables("testschema"),
 			)
 			s, err := sink.New(sink.SubstreamsModeDevelopment, false, testPackage, testPackage.Modules.Modules[0], []byte("unused"), testClientConfig, logger, nil)
 			require.NoError(t, err)
@@ -353,8 +353,8 @@ func blockScopedData(module string, changes []*pbdatabase.TableChange, blockNum 
 		FinalBlockHeight: finalBlockNum,
 	}
 }
-func mustNewTableInfo(schema, name string, pkList []string, columnsByName map[string]*db.ColumnInfo) *db.TableInfo {
-	ti, err := db.NewTableInfo(schema, name, pkList, columnsByName)
+func mustNewTableInfo(schema, name string, pkList []string, columnsByName map[string]*db2.ColumnInfo) *db2.TableInfo {
+	ti, err := db2.NewTableInfo(schema, name, pkList, columnsByName)
 	if err != nil {
 		panic(err)
 	}

@@ -2,8 +2,9 @@ package writer
 
 import (
 	"context"
-	"github.com/streamingfast/dstore"
 	"io"
+
+	"github.com/streamingfast/dstore"
 
 	"github.com/streamingfast/bstream"
 )

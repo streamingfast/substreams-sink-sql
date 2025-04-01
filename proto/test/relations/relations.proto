@@ -1,0 +1,96 @@
+syntax = "proto3";
+import "google/protobuf/descriptor.proto";
+import "schema/schema.proto";
+
+package test.relations;
+option go_package = "test/relations";
+
+
+message Output {
+  repeated Entity entities = 1;
+}
+
+
+message Entity {
+
+  oneof entity {
+    Customer customer = 1;
+    Order order = 2;
+    Item item = 3;
+  }
+}
+
+/*
+CREATE TABLE  IF NOT EXISTS rel_test.customers (
+    id SERIAL PRIMARY KEY,
+    block_number INTEGER NOT NULL,
+    customer_id VARCHAR(255) UNIQUE
+);
+ */
+message Customer {
+  option (schema.table) = { name: "customers" };
+
+  string customer_id = 1 [(schema.field) = { primary_key: true }];
+  string name = 2;
+  string foo = 3;
+}
+
+/*
+CREATE TABLE  IF NOT EXISTS rel_test.orders (
+    id SERIAL PRIMARY KEY,
+    block_number INTEGER NOT NULL,
+    order_id VARCHAR(255) UNIQUE,
+    customer_ref_id VARCHAR(255)
+);
+ALTER TABLE rel_test.orders ADD CONSTRAINT fk_customer_ref_id  FOREIGN KEY (customer_ref_id) REFERENCES rel_test.customers(customer_id)
+ */
+message Order {
+  option (schema.table) = { name: "orders"};
+
+  string order_id = 1 [(schema.field) = {  primary_key: true}];
+  string customer_ref_id = 2 [(schema.field) = { foreign_key: "customers on customer_id"}];
+  repeated OrderItem items = 3;
+}
+
+/*
+CREATE TABLE IF NOT EXISTS rel_test.order_items
+(
+    id           SERIAL PRIMARY KEY,
+    block_number INTEGER      NOT NULL,
+    order_id     VARCHAR(255) NOT NULL,
+    item_id      VARCHAR(255),
+    quantity     BIGINT
+);
+
+ALTER TABLE rel_test.order_items ADD CONSTRAINT fk_order_id  FOREIGN KEY (order_id) REFERENCES rel_test.orders(order_id)
+ALTER TABLE rel_test.order_items ADD CONSTRAINT fk_item_id  FOREIGN KEY (item_id) REFERENCES rel_test.items(item_id)
+
+ */
+message OrderItem {
+  option (schema.table) = {
+    name: "order_items",
+    child_of: "orders on order_id"
+  };
+
+  // can also leverage orders._id using "order on order_id" if order do not have a external unique identifier
+  string item_id = 2 [(schema.field) = { foreign_key: "items on item_id"}];
+  int64 quantity = 11;
+}
+
+
+/*
+CREATE TABLE  IF NOT EXISTS rel_test.items (
+    id SERIAL PRIMARY KEY,
+    block_number INTEGER NOT NULL,
+    item_id VARCHAR(255) UNIQUE,
+    name VARCHAR(255),
+    price DOUBLE PRECISION);
+ */
+message Item {
+  option (schema.table) = { name: "items" };
+
+  string item_id = 1 [(schema.field) = { unique: true }];
+
+  string name = 10;
+  double price = 11;
+}

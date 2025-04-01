@@ -1,8 +1,8 @@
 module github.com/streamingfast/substreams-sink-sql
 
-go 1.22
+go 1.23.1
 
-toolchain go1.22.9
+toolchain go1.23.6
 
 require (
 	github.com/AfterShip/clickhouse-sql-parser v0.4.5-0.20250321030459-a0eef0f2459e
@@ -11,7 +11,7 @@ require (
 	github.com/drone/envsubst v1.0.3
 	github.com/golang/protobuf v1.5.4
 	github.com/jimsmart/schema v0.2.0
-	github.com/lib/pq v1.10.7
+	github.com/lib/pq v1.10.9
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
@@ -19,11 +19,13 @@ require (
 	github.com/streamingfast/substreams v1.11.1
 	github.com/streamingfast/substreams-sink v0.5.0
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
-	github.com/stretchr/testify v1.9.0
+	github.com/streamingfast/substreams-sink-map-sql v0.0.0-20250328155027-0003fb767c70
+	github.com/stretchr/testify v1.10.0
+	github.com/test-go/testify v1.1.4
 	github.com/wk8/go-ordered-map/v2 v2.1.7
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.2
 )
 
 require (
@@ -39,6 +41,7 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/bobg/go-generics/v3 v3.4.0 // indirect
+	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/charmbracelet/lipgloss v1.0.0 // indirect
@@ -119,7 +122,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgx/v4 v4.18.1
-	github.com/jhump/protoreflect v1.14.0 // indirect
+	github.com/jhump/protoreflect v1.17.0
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.17.7 // indirect
 	github.com/lithammer/dedent v1.1.0
@@ -148,7 +151,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/term v0.20.0 // indirect

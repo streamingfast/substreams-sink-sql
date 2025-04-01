@@ -11,7 +11,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/dmetrics"
-	"github.com/streamingfast/substreams-sink-sql/db"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"go.uber.org/zap"
 )
 

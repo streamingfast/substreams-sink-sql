@@ -9,7 +9,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/sinker"
+	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
 	"github.com/streamingfast/substreams/manifest"
 )
 
@@ -20,7 +20,7 @@ func (i ignoreUndoBufferSize) IsIgnored(in string) bool {
 }
 
 var sinkRunCmd = Command(sinkRunE,
-	"run <dsn> <manifest> [<start>:<stop>]",
+	"run <dsn> [<manifest> [<module_name>]] ",
 	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
@@ -42,7 +42,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	app := NewApplication(cmd.Context())
 
 	sink.RegisterMetrics()
-	sinker.RegisterMetrics()
+	sinker2.RegisterMetrics()
 
 	dsn := args[0]
 	manifestPath := args[1]
@@ -98,7 +98,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new db loader: %w", err)
 	}
 
-	postgresSinker, err := sinker.New(sink, dbLoader, zlog, tracer)
+	postgresSinker, err := sinker2.New(sink, dbLoader, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("unable to setup postgres sinker: %w", err)
 	}

@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/dhammer"
 	"github.com/streamingfast/dstore"
 	"github.com/streamingfast/shutter"
-	"github.com/streamingfast/substreams-sink-sql/bundler/writer"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/bundler/writer"
 	"go.uber.org/zap"
 )
 

@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/dstore"
-	"github.com/streamingfast/substreams-sink-sql/db"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +44,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid block range %q: %w", args[3], err)
 	}
 
-	sqlDSN, err := db.ParseDSN(psqlDSN)
+	sqlDSN, err := db2.ParseDSN(psqlDSN)
 	if err != nil {
 		return fmt.Errorf("invalid sql DSN %q: %w", psqlDSN, err)
 	}
@@ -125,7 +125,7 @@ func extractFieldsFromReader(reader io.Reader) ([]string, error) {
 func (t *TableFiller) Run(ctx context.Context) error {
 	zlog.Info("table filler", zap.String("table", t.tblName))
 
-	if t.tblName == db.CURSORS_TABLE {
+	if t.tblName == db2.CURSORS_TABLE {
 		return t.injectCursorsTable(ctx)
 	}
 
@@ -160,11 +160,11 @@ func (t *TableFiller) Run(ctx context.Context) error {
 }
 
 func (t *TableFiller) injectCursorsTable(ctx context.Context) error {
-	path := db.CURSORS_TABLE + "/" + lastCursorFilename
+	path := db2.CURSORS_TABLE + "/" + lastCursorFilename
 	reader, err := t.in.OpenObject(ctx, path)
 	if err != nil {
 		if errors.Is(err, dstore.ErrNotFound) {
-			return fmt.Errorf("trying to inject %q table but the last cursor filename %q was not found in %s", db.CURSORS_TABLE, path, t.in.BaseURL())
+			return fmt.Errorf("trying to inject %q table but the last cursor filename %q was not found in %s", db2.CURSORS_TABLE, path, t.in.BaseURL())
 		}
 
 		return fmt.Errorf("open object %q: %w", lastCursorFilename, err)
@@ -183,7 +183,7 @@ func (t *TableFiller) injectCursorsTable(ctx context.Context) error {
 
 	zlog.Info("injecting cursors table")
 	if err := t.injectCSVFromReader(ctx, bytes.NewBuffer(content), "<generated>", dbColumns); err != nil {
-		return fmt.Errorf("failed to inject %q table content: %w", db.CURSORS_TABLE, err)
+		return fmt.Errorf("failed to inject %q table content: %w", db2.CURSORS_TABLE, err)
 	}
 
 	return nil
@@ -201,8 +201,8 @@ func (t *TableFiller) injectCSVFromFile(ctx context.Context, filename string, db
 
 func (t *TableFiller) injectCSVFromReader(ctx context.Context, fl io.Reader, source string, dbColumns []string) error {
 	query := fmt.Sprintf(`COPY %s.%s ("%s") FROM STDIN WITH (FORMAT CSV, HEADER)`,
-		db.EscapeIdentifier(t.pqSchema),
-		db.EscapeIdentifier(t.tblName),
+		db2.EscapeIdentifier(t.pqSchema),
+		db2.EscapeIdentifier(t.tblName),
 		strings.Join(dbColumns, `","`))
 	zlog.Info("loading file into sql from reader", zap.String("source", source), zap.String("table_name", t.tblName), zap.Strings("db_columns", dbColumns))
 

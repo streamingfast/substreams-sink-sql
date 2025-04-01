@@ -14,7 +14,7 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/db"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"
@@ -61,17 +61,17 @@ func newDBLoader(
 	batchRowFlushInterval int,
 	liveBlockFlushInterval int,
 	handleReorgs bool,
-) (*db.Loader, error) {
-	moduleMismatchMode, err := db.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, onModuleHashMistmatchFlag))
+) (*db2.Loader, error) {
+	moduleMismatchMode, err := db2.ParseOnModuleHashMismatch(sflags.MustGetString(cmd, onModuleHashMistmatchFlag))
 	cli.NoError(err, "invalid mistmatch mode")
 
-	dbLoader, err := db.NewLoader(psqlDSN, batchBlockFlushInterval, batchRowFlushInterval, liveBlockFlushInterval, moduleMismatchMode, &handleReorgs, zlog, tracer)
+	dbLoader, err := db2.NewLoader(psqlDSN, batchBlockFlushInterval, batchRowFlushInterval, liveBlockFlushInterval, moduleMismatchMode, &handleReorgs, zlog, tracer)
 	if err != nil {
 		return nil, fmt.Errorf("new psql loader: %w", err)
 	}
 
 	if err := dbLoader.LoadTables(); err != nil {
-		var e *db.SystemTableError
+		var e *db2.SystemTableError
 		if errors.As(err, &e) {
 			fmt.Printf("Error validating the system table: %s\n", e)
 			fmt.Println("Did you run setup ?")

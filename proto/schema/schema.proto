@@ -1,0 +1,31 @@
+syntax = "proto3";
+import "google/protobuf/descriptor.proto";
+
+package schema;
+option go_package = "github.com/streamingfast/substreams-sink-sql/pb/schema";
+
+
+
+extend google.protobuf.MessageOptions {
+  Table table = 77701;
+}
+
+extend google.protobuf.FieldOptions {
+  Column field = 77702;
+  //todo: ignore
+}
+
+message Table {
+  string name = 1;
+  optional string child_of = 2;
+
+  //  should be remove
+  string many_to_one_relation_field_name = 81;
+}
+
+message Column {
+  optional string name = 1;
+  optional string foreign_key = 2;
+  bool unique = 3;
+  bool primary_key = 4;
+}

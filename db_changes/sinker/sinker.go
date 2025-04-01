@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
-	"github.com/streamingfast/substreams-sink-sql/db"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -23,7 +23,7 @@ type SQLSinker struct {
 	*shutter.Shutter
 	*sink.Sinker
 
-	loader *db.Loader
+	loader *db2.Loader
 	logger *zap.Logger
 	tracer logging.Tracer
 
@@ -31,7 +31,7 @@ type SQLSinker struct {
 	lastAppliedBlockNum *uint64
 }
 
-func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer logging.Tracer) (*SQLSinker, error) {
+func New(sink *sink.Sinker, loader *db2.Loader, logger *zap.Logger, tracer logging.Tracer) (*SQLSinker, error) {
 	return &SQLSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
@@ -40,14 +40,14 @@ func New(sink *sink.Sinker, loader *db.Loader, logger *zap.Logger, tracer loggin
 		logger: logger,
 		tracer: tracer,
 
-		stats: NewStats(logger),
+		stats:               NewStats(logger),
 		lastAppliedBlockNum: nil,
 	}, nil
 }
 
 func (s *SQLSinker) Run(ctx context.Context) {
 	cursor, mistmatchDetected, err := s.loader.GetCursor(ctx, s.OutputModuleHash())
-	if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
+	if err != nil && !errors.Is(err, db2.ErrCursorNotFound) {
 		s.Shutdown(fmt.Errorf("unable to retrieve cursor: %w", err))
 		return
 	}
@@ -55,7 +55,7 @@ func (s *SQLSinker) Run(ctx context.Context) {
 	// We write an empty cursor right away in the database because the flush logic
 	// only performs an `update` operation so an initial cursor is required in the database
 	// for the flush to work correctly.
-	if errors.Is(err, db.ErrCursorNotFound) {
+	if errors.Is(err, db2.ErrCursorNotFound) {
 		if err := s.loader.InsertCursor(ctx, s.OutputModuleHash(), sink.NewBlankCursor()); err != nil {
 			s.Shutdown(fmt.Errorf("unable to write initial empty cursor: %w", err))
 			return

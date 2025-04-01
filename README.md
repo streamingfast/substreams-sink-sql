@@ -110,7 +110,7 @@ Moreover, the `schema` option key can be used to select a particular schema with
 
 Only `psql` and `clickhouse` are supported today, adding support for a new _dialect_ is quite easy:
 
-- Copy [db/dialect_clickhouse.go](./db/dialect_clickhouse.go) to a new file `db/dialect_<name>.go` implementing the right functionality.
+- Copy [db/dialect_clickhouse.go](db_changes/db/dialect_clickhouse.go) to a new file `db/dialect_<name>.go` implementing the right functionality.
 - Update [`db.driverDialect` map](https://github.com/streamingfast/substreams-sink-sql/blob/develop/db/dialect.go#L27-L31) to add you dialect (key is the Golang type of your dialect implementation).
 - Update [`dsn.driverMap` map](https://github.com/streamingfast/substreams-sink-sql/blob/develop/db/dsn.go#L27-L31) to add DSN -> `dialect name` mapping, edit the file to accommodate for your specific driver (might not be required)
 - Update Docker Compose to have this dependency auto-started for development purposes

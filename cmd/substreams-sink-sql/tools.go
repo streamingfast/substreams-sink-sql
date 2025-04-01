@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/db"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 )
 
 var sinkToolsCmd = Group(
@@ -96,7 +96,7 @@ func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
 
 	err = loader.UpdateCursor(cmd.Context(), nil, moduleHash, cursor)
 	if err != nil {
-		if errors.Is(err, db.ErrCursorNotFound) {
+		if errors.Is(err, db2.ErrCursorNotFound) {
 			err = loader.InsertCursor(cmd.Context(), moduleHash, cursor)
 			cli.NoError(err, "Unable to insert cursor")
 		}
@@ -133,7 +133,7 @@ func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Deleted %d cursor(s) successfully\n", deletedCount)
 	} else {
 		err := loader.DeleteCursor(cmd.Context(), moduleHash)
-		if err != nil && !errors.Is(err, db.ErrCursorNotFound) {
+		if err != nil && !errors.Is(err, db2.ErrCursorNotFound) {
 			cli.NoError(err, "Unable to delete cursor")
 		}
 
@@ -143,13 +143,13 @@ func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func toolsCreateLoader() *db.Loader {
+func toolsCreateLoader() *db2.Loader {
 	dsn := viper.GetString("tools-global-dsn")
-	loader, err := db.NewLoader(dsn, 0, 0, 0, db.OnModuleHashMismatchIgnore, nil, zlog, tracer)
+	loader, err := db2.NewLoader(dsn, 0, 0, 0, db2.OnModuleHashMismatchIgnore, nil, zlog, tracer)
 	cli.NoError(err, "Unable to instantiate database manager from DSN %q", dsn)
 
 	if err := loader.LoadTables(); err != nil {
-		var systemTableError *db.SystemTableError
+		var systemTableError *db2.SystemTableError
 		if errors.As(err, &systemTableError) {
 			fmt.Printf("Error validating the system table: %s\n", systemTableError)
 			fmt.Println("Did you run setup ?")

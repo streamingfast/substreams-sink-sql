@@ -3,8 +3,9 @@ package writer
 import (
 	"context"
 	"fmt"
-	"github.com/streamingfast/dstore"
 	"io"
+
+	"github.com/streamingfast/dstore"
 )
 
 type dataFile struct {

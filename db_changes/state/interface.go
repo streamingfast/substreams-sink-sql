@@ -5,7 +5,7 @@ import (
 
 	"github.com/streamingfast/bstream"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/bundler/writer"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/bundler/writer"
 )
 
 type Store interface {
