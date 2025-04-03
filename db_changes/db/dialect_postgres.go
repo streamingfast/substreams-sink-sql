@@ -17,11 +17,23 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-type postgresDialect struct{}
+type PostgresDialect struct {
+	cursorTableName  string
+	historyTableName string
+	schemaName       string
+}
 
-func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
+func NewPostgresDialect(schemaName string, cursorTableName string, historyTableName string) *PostgresDialect {
+	return &PostgresDialect{
+		cursorTableName:  cursorTableName,
+		historyTableName: historyTableName,
+		schemaName:       schemaName,
+	}
+}
+
+func (d PostgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
 	query := fmt.Sprintf(`SELECT op,table_name,pk,prev_value,block_num FROM %s WHERE "block_num" > %d ORDER BY "block_num" DESC`,
-		d.historyTable(l.schema),
+		d.historyTable(d.schemaName),
 		lastValidFinalBlock,
 	)
 
@@ -65,7 +77,7 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 		}
 	}
 	pruneHistory := fmt.Sprintf(`DELETE FROM %s WHERE "block_num" > %d;`,
-		d.historyTable(l.schema),
+		d.historyTable(d.schemaName),
 		lastValidFinalBlock,
 	)
 
@@ -76,7 +88,7 @@ func (d postgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 	return nil
 }
 
-func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
+func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
 	var rowCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		tableName := entriesPair.Key
@@ -88,7 +100,7 @@ func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
 			entry := entryPair.Value
 
-			query, err := d.prepareStatement(l.schema, entry)
+			query, err := d.prepareStatement(d.schemaName, entry)
 			if err != nil {
 				return 0, fmt.Errorf("failed to prepare statement: %w", err)
 			}
@@ -104,14 +116,14 @@ func (d postgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 		rowCount += entries.Len()
 	}
 
-	if err := d.pruneReversibleSegment(tx, ctx, l.schema, lastFinalBlock); err != nil {
+	if err := d.pruneReversibleSegment(tx, ctx, d.schemaName, lastFinalBlock); err != nil {
 		return 0, err
 	}
 
 	return rowCount, nil
 }
 
-func (d postgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_name, pk, prev_value string, block_num uint64) error {
+func (d PostgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_name, pk, prev_value string, block_num uint64) error {
 
 	pkmap := make(map[string]string)
 	if err := json.Unmarshal([]byte(pk), &pkmap); err != nil {
@@ -175,7 +187,7 @@ func sqlColumnNamesFromJSON(in string) (string, error) {
 	return strings.Join(escapedNames, ","), nil
 }
 
-func (d postgresDialect) pruneReversibleSegment(tx Tx, ctx context.Context, schema string, highestFinalBlock uint64) error {
+func (d PostgresDialect) pruneReversibleSegment(tx Tx, ctx context.Context, schema string, highestFinalBlock uint64) error {
 	query := fmt.Sprintf(`DELETE FROM %s WHERE block_num <= %d;`, d.historyTable(schema), highestFinalBlock)
 	if _, err := tx.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("executing prune query %q: %w", query, err)
@@ -183,7 +195,7 @@ func (d postgresDialect) pruneReversibleSegment(tx Tx, ctx context.Context, sche
 	return nil
 }
 
-func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
+func (d PostgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
 	out := fmt.Sprintf(cli.Dedent(`
 		create table if not exists %s.%s
 		(
@@ -192,15 +204,15 @@ func (d postgresDialect) GetCreateCursorQuery(schema string, withPostgraphile bo
 			block_num  bigint,
 			block_id   text
 		);
-		`), EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE), EscapeIdentifier(CURSORS_TABLE+"_pk"))
+		`), EscapeIdentifier(schema), EscapeIdentifier(d.cursorTableName), EscapeIdentifier(d.cursorTableName+"_pk"))
 	if withPostgraphile {
 		out += fmt.Sprintf("COMMENT ON TABLE %s.%s IS E'@omit';",
-			EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE))
+			EscapeIdentifier(schema), EscapeIdentifier(d.cursorTableName))
 	}
 	return out
 }
 
-func (d postgresDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
+func (d PostgresDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
 	out := fmt.Sprintf(cli.Dedent(`
 		create table if not exists %s
 		(
@@ -216,45 +228,45 @@ func (d postgresDialect) GetCreateHistoryQuery(schema string, withPostgraphile b
 	)
 	if withPostgraphile {
 		out += fmt.Sprintf("COMMENT ON TABLE %s.%s IS E'@omit';",
-			EscapeIdentifier(schema), EscapeIdentifier(HISTORY_TABLE))
+			EscapeIdentifier(schema), EscapeIdentifier(d.historyTableName))
 	}
 	return out
 }
 
-func (d postgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
+func (d PostgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
 	if _, err := l.ExecContext(ctx, schemaSql); err != nil {
-		return fmt.Errorf("exec schema: %w", err)
+		return fmt.Errorf("exec schemaName: %w", err)
 	}
 	return nil
 }
 
-func (d postgresDialect) GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string {
+func (d PostgresDialect) GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string {
 	return query(`
 		UPDATE %s set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';
 	`, table, cursor, block_num, block_id, moduleHash)
 }
 
-func (d postgresDialect) GetAllCursorsQuery(table string) string {
+func (d PostgresDialect) GetAllCursorsQuery(table string) string {
 	return fmt.Sprintf("SELECT id, cursor, block_num, block_id FROM %s", table)
 }
 
-func (d postgresDialect) ParseDatetimeNormalization(value string) string {
+func (d PostgresDialect) ParseDatetimeNormalization(value string) string {
 	return escapeStringValue(value)
 }
 
-func (d postgresDialect) DriverSupportRowsAffected() bool {
+func (d PostgresDialect) DriverSupportRowsAffected() bool {
 	return true
 }
 
-func (d postgresDialect) OnlyInserts() bool {
+func (d PostgresDialect) OnlyInserts() bool {
 	return false
 }
 
-func (d postgresDialect) AllowPkDuplicates() bool {
+func (d PostgresDialect) AllowPkDuplicates() bool {
 	return false
 }
 
-func (d postgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error {
+func (d PostgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error {
 	user, pass, db := EscapeIdentifier(username), password, EscapeIdentifier(database)
 	var q string
 	if readOnly {
@@ -277,11 +289,11 @@ func (d postgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, usern
 	return nil
 }
 
-func (d postgresDialect) historyTable(schema string) string {
-	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier(HISTORY_TABLE))
+func (d PostgresDialect) historyTable(schema string) string {
+	return fmt.Sprintf("%s.%s", EscapeIdentifier(schema), EscapeIdentifier(d.historyTableName))
 }
 
-func (d postgresDialect) saveInsert(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
+func (d PostgresDialect) saveInsert(schema string, table string, primaryKey map[string]string, blockNum uint64) string {
 	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,block_num) values (%s,%s,%s,%d);`,
 		d.historyTable(schema),
 		escapeStringValue("I"),
@@ -291,15 +303,15 @@ func (d postgresDialect) saveInsert(schema string, table string, primaryKey map[
 	)
 }
 
-func (d postgresDialect) saveUpdate(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+func (d PostgresDialect) saveUpdate(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
 	return d.saveRow("U", schema, escapedTableName, primaryKey, blockNum)
 }
 
-func (d postgresDialect) saveDelete(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+func (d PostgresDialect) saveDelete(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
 	return d.saveRow("D", schema, escapedTableName, primaryKey, blockNum)
 }
 
-func (d postgresDialect) saveRow(op, schema, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+func (d PostgresDialect) saveRow(op, schema, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
 	schemaAndTable := fmt.Sprintf("%s.%s", EscapeIdentifier(schema), escapedTableName)
 	return fmt.Sprintf(`INSERT INTO %s (op,table_name,pk,prev_value,block_num) SELECT %s,%s,%s,row_to_json(%s),%d FROM %s.%s WHERE %s;`,
 		d.historyTable(schema),
@@ -310,7 +322,7 @@ func (d postgresDialect) saveRow(op, schema, escapedTableName string, primaryKey
 
 }
 
-func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string, error) {
+func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string, error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
 		var err error
@@ -374,7 +386,7 @@ func (d *postgresDialect) prepareStatement(schema string, o *Operation) (string,
 	}
 }
 
-func (d *postgresDialect) prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
+func (d *PostgresDialect) prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
 	if len(colValues) == 0 {
 		return
 	}
@@ -425,7 +437,7 @@ func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
 }
 
 // Format based on type, value returned unescaped
-func (d *postgresDialect) normalizeValueType(value string, valueType reflect.Type) (string, error) {
+func (d *PostgresDialect) normalizeValueType(value string, valueType reflect.Type) (string, error) {
 	switch valueType.Kind() {
 	case reflect.String:
 		// replace unicode null character with empty string
@@ -459,16 +471,16 @@ func (d *postgresDialect) normalizeValueType(value string, valueType reflect.Typ
 				return escapeStringValue(time.Unix(int64(i), 0).Format(time.RFC3339)), nil
 			}
 
-			// It's a plain string, parse by dialect it and pass it to the database
+			// It's a plain string, parse by dialect it and pass it to the databaseName
 			return d.ParseDatetimeNormalization(value), nil
 		}
 
 		return "", fmt.Errorf("unsupported struct type %s", valueType)
 	default:
-		// It's a column's type the schema parsing don't know how to represents as
-		// a Go type. In that case, we pass it unmodified to the database engine. It
+		// It's a column's type the schemaName parsing don't know how to represents as
+		// a Go type. In that case, we pass it unmodified to the databaseName engine. It
 		// will be the responsibility of the one sending the data to correctly represent
-		// it in the way accepted by the database.
+		// it in the way accepted by the databaseName.
 		//
 		// In most cases, it going to just work.
 		return value, nil

@@ -3,26 +3,44 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"testing"
 
 	"github.com/streamingfast/logging"
+	"github.com/stretchr/testify/require"
+
 	"go.uber.org/zap"
 )
 
+const testCursorTableName = "cursors"
+const testHistoryTableName = "substreams_history"
+
 func NewTestLoader(
+	t *testing.T,
 	zlog *zap.Logger,
 	tracer logging.Tracer,
 	schema string,
 	tables map[string]*TableInfo,
 ) (*Loader, *TestTx) {
+	dsn, err := ParseDSN(fmt.Sprintf("psql://x:5432/x?schemaName=%s", schema))
 
-	loader, err := NewLoader("psql://x:5432/x", 0, 0, 0, OnModuleHashMismatchIgnore, nil, zlog, tracer)
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
+
+	loader, err := NewLoader(
+		dsn,
+		testCursorTableName,
+		testHistoryTableName,
+		"",
+		0, 0, 0,
+		OnModuleHashMismatchIgnore.String(),
+		nil,
+		zlog, tracer,
+	)
+	require.NoError(t, err)
+
 	loader.testTx = &TestTx{}
 	loader.tables = tables
-	loader.schema = schema
-	loader.cursorTable = tables[CURSORS_TABLE]
+	loader.cursorTable = tables[testCursorTableName]
 	return loader, loader.testTx
 
 }
@@ -34,7 +52,7 @@ func TestTables(schema string) map[string]*TableInfo {
 			"from": NewColumnInfo("from", "text", ""),
 			"to":   NewColumnInfo("to", "text", ""),
 		}),
-		CURSORS_TABLE: mustNewTableInfo(schema, CURSORS_TABLE, []string{"id"}, map[string]*ColumnInfo{
+		testCursorTableName: mustNewTableInfo(schema, testCursorTableName, []string{"id"}, map[string]*ColumnInfo{
 			"block_num": NewColumnInfo("id", "int64", ""),
 			"block_id":  NewColumnInfo("from", "text", ""),
 			"cursor":    NewColumnInfo("cursor", "text", ""),

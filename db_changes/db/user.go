@@ -20,7 +20,7 @@ func (l *Loader) CreateUser(ctx context.Context, username string, password strin
 		}
 	}()
 
-	err = l.getDialect().CreateUser(tx, ctx, l, username, password, database, readOnly)
+	err = l.dialect.CreateUser(tx, ctx, l, username, password, database, readOnly)
 	if err != nil {
 		return fmt.Errorf("create user: %w", err)
 	}

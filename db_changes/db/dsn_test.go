@@ -24,8 +24,8 @@ func TestParseDSN(t *testing.T) {
 			expectPassword:   "postgres",
 		},
 		{
-			name:             "with schema",
-			dns:              "psql://postgres:postgres@localhost/substreams-dev?enable_incremental_sort=off&sslmode=disable&schema=foo",
+			name:             "with schemaName",
+			dns:              "psql://postgres:postgres@localhost/substreams-dev?enable_incremental_sort=off&sslmode=disable&schemaName=foo",
 			expectConnString: "host=localhost port=5432 user=postgres dbname=substreams-dev enable_incremental_sort=off  sslmode=disable password=postgres",
 			expectSchema:     "foo",
 			expectPassword:   "postgres",

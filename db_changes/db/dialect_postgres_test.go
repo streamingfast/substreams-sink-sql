@@ -144,7 +144,7 @@ func TestRevertOp(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tx := &TestTx{}
 			ctx := context.Background()
-			pd := postgresDialect{}
+			pd := PostgresDialect{}
 
 			row := test.row
 			err := pd.revertOp(tx, ctx, row.op, row.table_name, row.pk, row.prev_value, 9999)

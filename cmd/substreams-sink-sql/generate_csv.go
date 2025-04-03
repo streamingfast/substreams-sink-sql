@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
+	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
 	"github.com/streamingfast/substreams/manifest"
 )
@@ -36,6 +38,7 @@ var generateCsvCmd = Command(generateCsvE,
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags, sink.FlagIgnore("final-blocks-only"))
 		AddCommonSinkerFlags(flags)
+		AddCommonDatabaseChangesFlags(flags)
 
 		flags.Uint64("bundle-size", 10000, "Size of output bundle, in blocks")
 		flags.String("working-dir", "./workdir", "Path to local folder used as working directory")
@@ -62,7 +65,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	sink.RegisterMetrics()
 	sinker2.RegisterMetrics()
 
-	dsn := args[0]
+	dsnString := args[0]
 	manifestPath := args[1]
 	blockRange := args[2]
 
@@ -70,6 +73,8 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	bundleSize := sflags.MustGetUint64(cmd, "bundle-size")
 	bufferMaxSize := sflags.MustGetUint64(cmd, "buffer-max-size")
 	workingDir := sflags.MustGetString(cmd, "working-dir")
+	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
+	historyTableName := sflags.MustGetString(cmd, "history-table")
 
 	endpoint := sflags.MustGetString(cmd, "endpoint")
 	if endpoint == "" {
@@ -107,15 +112,43 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	dbLoader, err := newDBLoader(cmd, dsn, 0, 0, 0, false) // flush interval not used in CSV mode
+	dsn, err := db2.ParseDSN(dsnString)
 	if err != nil {
-		return fmt.Errorf("new db loader: %w", err)
+		return fmt.Errorf("parse dsn: %w", err)
+	}
+
+	handleReorgs := false
+	dbLoader, err := db2.NewLoader(
+		dsn,
+		cursorTableName,
+		historyTableName,
+		sflags.MustGetString(cmd, "clickhouse-cluster"),
+		0, 0, 0,
+		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		&handleReorgs,
+		zlog, tracer,
+	)
+
+	if err != nil {
+		return fmt.Errorf("creating loader: %w", err)
+	}
+
+	if err := dbLoader.LoadTables(dsn.Schema(), cursorTableName, historyTableName); err != nil {
+		var e *db2.SystemTableError
+		if errors.As(err, &e) {
+			fmt.Printf("Error validating the system table: %s\n", e)
+			fmt.Println("Did you run setup ?")
+			return e
+		}
+
+		return fmt.Errorf("load psql table: %w", err)
 	}
 
 	generateCSVSinker, err := sinker2.NewGenerateCSVSinker(
 		sink,
 		outputDir,
 		workingDir,
+		cursorTableName,
 		bundleSize,
 		bufferMaxSize,
 		dbLoader,

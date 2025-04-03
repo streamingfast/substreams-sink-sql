@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
+	db "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
 	"github.com/streamingfast/substreams/manifest"
 )
@@ -26,6 +28,7 @@ var sinkRunCmd = Command(sinkRunE,
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags, ignoreUndoBufferSize{})
 		AddCommonSinkerFlags(flags)
+		AddCommonDatabaseChangesFlags(flags)
 
 		flags.Int("undo-buffer-size", 0, "If non-zero, handling of reorgs in the database is disabled. Instead, a buffer is introduced to only process a blocks once it has been confirmed by that many blocks, introducing a latency but slightly reducing the load on the database when close to head.")
 		flags.Int("batch-block-flush-interval", 1_000, "When in catch up mode, flush every N blocks or after batch-row-flush-interval, whichever comes first. Set to 0 to disable and only use batch-row-flush-interval. Ineffective if the sink is now in the live portion of the chain where only 'live-block-flush-interval' applies.")
@@ -44,7 +47,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	sink.RegisterMetrics()
 	sinker2.RegisterMetrics()
 
-	dsn := args[0]
+	dsnString := args[0]
 	manifestPath := args[1]
 	blockRange := ""
 	if len(args) > 2 {
@@ -72,8 +75,6 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") == 0
-
 	sink, err := sink.NewFromViper(
 		cmd,
 		supportedOutputTypes,
@@ -92,10 +93,42 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	if sflags.MustGetInt(cmd, "flush-interval") != 0 {
 		batchBlockFlushInterval = sflags.MustGetInt(cmd, "flush-interval")
 	}
+	batchRowFlushInterval := sflags.MustGetInt(cmd, "batch-row-flush-interval")
+	liveBlockFlushInterval := sflags.MustGetInt(cmd, "live-block-flush-interval")
 
-	dbLoader, err := newDBLoader(cmd, dsn, batchBlockFlushInterval, sflags.MustGetInt(cmd, "batch-row-flush-interval"), sflags.MustGetInt(cmd, "live-block-flush-interval"), handleReorgs)
+	dsn, err := db.ParseDSN(dsnString)
 	if err != nil {
-		return fmt.Errorf("new db loader: %w", err)
+		return fmt.Errorf("parsing dsn: %w", err)
+	}
+
+	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
+	historyTableName := sflags.MustGetString(cmd, "history-table")
+
+	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") != 0
+	dbLoader, err := db.NewLoader(
+		dsn,
+		cursorTableName,
+		historyTableName,
+		sflags.MustGetString(cmd, "clickhouse-cluster"),
+		batchBlockFlushInterval, batchRowFlushInterval, liveBlockFlushInterval,
+		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		&handleReorgs,
+		zlog, tracer,
+	)
+
+	if err != nil {
+		return fmt.Errorf("creating loader: %w", err)
+	}
+
+	if err := dbLoader.LoadTables(dsn.Schema(), cursorTableName, historyTableName); err != nil {
+		var e *db.SystemTableError
+		if errors.As(err, &e) {
+			fmt.Printf("Error validating the system table: %s\n", e)
+			fmt.Println("Did you run setup ?")
+			return e
+		}
+
+		return fmt.Errorf("load psql table: %w", err)
 	}
 
 	postgresSinker, err := sinker2.New(sink, dbLoader, zlog, tracer)

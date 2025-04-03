@@ -44,13 +44,15 @@ type GenerateCSVSinker struct {
 	logger *zap.Logger
 	tracer logging.Tracer
 
-	stats *Stats
+	stats           *Stats
+	cursorTableName string
 }
 
 func NewGenerateCSVSinker(
 	sink *sink.Sinker,
 	destFolder string,
 	workingDir string,
+	cursorTableName string,
 	bundleSize uint64,
 	bufferSize uint64,
 	loader *db2.Loader,
@@ -84,7 +86,7 @@ func NewGenerateCSVSinker(
 		return nil, err
 	}
 
-	cursorsStore, err := csvOutputStore.SubStore(db2.CURSORS_TABLE)
+	cursorsStore, err := csvOutputStore.SubStore(cursorTableName)
 	if err != nil {
 		return nil, fmt.Errorf("cursors sub store: %w", err)
 	}
@@ -104,6 +106,8 @@ func NewGenerateCSVSinker(
 
 		stateStore: stateStore,
 		bundleSize: bundleSize,
+
+		cursorTableName: cursorTableName,
 
 		stats: NewStats(logger),
 	}
@@ -152,8 +156,7 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 	s.logger.Info("starting sql generate CSV sink",
 		zap.Duration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
-		zap.String("database", s.loader.GetDatabase()),
-		zap.String("schema", s.loader.GetSchema()),
+		zap.String("loader", s.loader.GetIdentifier()),
 	)
 
 	for _, fb := range s.bundlersByTable {
@@ -362,7 +365,7 @@ func (s *GenerateCSVSinker) HandleBlockRangeCompletion(ctx context.Context, curs
 func (s *GenerateCSVSinker) writeCursorsTable(ctx context.Context, lastCursor *sink.Cursor) error {
 	buffer := bytes.NewBuffer(make([]byte, 0, 1024))
 
-	columns := s.loader.GetColumnsForTable(db2.CURSORS_TABLE)
+	columns := s.loader.GetColumnsForTable(s.cursorTableName)
 	sort.Strings(columns)
 	buffer.WriteString(strings.Join(columns, ","))
 	buffer.WriteString("\n")

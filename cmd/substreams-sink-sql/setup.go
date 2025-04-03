@@ -18,6 +18,8 @@ var sinkSetupCmd = Command(sinkSetupE,
 	"Setup the required infrastructure to deploy a Substreams SQL deployable unit",
 	ExactArgs(2),
 	Flags(func(flags *pflag.FlagSet) {
+		AddCommonDatabaseChangesFlags(flags)
+
 		flags.Bool("postgraphile", false, "Will append the necessary 'comments' on cursors table to fully support postgraphile")
 		flags.Bool("system-tables-only", false, "will only create/update the systems tables (cursors, substreams_history) and ignore the schema from the manifest")
 		flags.Bool("ignore-duplicate-table-errors", false, "[Dev] Use this if you want to ignore duplicate table errors, take caution that this means the 'schemal.sql' file will not have run fully!")
@@ -27,10 +29,12 @@ var sinkSetupCmd = Command(sinkSetupE,
 func sinkSetupE(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	dsn := args[0]
+	dsnString := args[0]
 	manifestPath := args[1]
 	ignoreDuplicateTableErrors := sflags.MustGetBool(cmd, "ignore-duplicate-table-errors")
 	systemTableOnly := sflags.MustGetBool(cmd, "system-tables-only")
+	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
+	historyTableName := sflags.MustGetString(cmd, "history-table")
 
 	reader, err := manifest.NewReader(manifestPath)
 	if err != nil {
@@ -46,9 +50,36 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("extract sink config: %w", err)
 	}
 
-	dbLoader, err := db2.NewLoader(dsn, 0, 0, 0, db2.OnModuleHashMismatchError, nil, zlog, tracer)
+	dsn, err := db2.ParseDSN(dsnString)
 	if err != nil {
-		return fmt.Errorf("new psql loader: %w", err)
+		return fmt.Errorf("parse dsn: %w", err)
+	}
+
+	handleReorgs := false
+	dbLoader, err := db2.NewLoader(
+		dsn,
+		cursorTableName,
+		historyTableName,
+		sflags.MustGetString(cmd, "clickhouse-cluster"),
+		0, 0, 0,
+		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		&handleReorgs,
+		zlog, tracer,
+	)
+
+	if err != nil {
+		return fmt.Errorf("creating loader: %w", err)
+	}
+
+	if err := dbLoader.LoadTables(dsn.Schema(), cursorTableName, historyTableName); err != nil {
+		var e *db2.SystemTableError
+		if errors.As(err, &e) {
+			fmt.Printf("Error validating the system table: %s\n", e)
+			fmt.Println("Did you run setup ?")
+			return e
+		}
+
+		return fmt.Errorf("load psql table: %w", err)
 	}
 
 	schema := sinkConfig.Schema

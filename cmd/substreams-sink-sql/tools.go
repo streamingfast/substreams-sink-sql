@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
+	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 )
@@ -33,6 +34,11 @@ var sinkToolsCmd = Group(
 
 				This command will list all of them.
 			`),
+			Flags(func(flags *pflag.FlagSet) {
+				flags.String("cursors-table", "cursors", "[Operator] Name of the table to use for storing cursors")
+				flags.String("history-table", "substreams_history", "[Operator] Name of the table to use for storing block history, used to handle reorgs")
+				flags.String("clickhouse-cluster", "", "[Operator] If non-empty, a 'ON CLUSTER <cluster>' clause will be applied when setting up tables in Clickhouse. It will also replace the table engine with it's replicated counterpart (MergeTree will be replaced with ReplicatedMergeTree for example).")
+			}),
 		),
 
 		Command(toolsWriteCursorE,
@@ -45,6 +51,11 @@ var sinkToolsCmd = Group(
 				hash. The command update the current cursor if it exists or insert a new one if
 				none already exist.
 			`),
+			Flags(func(flags *pflag.FlagSet) {
+				flags.String("cursors-table", "cursors", "[Operator] Name of the table to use for storing cursors")
+				flags.String("history-table", "substreams_history", "[Operator] Name of the table to use for storing block history, used to handle reorgs")
+				flags.String("clickhouse-cluster", "", "[Operator] If non-empty, a 'ON CLUSTER <cluster>' clause will be applied when setting up tables in Clickhouse. It will also replace the table engine with it's replicated counterpart (MergeTree will be replaced with ReplicatedMergeTree for example).")
+			}),
 		),
 
 		Command(toolsDeleteCursorE,
@@ -59,13 +70,19 @@ var sinkToolsCmd = Group(
 			RangeArgs(0, 1),
 			Flags(func(flags *pflag.FlagSet) {
 				flags.BoolP("all", "a", false, "Delete all active cursors")
+				flags.String("cursors-table", "cursors", "[Operator] Name of the table to use for storing cursors")
+				flags.String("history-table", "substreams_history", "[Operator] Name of the table to use for storing block history, used to handle reorgs")
+				flags.String("clickhouse-cluster", "", "[Operator] If non-empty, a 'ON CLUSTER <cluster>' clause will be applied when setting up tables in Clickhouse. It will also replace the table engine with it's replicated counterpart (MergeTree will be replaced with ReplicatedMergeTree for example).")
 			}),
 		),
 	),
 )
 
 func toolsReadCursorE(cmd *cobra.Command, _ []string) error {
-	loader := toolsCreateLoader()
+	loader, err := toolsCreateLoader(cmd)
+	if err != nil {
+		return err
+	}
 
 	out, err := loader.GetAllCursors(cmd.Context())
 	cli.NoError(err, "Unable to get all cursors")
@@ -83,7 +100,10 @@ func toolsReadCursorE(cmd *cobra.Command, _ []string) error {
 }
 
 func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
-	loader := toolsCreateLoader()
+	loader, err := toolsCreateLoader(cmd)
+	if err != nil {
+		return err
+	}
 
 	moduleHash := args[0]
 	opaqueCursor := args[1]
@@ -114,7 +134,10 @@ func toolsWriteCursorE(cmd *cobra.Command, args []string) error {
 }
 
 func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
-	loader := toolsCreateLoader()
+	loader, err := toolsCreateLoader(cmd)
+	if err != nil {
+		return err
+	}
 
 	moduleHash := ""
 	if !viper.GetBool("tools-cursor-delete-all") {
@@ -143,12 +166,32 @@ func toolsDeleteCursorE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func toolsCreateLoader() *db2.Loader {
-	dsn := viper.GetString("tools-global-dsn")
-	loader, err := db2.NewLoader(dsn, 0, 0, 0, db2.OnModuleHashMismatchIgnore, nil, zlog, tracer)
-	cli.NoError(err, "Unable to instantiate database manager from DSN %q", dsn)
+func toolsCreateLoader(cmd *cobra.Command) (*db2.Loader, error) {
+	dsnString := viper.GetString("tools-global-dsn")
+	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
+	historyTableName := sflags.MustGetString(cmd, "history-table")
 
-	if err := loader.LoadTables(); err != nil {
+	dsn, err := db2.ParseDSN(dsnString)
+	if err != nil {
+		return nil, fmt.Errorf("parse dsn: %w", err)
+	}
+
+	handleReorgs := false
+	loader, err := db2.NewLoader(
+		dsn,
+		cursorTableName,
+		historyTableName,
+		sflags.MustGetString(cmd, "clickhouse-cluster"),
+		0, 0, 0,
+		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		&handleReorgs,
+		zlog, tracer,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating loader: %w", err)
+	}
+
+	if err := loader.LoadTables(dsn.Schema(), cursorTableName, historyTableName); err != nil {
 		var systemTableError *db2.SystemTableError
 		if errors.As(err, &systemTableError) {
 			fmt.Printf("Error validating the system table: %s\n", systemTableError)
@@ -159,7 +202,7 @@ func toolsCreateLoader() *db2.Loader {
 		cli.NoError(err, "Unable to load table information from database")
 	}
 
-	return loader
+	return loader, nil
 }
 
 func cursorToShortString(in *sink.Cursor) string {

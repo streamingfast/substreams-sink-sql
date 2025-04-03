@@ -24,7 +24,7 @@ type cursorRow struct {
 // GetAllCursors returns an unordered map given for each module's hash recorded
 // the active cursor for it.
 func (l *Loader) GetAllCursors(ctx context.Context) (out map[string]*sink.Cursor, err error) {
-	query := l.getDialect().GetAllCursorsQuery(l.cursorTable.identifier)
+	query := l.dialect.GetAllCursorsQuery(l.cursorTable.identifier)
 	rows, err := l.DB.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query all cursors: %w", err)
@@ -39,7 +39,7 @@ func (l *Loader) GetAllCursors(ctx context.Context) (out map[string]*sink.Cursor
 
 		out[c.ID], err = sink.NewCursor(c.Cursor)
 		if err != nil {
-			return nil, fmt.Errorf("database corrupted: stored cursor %q is not a valid cursor", c.Cursor)
+			return nil, fmt.Errorf("databaseName corrupted: stored cursor %q is not a valid cursor", c.Cursor)
 		}
 	}
 
@@ -79,7 +79,7 @@ func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (cursor
 		return activeCursor, true, err
 
 	case OnModuleHashMismatchError:
-		return nil, true, fmt.Errorf("cursor module hash mismatch, refusing to continue because flag '--on-module-hash-mistmatch=error' (defaults) is set, you can change to 'warn' or 'ignore': your module's hash is %q but cursor with highest block (%d) module hash is actually %q in the database",
+		return nil, true, fmt.Errorf("cursor module hash mismatch, refusing to continue because flag '--on-module-hash-mistmatch=error' (defaults) is set, you can change to 'warn' or 'ignore': your module's hash is %q but cursor with highest block (%d) module hash is actually %q in the databaseName",
 			outputModuleHash,
 			activeCursor.Block().Num(),
 			actualOutputModuleHash,
@@ -117,25 +117,25 @@ func (l *Loader) InsertCursor(ctx context.Context, moduleHash string, c *sink.Cu
 }
 
 // UpdateCursor updates the active cursor. If no cursor is active and no update occurred, returns
-// ErrCursorNotFound. If the update was not successful on the database, returns an error.
+// ErrCursorNotFound. If the update was not successful on the databaseName, returns an error.
 // You can use tx=nil to run the query outside of a transaction.
 func (l *Loader) UpdateCursor(ctx context.Context, tx Tx, moduleHash string, c *sink.Cursor) error {
 	l.logger.Debug("updating cursor", zap.String("module_hash", moduleHash), zap.Stringer("cursor", c))
-	_, err := l.runModifiyQuery(ctx, tx, "update", l.getDialect().GetUpdateCursorQuery(
+	_, err := l.runModifiyQuery(ctx, tx, "update", l.dialect.GetUpdateCursorQuery(
 		l.cursorTable.identifier, moduleHash, c, c.Block().Num(), c.Block().ID(),
 	))
 	return err
 }
 
 // DeleteCursor deletes the active cursor for the given 'moduleHash'. If no cursor is active and
-// no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
+// no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the databaseName, returns an error.
 func (l *Loader) DeleteCursor(ctx context.Context, moduleHash string) error {
 	_, err := l.runModifiyQuery(ctx, nil, "delete", fmt.Sprintf("DELETE FROM %s WHERE id = '%s'", l.cursorTable.identifier, moduleHash))
 	return err
 }
 
 // DeleteAllCursors deletes the active cursor for the given 'moduleHash'. If no cursor is active and
-// no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the database, returns an error.
+// no delete occurrred, returns ErrCursorNotFound. If the delete was not successful on the databaseName, returns an error.
 func (l *Loader) DeleteAllCursors(ctx context.Context) (deletedCount int64, err error) {
 	deletedCount, err = l.runModifiyQuery(ctx, nil, "delete", fmt.Sprintf("DELETE FROM %s", l.cursorTable.identifier))
 	if err != nil && errors.Is(err, ErrCursorNotFound) {
@@ -149,7 +149,7 @@ type sqlExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// runModifiyQuery runs the logic to execute a query that is supposed to modify the database in some form affecting
+// runModifiyQuery runs the logic to execute a query that is supposed to modify the databaseName in some form affecting
 // at least 1 row.
 //
 // If `tx` is nil, we use `l.DB` as the execution context, so an operations happening outside
@@ -170,7 +170,7 @@ func (l *Loader) runModifiyQuery(ctx context.Context, tx Tx, action string, quer
 		return 0, fmt.Errorf("rows affected: %w", err)
 	}
 
-	if l.getDialect().DriverSupportRowsAffected() && rowsAffected <= 0 {
+	if l.dialect.DriverSupportRowsAffected() && rowsAffected <= 0 {
 		return 0, ErrCursorNotFound
 	}
 

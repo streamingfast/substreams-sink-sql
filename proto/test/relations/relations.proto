@@ -32,7 +32,6 @@ message Customer {
 
   string customer_id = 1 [(schema.field) = { primary_key: true }];
   string name = 2;
-  string foo = 3;
 }
 
 /*

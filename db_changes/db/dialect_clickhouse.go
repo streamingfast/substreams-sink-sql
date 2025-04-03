@@ -19,12 +19,24 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-type clickhouseDialect struct{}
+type ClickhouseDialect struct {
+	cursorTableName string
+	cluster         string
+	schemaName      string
+}
+
+func NewClickhouseDialect(schemaName string, cursorTableName string, cluster string) *ClickhouseDialect {
+	return &ClickhouseDialect{
+		cursorTableName: cursorTableName,
+		cluster:         cluster,
+		schemaName:      schemaName,
+	}
+}
 
 // Clickhouse should be used to insert a lot of data in batches. The current official clickhouse
 // driver doesn't support Transactions for multiple tables. The only way to add in batches is
 // creating a transaction for a table, adding all rows and commiting it.
-func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
+func (d ClickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
 	var entryCount int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		tableName := entriesPair.Key
@@ -45,7 +57,7 @@ func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputMo
 		sort.Strings(columns)
 		query := fmt.Sprintf(
 			"INSERT INTO %s.%s (%s)",
-			EscapeIdentifier(l.schema),
+			EscapeIdentifier(d.schemaName),
 			EscapeIdentifier(tableName),
 			strings.Join(columns, ","))
 		batch, err := tx.Prepare(query)
@@ -82,17 +94,17 @@ func (d clickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputMo
 	return entryCount, nil
 }
 
-func (d clickhouseDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
+func (d ClickhouseDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValidFinalBlock uint64) error {
 	return fmt.Errorf("clickhouse driver does not support reorg management.")
 }
 
-func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
+func (d ClickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile bool) string {
 	_ = withPostgraphile // TODO: see if this can work
 
 	clusterClause := ""
 	engine := "ReplacingMergeTree()"
-	if CLICKHOUSE_CLUSTER != "" {
-		clusterClause = fmt.Sprintf("ON CLUSTER %s", EscapeIdentifier(CLICKHOUSE_CLUSTER))
+	if d.cluster != "" {
+		clusterClause = fmt.Sprintf("ON CLUSTER %s", EscapeIdentifier(d.cluster))
 		engine = "ReplicatedReplacingMergeTree()"
 	}
 
@@ -104,25 +116,25 @@ func (d clickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 		block_num  Int64,
 		block_id   String
 	) Engine = %s ORDER BY id;
-	`), EscapeIdentifier(schema), EscapeIdentifier(CURSORS_TABLE), clusterClause, engine)
+	`), EscapeIdentifier(schema), EscapeIdentifier(d.cursorTableName), clusterClause, engine)
 }
 
-func (d clickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
+func (d ClickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile bool) string {
 	panic("clickhouse does not support reorg management")
 }
 
-func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
+func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
 
-	if CLICKHOUSE_CLUSTER != "" {
+	if d.cluster != "" {
 		stmts, err := clickhouse.NewParser(schemaSql).ParseStmts()
 		if err != nil {
-			return fmt.Errorf("parsing schema: %w", err)
+			return fmt.Errorf("parsing schemaName: %w", err)
 		}
 
 		for _, stmt := range stmts {
 			if createTable, ok := stmt.(*clickhouse.CreateTable); ok {
-				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE TABLE'", zap.String("cluster", CLICKHOUSE_CLUSTER), zap.String("table", createTable.Name.String()))
-				createTable.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: CLICKHOUSE_CLUSTER}}
+				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE TABLE'", zap.String("cluster", d.cluster), zap.String("table", createTable.Name.String()))
+				createTable.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: d.cluster}}
 
 				if !strings.HasPrefix(createTable.Engine.Name, "Replicated") &&
 					strings.HasSuffix(createTable.Engine.Name, "MergeTree") {
@@ -133,7 +145,7 @@ func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 			}
 
 			if _, err := l.ExecContext(ctx, stmt.String()); err != nil {
-				return fmt.Errorf("exec schema: %w", err)
+				return fmt.Errorf("exec schemaName: %w", err)
 			}
 		}
 	} else {
@@ -142,7 +154,7 @@ func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 				continue
 			}
 			if _, err := l.ExecContext(ctx, query); err != nil {
-				return fmt.Errorf("exec schema: %w", err)
+				return fmt.Errorf("exec schemaName: %w", err)
 			}
 		}
 	}
@@ -150,38 +162,38 @@ func (d clickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 	return nil
 }
 
-func (d clickhouseDialect) GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string {
+func (d ClickhouseDialect) GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string {
 	return query(`
 			INSERT INTO %s (id, cursor, block_num, block_id) values ('%s', '%s', %d, '%s')
 	`, table, moduleHash, cursor, block_num, block_id)
 }
 
-func (d clickhouseDialect) GetAllCursorsQuery(table string) string {
+func (d ClickhouseDialect) GetAllCursorsQuery(table string) string {
 	return fmt.Sprintf("SELECT id, cursor, block_num, block_id FROM %s FINAL", table)
 }
 
-func (d clickhouseDialect) ParseDatetimeNormalization(value string) string {
+func (d ClickhouseDialect) ParseDatetimeNormalization(value string) string {
 	return fmt.Sprintf("parseDateTimeBestEffort(%s)", escapeStringValue(value))
 }
 
-func (d clickhouseDialect) DriverSupportRowsAffected() bool {
+func (d ClickhouseDialect) DriverSupportRowsAffected() bool {
 	return false
 }
 
-func (d clickhouseDialect) OnlyInserts() bool {
+func (d ClickhouseDialect) OnlyInserts() bool {
 	return true
 }
 
-func (d clickhouseDialect) AllowPkDuplicates() bool {
+func (d ClickhouseDialect) AllowPkDuplicates() bool {
 	return true
 }
 
-func (d clickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, _database string, readOnly bool) error {
+func (d ClickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, _database string, readOnly bool) error {
 	user, pass := EscapeIdentifier(username), escapeStringValue(password)
 
 	onClusterClause := ""
-	if CLICKHOUSE_CLUSTER != "" {
-		onClusterClause = fmt.Sprintf("ON CLUSTER %s", EscapeIdentifier(CLICKHOUSE_CLUSTER))
+	if d.cluster != "" {
+		onClusterClause = fmt.Sprintf("ON CLUSTER %s", EscapeIdentifier(d.cluster))
 	}
 
 	createUserQ := fmt.Sprintf("CREATE USER IF NOT EXISTS %s %s IDENTIFIED WITH plaintext_password BY %s;", user, onClusterClause, pass)

@@ -13,10 +13,10 @@ type UnknownDriverError struct {
 
 // Error returns a formatted string description.
 func (e UnknownDriverError) Error() string {
-	return fmt.Sprintf("unknown database driver: %s", e.Driver)
+	return fmt.Sprintf("unknown databaseName driver: %s", e.Driver)
 }
 
-type dialect interface {
+type Dialect interface {
 	GetCreateCursorQuery(schema string, withPostgraphile bool) string
 	GetCreateHistoryQuery(schema string, withPostgraphile bool) string
 	ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error
@@ -29,9 +29,4 @@ type dialect interface {
 	OnlyInserts() bool
 	AllowPkDuplicates() bool
 	CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error
-}
-
-var driverDialect = map[string]dialect{
-	"*pq.Driver":            postgresDialect{},   // github.com/lib/pq
-	"*clickhouse.stdDriver": clickhouseDialect{}, // github.com/clickhouse-go/v2
 }

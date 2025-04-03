@@ -209,6 +209,7 @@ func TestInserts(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
 			l, tx := db2.NewTestLoader(
+				t,
 				logger,
 				tracer,
 				"testschema",

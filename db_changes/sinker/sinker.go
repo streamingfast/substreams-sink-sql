@@ -87,8 +87,7 @@ func (s *SQLSinker) Run(ctx context.Context) {
 	s.logger.Info("starting sql sink",
 		zap.Duration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
-		zap.String("database", s.loader.GetDatabase()),
-		zap.String("schema", s.loader.GetSchema()),
+		zap.String("loader", s.loader.GetIdentifier()),
 	)
 	s.Sinker.Run(ctx, cursor, s)
 }

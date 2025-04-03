@@ -15,7 +15,9 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
+	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/dstore"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"go.uber.org/zap"
@@ -30,6 +32,9 @@ var injectCSVCmd = Command(injectCSVE,
 		Watch out, the <start> must be aligned with the range size of the CSV files or the module initial block.
 	`),
 	ExactArgs(4),
+	Flags(func(flags *pflag.FlagSet) {
+		AddCommonDatabaseChangesFlags(flags)
+	}),
 )
 
 func injectCSVE(cmd *cobra.Command, args []string) error {
@@ -38,6 +43,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 	psqlDSN := args[0]
 	inputPath := args[1]
 	tableName := args[2]
+	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 
 	blockRange, err := readBlockRangeArgument(args[3])
 	if err != nil {
@@ -67,7 +73,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 	t0 := time.Now()
 
 	zlog.Debug("table filler", zap.String("pg_schema", sqlDSN.Schema()), zap.String("table_name", tableName), zap.Stringer("range", blockRange))
-	filler := NewTableFiller(pool, sqlDSN.Schema(), tableName, blockRange.StartBlock(), *blockRange.EndBlock(), inputStore)
+	filler := NewTableFiller(pool, sqlDSN.Schema(), tableName, blockRange.StartBlock(), *blockRange.EndBlock(), inputStore, cursorTableName)
 
 	if err := filler.Run(ctx); err != nil {
 		return fmt.Errorf("table filler %q: %w", tableName, err)
@@ -81,20 +87,22 @@ type TableFiller struct {
 	pqSchema string
 	tblName  string
 
-	in            dstore.Store
-	startBlockNum uint64
-	stopBlockNum  uint64
-	pool          *pgxpool.Pool
+	in              dstore.Store
+	startBlockNum   uint64
+	stopBlockNum    uint64
+	pool            *pgxpool.Pool
+	cursorTableName string
 }
 
-func NewTableFiller(pool *pgxpool.Pool, pqSchema, tblName string, startBlockNum, stopBlockNum uint64, inStore dstore.Store) *TableFiller {
+func NewTableFiller(pool *pgxpool.Pool, pqSchema, tblName string, startBlockNum, stopBlockNum uint64, inStore dstore.Store, cursorTableName string) *TableFiller {
 	return &TableFiller{
-		tblName:       tblName,
-		pqSchema:      pqSchema,
-		pool:          pool,
-		startBlockNum: startBlockNum,
-		stopBlockNum:  stopBlockNum,
-		in:            inStore,
+		tblName:         tblName,
+		pqSchema:        pqSchema,
+		pool:            pool,
+		startBlockNum:   startBlockNum,
+		stopBlockNum:    stopBlockNum,
+		in:              inStore,
+		cursorTableName: cursorTableName,
 	}
 }
 
@@ -125,7 +133,7 @@ func extractFieldsFromReader(reader io.Reader) ([]string, error) {
 func (t *TableFiller) Run(ctx context.Context) error {
 	zlog.Info("table filler", zap.String("table", t.tblName))
 
-	if t.tblName == db2.CURSORS_TABLE {
+	if t.tblName == t.cursorTableName {
 		return t.injectCursorsTable(ctx)
 	}
 
@@ -160,11 +168,11 @@ func (t *TableFiller) Run(ctx context.Context) error {
 }
 
 func (t *TableFiller) injectCursorsTable(ctx context.Context) error {
-	path := db2.CURSORS_TABLE + "/" + lastCursorFilename
+	path := t.cursorTableName + "/" + lastCursorFilename
 	reader, err := t.in.OpenObject(ctx, path)
 	if err != nil {
 		if errors.Is(err, dstore.ErrNotFound) {
-			return fmt.Errorf("trying to inject %q table but the last cursor filename %q was not found in %s", db2.CURSORS_TABLE, path, t.in.BaseURL())
+			return fmt.Errorf("trying to inject %q table but the last cursor filename %q was not found in %s", t.cursorTableName, path, t.in.BaseURL())
 		}
 
 		return fmt.Errorf("open object %q: %w", lastCursorFilename, err)
@@ -183,7 +191,7 @@ func (t *TableFiller) injectCursorsTable(ctx context.Context) error {
 
 	zlog.Info("injecting cursors table")
 	if err := t.injectCSVFromReader(ctx, bytes.NewBuffer(content), "<generated>", dbColumns); err != nil {
-		return fmt.Errorf("failed to inject %q table content: %w", db2.CURSORS_TABLE, err)
+		return fmt.Errorf("failed to inject %q table content: %w", t.cursorTableName, err)
 	}
 
 	return nil

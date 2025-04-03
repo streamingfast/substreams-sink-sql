@@ -88,7 +88,7 @@ func ParseDSN(dsn string) (*DSN, error) {
 
 	options := make([]string, len(query))
 	for i, key := range keys {
-		if key == "schema" {
+		if key == "schemaName" {
 			d.schema = query[key][0]
 			continue
 		}
@@ -107,7 +107,10 @@ func (c *DSN) ConnString() string {
 	if c.driver == "clickhouse" {
 		return c.original
 	}
-	out := fmt.Sprintf("host=%s port=%d user=%s dbname=%s %s", c.host, c.port, c.username, c.database, strings.Join(c.options, " "))
+	out := fmt.Sprintf("host=%s port=%d dbname=%s %s", c.host, c.port, c.database, strings.Join(c.options, " "))
+	if c.username != "" {
+		out = out + " user=" + c.username
+	}
 	if c.password != "" {
 		out = out + " password=" + c.password
 	}

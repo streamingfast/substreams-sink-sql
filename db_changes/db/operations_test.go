@@ -14,12 +14,24 @@ import (
 
 func TestEscapeColumns(t *testing.T) {
 	ctx := context.Background()
-	dsn := os.Getenv("PG_DSN")
-	if dsn == "" {
+	dsnString := os.Getenv("PG_DSN")
+	if dsnString == "" {
 		t.Skip(`PG_DSN not set, please specify PG_DSN to run this test, example: PG_DSN="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?enable_incremental_sort=off&sslmode=disable"`)
 	}
 
-	dbLoader, err := NewLoader(dsn, 0, 0, 0, OnModuleHashMismatchIgnore, nil, zlog, tracer)
+	dsn, err := ParseDSN(dsnString)
+	require.NoError(t, err)
+
+	dbLoader, err := NewLoader(
+		dsn,
+		testCursorTableName,
+		testHistoryTableName,
+		"cluster.name.1",
+		0, 0, 0,
+		OnModuleHashMismatchIgnore.String(),
+		nil,
+		zlog, tracer,
+	)
 	require.NoError(t, err)
 
 	tx, err := dbLoader.DB.Begin()
@@ -63,12 +75,24 @@ func TestEscapeColumns(t *testing.T) {
 func TestEscapeValues(t *testing.T) {
 
 	ctx := context.Background()
-	dsn := os.Getenv("PG_DSN")
-	if dsn == "" {
+	dsnString := os.Getenv("PG_DSN")
+	if dsnString == "" {
 		t.Skip(`PG_DSN not set, please specify PG_DSN to run this test, example: PG_DSN="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?enable_incremental_sort=off&sslmode=disable"`)
 	}
 
-	dbLoader, err := NewLoader(dsn, 0, 0, 0, OnModuleHashMismatchIgnore, nil, zlog, tracer)
+	dsn, err := ParseDSN(dsnString)
+	require.NoError(t, err)
+
+	dbLoader, err := NewLoader(
+		dsn,
+		testCursorTableName,
+		testHistoryTableName,
+		"cluster.name.1",
+		0, 0, 0,
+		OnModuleHashMismatchIgnore.String(),
+		nil,
+		zlog, tracer,
+	)
 	require.NoError(t, err)
 
 	tx, err := dbLoader.DB.Begin()
@@ -144,7 +168,7 @@ func Test_prepareColValues(t *testing.T) {
 		{
 			"bool true",
 			args{
-				newTable(t, "schema", "name", "id", NewColumnInfo("col", "bool", true)),
+				newTable(t, "schemaName", "name", "id", NewColumnInfo("col", "bool", true)),
 				map[string]string{"col": "true"},
 			},
 			[]string{`"col"`},
@@ -154,7 +178,7 @@ func Test_prepareColValues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dialect := postgresDialect{}
+			dialect := PostgresDialect{}
 
 			gotColumns, gotValues, err := dialect.prepareColValues(tt.args.table, tt.args.colValues)
 			tt.assertion(t, err)

@@ -12,7 +12,7 @@ import (
 type TypeGetter func(tableName string, columnName string) (reflect.Type, error)
 
 type Queryable interface {
-	query(d dialect) (string, error)
+	query(d Dialect) (string, error)
 }
 
 type OperationType string

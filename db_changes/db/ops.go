@@ -32,7 +32,7 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		l.entries.Set(tableName, entry)
 	}
 
-	if _, found := entry.Get(uniqueID); found && !l.getDialect().AllowPkDuplicates() {
+	if _, found := entry.Get(uniqueID); found && !l.dialect.AllowPkDuplicates() {
 		return fmt.Errorf("attempting to insert in table %q a primary key %q, that is already scheduled for insertion, insert should only be called once for a given primary key", tableName, primaryKey)
 	}
 
@@ -98,8 +98,8 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 // Update a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
-	if l.getDialect().OnlyInserts() {
-		return fmt.Errorf("update operation is not supported by the current database")
+	if l.dialect.OnlyInserts() {
+		return fmt.Errorf("update operation is not supported by the current databaseName")
 	}
 
 	uniqueID := createRowUniqueID(primaryKey)
@@ -153,8 +153,8 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 // Delete a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
 func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversibleBlockNum *uint64) error {
-	if l.getDialect().OnlyInserts() {
-		return fmt.Errorf("delete operation is not supported by the current database")
+	if l.dialect.OnlyInserts() {
+		return fmt.Errorf("delete operation is not supported by the current databaseName")
 	}
 
 	uniqueID := createRowUniqueID(primaryKey)
