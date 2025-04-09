@@ -280,7 +280,7 @@ func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId i
 		err := row.Err()
 		if err != nil {
 			insert := d.Schema.insertSql[tableFullName]
-			return 0, 0, fmt.Errorf("inserting %q: %w", insert, err)
+			return 0, 0, fmt.Errorf("querying insert %q: %w", insert, err)
 		}
 		err = row.Scan(&id)
 

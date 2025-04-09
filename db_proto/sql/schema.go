@@ -35,6 +35,7 @@ const static_sql = `
 
 type Schema struct {
 	Name                       string
+	HasGeneratedPrimaryKey     bool
 	tableRegistry              map[string]*Table
 	tableCreateStatements      map[string]string
 	PrimaryKeyStatements       []*Constraint
@@ -104,6 +105,9 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 			return fmt.Errorf("creating table message descriptor: %w", err)
 		}
 		s.tableRegistry[tableInfo.Name] = table
+		if table.PrimaryKey.Generated {
+			s.HasGeneratedPrimaryKey = true
+		}
 		return nil
 	})
 
@@ -158,18 +162,15 @@ func (s *Schema) createTableStatement(table *Table) error {
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
 	var primaryKeyFieldName string
-	if table.PrimaryKey == nil {
-		//sb.WriteString("id SERIAL PRIMARY KEY,")
+	if table.PrimaryKey.Generated {
 		s.PrimaryKeyStatements = append(s.PrimaryKeyStatements, &Constraint{
 			table.Name,
-			fmt.Sprintf("alter table %s add constraint %s_pk primary key (id);", tableName, table.Name),
+			fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, table.PrimaryKey.Name),
 		})
-
-		sb.WriteString("id SERIAL,")
+		sb.WriteString(fmt.Sprintf("%s SERIAL,", table.PrimaryKey.Name))
 	} else {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
-		//sb.WriteString(fmt.Sprintf("%s %s PRIMARY KEY,", pk.Name, pk.DataType))
 		s.PrimaryKeyStatements = append(s.PrimaryKeyStatements, &Constraint{
 			table.Name,
 			fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName),
@@ -311,13 +312,13 @@ func (s *Schema) createInsertFromDescriptor(table *Table) error {
 	var placeholders []string
 
 	fieldCount := 0
-	returningField := "id"
+	returningField := table.PrimaryKey.Name
 
 	fieldCount++
 	fieldNames = append(fieldNames, "block_number")
 	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 
-	if pk := table.PrimaryKey; pk != nil {
+	if pk := table.PrimaryKey; pk != nil && !pk.Generated {
 		fieldCount++
 		returningField = pk.Name
 		fieldNames = append(fieldNames, pk.Name)

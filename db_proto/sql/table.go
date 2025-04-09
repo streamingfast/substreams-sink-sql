@@ -9,8 +9,10 @@ import (
 )
 
 type PrimaryKey struct {
-	Name     string
-	DataType DataType
+	Name      string
+	DataType  DataType
+	Index     int
+	Generated bool
 }
 
 type ChildOf struct {
@@ -65,7 +67,7 @@ func NewTable(descriptor *desc.MessageDescriptor) (*Table, error) {
 }
 
 func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
-	for _, fieldDescriptor := range descriptor.GetFields() {
+	for idx, fieldDescriptor := range descriptor.GetFields() {
 		column, err := NewColumn(fieldDescriptor)
 		if err != nil {
 			return fmt.Errorf("error processing column %q: %w", fieldDescriptor.GetName(), err)
@@ -78,9 +80,18 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 			t.PrimaryKey = &PrimaryKey{
 				Name:     column.Name,
 				DataType: column.DataType,
+				Index:    idx,
 			}
 		}
 		t.Columns = append(t.Columns, column)
+	}
+
+	if t.PrimaryKey == nil {
+		t.PrimaryKey = &PrimaryKey{
+			Name:      "id",
+			DataType:  TypeInteger,
+			Generated: true,
+		}
 	}
 
 	return nil

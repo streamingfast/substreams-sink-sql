@@ -27,6 +27,9 @@ func (a *Average) Add(d time.Duration) {
 }
 
 func (a *Average) Average() time.Duration {
+	if len(a.Duration) == 0 {
+		return 0
+	}
 	var total int64
 	for _, d := range a.Duration {
 		total += d.Nanoseconds()
@@ -35,6 +38,9 @@ func (a *Average) Average() time.Duration {
 }
 
 func (a *Average) LastItemsAverage(count int) time.Duration {
+	if len(a.Duration) == 0 {
+		return 0
+	}
 	if count <= 0 || count > len(a.Duration) {
 		count = len(a.Duration)
 	}
