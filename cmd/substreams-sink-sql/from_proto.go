@@ -11,9 +11,10 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
-	"github.com/streamingfast/substreams-sink-sql/db_proto/data"
+	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
+	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams/manifest"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -29,6 +30,9 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.StringP("start-block", "s", "", "Start block to stream from. If empty, will be replaced by initialBlock of the first module you are streaming. If negative, will be resolved by the server relative to the chain head")
 		flags.StringP("stop-block", "t", "0", "Stop block to end stream at, exclusively. If the start-block is positive, a '+' prefix can indicate 'relative to start-block'")
 
+		flags.Bool("no-constraints", false, "Do not add any constraints to the database. This is useful to speed up the initial import of a large dataset.")
+		flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
+		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
 	}),
 )
 
@@ -41,6 +45,10 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	if outputModuleName == "" {
 		outputModuleName = sink.InferOutputModuleFromPackage
 	}
+
+	useConstraints := !sflags.MustGetBool(cmd, "no-constraints")
+	useTransactions := !sflags.MustGetBool(cmd, "no-transactions")
+	blockBatchSize := sflags.MustGetInt(cmd, "block-batch-size")
 
 	endpoint := sflags.MustGetString(cmd, "substreams-endpoint")
 	if endpoint == "" {
@@ -143,12 +151,13 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open db connection: %w", err)
 	}
 
-	database, err := protosql.NewDatabase(schema, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
+	database, err := protosql.NewDatabase(schema, sqlDB, outputModuleName, rootMessageDescriptor, useConstraints, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
 
-	sinker := data.NewSinker(zlog, baseSink, database)
+	stats := stats2.NewStats(zlog)
+	sinker := db_proto.NewSinker(zlog, baseSink, database, useTransactions, blockBatchSize, stats)
 	sinker.OnTerminating(func(err error) {
 		zlog.Error("sinker terminating", zap.Error(err))
 	})
@@ -157,6 +166,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("runnning sinker:%w", err)
 	}
+
+	stats.Log()
+	fmt.Println("Goodbye")
 
 	return nil
 }

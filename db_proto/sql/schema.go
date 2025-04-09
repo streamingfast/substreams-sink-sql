@@ -26,20 +26,23 @@ const static_sql = `
 	);
 
 	CREATE TABLE IF NOT EXISTS "%s".block (
-		number integer PRIMARY KEY,
+		-- number integer PRIMARY KEY,
+		number integer,
 		hash TEXT NOT NULL,
 		timestamp TIMESTAMP NOT NULL
 	);
 `
 
 type Schema struct {
-	Name                  string
-	tableRegistry         map[string]*Table
-	tableCreateStatements map[string]string
-	constraintStatements  []*Constraint
-	insertSql             map[string]string
-	logger                *zap.Logger
-	rootMessageDescriptor *desc.MessageDescriptor
+	Name                       string
+	tableRegistry              map[string]*Table
+	tableCreateStatements      map[string]string
+	PrimaryKeyStatements       []*Constraint
+	ForeignKeyStatements       []*Constraint
+	UniqueConstraintStatements []*Constraint
+	insertSql                  map[string]string
+	logger                     *zap.Logger
+	rootMessageDescriptor      *desc.MessageDescriptor
 }
 
 func NewSchema(name string, rootMessageDescriptor *desc.MessageDescriptor, logger *zap.Logger) (*Schema, error) {
@@ -48,7 +51,6 @@ func NewSchema(name string, rootMessageDescriptor *desc.MessageDescriptor, logge
 		insertSql:             make(map[string]string),
 		tableCreateStatements: make(map[string]string),
 		tableRegistry:         make(map[string]*Table),
-		constraintStatements:  make([]*Constraint, 0),
 		logger:                logger,
 		rootMessageDescriptor: rootMessageDescriptor,
 	}
@@ -65,7 +67,9 @@ func (s *Schema) ChangeName(name string) error {
 	s.insertSql = make(map[string]string)
 	s.tableCreateStatements = make(map[string]string)
 	s.tableRegistry = make(map[string]*Table)
-	s.constraintStatements = make([]*Constraint, 0)
+	s.PrimaryKeyStatements = make([]*Constraint, 0)
+	s.ForeignKeyStatements = make([]*Constraint, 0)
+	s.UniqueConstraintStatements = make([]*Constraint, 0)
 	err := s.init(s.rootMessageDescriptor)
 	if err != nil {
 		return fmt.Errorf("changing schema name: %w", err)
@@ -78,6 +82,11 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 
 	s.insertSql["block"] =
 		fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", TableName(s, "block"))
+
+	s.PrimaryKeyStatements = append(s.PrimaryKeyStatements, &Constraint{
+		"blocks",
+		fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", s.String()),
+	})
 
 	s.insertSql["cursor"] =
 		fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", TableName(s, "cursor"))
@@ -150,11 +159,22 @@ func (s *Schema) createTableStatement(table *Table) error {
 	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
 	var primaryKeyFieldName string
 	if table.PrimaryKey == nil {
-		sb.WriteString("id SERIAL PRIMARY KEY,")
+		//sb.WriteString("id SERIAL PRIMARY KEY,")
+		s.PrimaryKeyStatements = append(s.PrimaryKeyStatements, &Constraint{
+			table.Name,
+			fmt.Sprintf("alter table %s add constraint %s_pk primary key (id);", tableName, table.Name),
+		})
+
+		sb.WriteString("id SERIAL,")
 	} else {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
-		sb.WriteString(fmt.Sprintf("%s %s PRIMARY KEY,", pk.Name, pk.DataType))
+		//sb.WriteString(fmt.Sprintf("%s %s PRIMARY KEY,", pk.Name, pk.DataType))
+		s.PrimaryKeyStatements = append(s.PrimaryKeyStatements, &Constraint{
+			table.Name,
+			fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName),
+		})
+		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, pk.DataType))
 	}
 
 	sb.WriteString(" block_number INTEGER NOT NULL,")
@@ -182,7 +202,7 @@ func (s *Schema) createTableStatement(table *Table) error {
 					table: tableName,
 					sql:   foreignKey.String(),
 				}
-				s.constraintStatements = append(s.constraintStatements, c)
+				s.ForeignKeyStatements = append(s.ForeignKeyStatements, c)
 
 				fieldFound = true
 				break
@@ -201,7 +221,12 @@ func (s *Schema) createTableStatement(table *Table) error {
 		fieldName := f.Name
 		fieldType := f.DataType
 		if f.IsUnique {
-			fieldType = fieldType + " UNIQUE"
+			//fieldType = fieldType + " UNIQUE"
+			s.UniqueConstraintStatements = append(s.UniqueConstraintStatements, &Constraint{
+				table.Name,
+				fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, fieldName, fieldName),
+			})
+
 		}
 
 		switch {
@@ -223,7 +248,7 @@ func (s *Schema) createTableStatement(table *Table) error {
 				table: tableName,
 				sql:   foreignKey.String(),
 			}
-			s.constraintStatements = append(s.constraintStatements, c)
+			s.ForeignKeyStatements = append(s.ForeignKeyStatements, c)
 		case f.ForeignKey != nil:
 			foreignTable, found := s.tableRegistry[f.ForeignKey.Table]
 			if !found {
@@ -252,7 +277,7 @@ func (s *Schema) createTableStatement(table *Table) error {
 				table: tableName,
 				sql:   foreignKey.String(),
 			}
-			s.constraintStatements = append(s.constraintStatements, c)
+			s.ForeignKeyStatements = append(s.ForeignKeyStatements, c)
 		}
 		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
 		sb.WriteString(",")
@@ -271,7 +296,7 @@ func (s *Schema) createTableStatement(table *Table) error {
 		sql:   fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.block(number) ON DELETE CASCADE", tableName, s.String()),
 	}
 
-	s.constraintStatements = append(s.constraintStatements, c)
+	s.ForeignKeyStatements = append(s.ForeignKeyStatements, c)
 	s.tableCreateStatements[tableName] = sb.String()
 
 	return nil
@@ -347,12 +372,30 @@ func (s *Schema) Hash() string {
 		buf = append(buf, []byte(sql)...)
 	}
 
-	var constraints []string
-	for _, constraint := range s.constraintStatements {
-		constraints = append(constraints, constraint.sql)
+	var pk []string
+	for _, constraint := range s.PrimaryKeyStatements {
+		pk = append(pk, constraint.sql)
 	}
-	sort.Strings(constraints)
-	for _, constraint := range constraints {
+	sort.Strings(pk)
+	for _, constraint := range pk {
+		buf = append(buf, []byte(constraint)...)
+	}
+
+	var fk []string
+	for _, constraint := range s.ForeignKeyStatements {
+		fk = append(fk, constraint.sql)
+	}
+	sort.Strings(fk)
+	for _, constraint := range fk {
+		buf = append(buf, []byte(constraint)...)
+	}
+
+	var uniques []string
+	for _, constraint := range s.UniqueConstraintStatements {
+		uniques = append(uniques, constraint.sql)
+	}
+	sort.Strings(uniques)
+	for _, constraint := range uniques {
 		buf = append(buf, []byte(constraint)...)
 	}
 

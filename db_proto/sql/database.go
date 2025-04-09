@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"hash/fnv"
-	"runtime/debug"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/jhump/protoreflect/dynamic"
 	pq "github.com/lib/pq"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 	"go.uber.org/zap"
 )
@@ -23,10 +23,11 @@ type Database struct {
 	logger                *zap.Logger
 	mapOutputType         string
 	insertStatements      map[string]*sql.Stmt
-	rootMessageDescriptor *desc.MessageDescriptor
+	RootMessageDescriptor *desc.MessageDescriptor
+	tx                    *sql.Tx
 }
 
-func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, logger *zap.Logger) (database *Database, err error) {
+func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useConstraints bool, logger *zap.Logger) (database *Database, err error) {
 	logger = logger.Named("database")
 
 	if reachable, err := isDatabaseReachable(db); !reachable {
@@ -47,7 +48,6 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 			err = fmt.Errorf("database not created cause by: %w", err)
 			return
 		}
-		_ = tx.Commit()
 	}()
 
 	sinkInfo, err := getSinkInfo(db, schema.Name)
@@ -110,16 +110,20 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 			}
 		}
 
-		for _, constraint := range schema.constraintStatements {
-			logger.Info("executing constraint statement", zap.String("sql", constraint.sql))
-			_, err = tx.Exec(constraint.sql)
+		if useConstraints {
+			err := ApplyConstraints(schema, tx, logger)
 			if err != nil {
-				return nil, fmt.Errorf("executing constraint statement: %w %s", err, constraint.sql)
+				return nil, fmt.Errorf("applying constraints: %w", err)
 			}
 		}
+
 		err = StoreSinkInfo(tx, schema)
 		if err != nil {
 			return nil, fmt.Errorf("storing sink info: %w", err)
+		}
+		err := tx.Commit()
+		if err != nil {
+			return nil, fmt.Errorf("committing transaction: %w", err)
 		}
 	}
 
@@ -134,7 +138,7 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 		return nil, fmt.Errorf("schema hash mismatch")
 	}
 
-	insertStatements, err := generateInsertStatements(schema, tx)
+	insertStatements, err := generateInsertStatements(schema, db)
 	if err != nil {
 		return nil, fmt.Errorf("generating insertSql: %w", err)
 	}
@@ -144,80 +148,96 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 		Db:                    db,
 		logger:                logger,
 		mapOutputType:         moduleOutputType,
-		rootMessageDescriptor: rootMessageDescriptor,
+		RootMessageDescriptor: rootMessageDescriptor,
 		insertStatements:      insertStatements,
 	}, nil
 }
 
-func (d *Database) ProcessEntity(data []byte, blockNum uint64, blockHash string, blockTimestamp time.Time, cursor *sink.Cursor) (err error) {
-	d.logger.Debug("processing entity", zap.Uint64("block_num", blockNum), zap.String("block_hash", blockHash))
+func ApplyConstraints(schema *Schema, tx *sql.Tx, logger *zap.Logger) error {
+	startAt := time.Now()
+	for _, constraint := range schema.PrimaryKeyStatements {
+		logger.Info("executing pk statement", zap.String("sql", constraint.sql))
+		_, err := tx.Exec(constraint.sql)
+		if err != nil {
+			return fmt.Errorf("executing pk statement: %w %s", err, constraint.sql)
+		}
+	}
+	for _, constraint := range schema.UniqueConstraintStatements {
+		logger.Info("executing unique statement", zap.String("sql", constraint.sql))
+		_, err := tx.Exec(constraint.sql)
+		if err != nil {
+			return fmt.Errorf("executing unique statement: %w %s", err, constraint.sql)
+		}
+	}
+	for _, constraint := range schema.ForeignKeyStatements {
+		logger.Info("executing fk constraint statement", zap.String("sql", constraint.sql))
+		_, err := tx.Exec(constraint.sql)
+		if err != nil {
+			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.sql)
+		}
+	}
+	logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
+	return nil
+}
 
-	tx, err := d.Db.Begin()
+func (d *Database) BeginTransaction() (err error) {
+	d.tx, err = d.Db.Begin()
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			e := tx.Rollback()
-			if e != nil {
-				panic(e)
-			}
-			fmt.Println("stacktrace from panic: \n" + string(debug.Stack()))
-			err = fmt.Errorf("recovering from panic: %v", r)
-			return
-		}
-		if err != nil {
-			e := tx.Rollback()
-			if e != nil {
-				err = fmt.Errorf("rolling back transaction: %w", e)
-			}
-			err = fmt.Errorf("processing entity: %w", err)
-			return
-		}
-		err = tx.Commit()
-	}()
-
-	md := d.rootMessageDescriptor
-	dm := dynamic.NewMessage(md)
-	err = dm.Unmarshal(data)
-
-	if err != nil {
-		return fmt.Errorf("unmarshaling message: %w", err)
-	}
-
-	err = d.processMessage(dm, blockNum, blockHash, blockTimestamp, tx)
-	if err != nil {
-		return fmt.Errorf("processing message: %w", err)
-	}
-
-	err = insertCursor(tx, d, cursor)
-	if err != nil {
-		return fmt.Errorf("inserting cursor: %w", err)
-	}
-
 	return nil
 }
 
-func (d *Database) processMessage(dm *dynamic.Message, blockNum uint64, blockHash string, blockTimestamp time.Time, tx *sql.Tx) error {
-	id, err := insertBlock(tx, d, blockNum, blockHash, blockTimestamp)
+func (d *Database) CommitTransaction() (err error) {
+	err = d.tx.Commit()
+	if err != nil {
+		return fmt.Errorf("committing transaction: %w", err)
+	}
+	d.tx = nil
+	return nil
+}
+
+func (d *Database) RollbackTransaction() {
+	err := d.tx.Rollback()
+	if err != nil {
+		panic("RollbackTransaction failed: " + err.Error())
+	}
+}
+
+func (d *Database) insertStatement(table string) *sql.Stmt {
+	stmt, found := d.insertStatements[table]
+	if !found {
+		panic(fmt.Sprintf("insert statement not found for table %q", table))
+	}
+	if d.tx != nil {
+		stmt = d.tx.Stmt(stmt)
+	}
+	return stmt
+}
+
+func (d *Database) ProcessMessage(dm *dynamic.Message, blockNum uint64, blockHash string, blockTimestamp time.Time, stats *stats.Stats) error {
+	startInsertBlock := time.Now()
+	id, err := d.insertBlock(blockNum, blockHash, blockTimestamp)
 	if err != nil {
 		return fmt.Errorf("inserting block: %w", err)
 	}
-	_, err = d.walkMessageDescriptorAndInsert(dm, id, nil, tx)
+	stats.BlockInsertDuration.Add(time.Since(startInsertBlock))
+
+	_, sqlDuration, err := d.walkMessageDescriptorAndInsert(dm, id, nil, stats)
 	if err != nil {
 		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 	}
+	stats.EntitiesInsertDuration.Add(sqlDuration)
 
 	return nil
 }
 
-func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId int, parent *Parent, tx *sql.Tx) (id interface{}, err error) {
-
+func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId int, parent *Parent, stats *stats.Stats) (interface{}, time.Duration, error) {
 	if dm == nil {
-		return 0, fmt.Errorf("received a nil message")
+		return 0, 0, fmt.Errorf("received a nil message")
 	}
 
+	totalSqlDuration := time.Duration(0)
 	var fieldValues []any
 	fieldValues = append(fieldValues, blockId)
 
@@ -235,10 +255,11 @@ func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId i
 				fieldValues = append(fieldValues, nil)
 				continue //un-use oneOf field
 			}
-			id, err = d.walkMessageDescriptorAndInsert(fm, blockId, nil, tx)
+			id, sqlDuration, err := d.walkMessageDescriptorAndInsert(fm, blockId, nil, stats)
 			if err != nil {
-				return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
+				return 0, 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
 			}
+			totalSqlDuration += sqlDuration
 			fieldValues = append(fieldValues, id)
 		} else {
 			fieldValues = append(fieldValues, fv)
@@ -248,27 +269,27 @@ func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId i
 	md := dm.GetMessageDescriptor()
 	var p *Parent
 	tableInfo := proto.TableInfo(md)
+	var id interface{}
 	if tableInfo != nil {
+		insertStartAt := time.Now()
 		table := d.Schema.tableRegistry[tableInfo.Name]
 		tableFullName := table.FullName(d.Schema)
-		stmt, found := d.insertStatements[tableFullName]
-		if !found {
-			return 0, fmt.Errorf("insert statement not found for table %q", tableFullName)
-		}
+		stmt := d.insertStatement(tableFullName)
 
-		row := tx.Stmt(stmt).QueryRow(fieldValues...)
-		err = row.Err()
+		row := stmt.QueryRow(fieldValues...)
+		err := row.Err()
 		if err != nil {
 			insert := d.Schema.insertSql[tableFullName]
-			return 0, fmt.Errorf("inserting %q: %w", insert, err)
+			return 0, 0, fmt.Errorf("inserting %q: %w", insert, err)
 		}
-
 		err = row.Scan(&id)
 
 		p = &Parent{
 			field: strings.ToLower(md.GetName()),
 			id:    id,
 		}
+		totalSqlDuration += time.Since(insertStartAt)
+
 	}
 
 	for _, child := range childs {
@@ -277,14 +298,15 @@ func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId i
 			if !ok {
 				panic("expected *dynamic.Message")
 			}
-			_, err = d.walkMessageDescriptorAndInsert(fm, blockId, p, tx)
+			_, sqlDuration, err := d.walkMessageDescriptorAndInsert(fm, blockId, p, stats)
 			if err != nil {
-				return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
+				return 0, 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 			}
+			totalSqlDuration += sqlDuration
 		}
 	}
 
-	return id, err
+	return id, totalSqlDuration, nil
 }
 
 type Parent struct {
@@ -310,13 +332,19 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Curso
 		err = tx.Commit()
 	}()
 
-	query := fmt.Sprintf(`DELETE CASCADE FROM %s.block WHERE "number" > $1`, d.Schema.String())
-	_, err = tx.Exec(query, lastValidBlockNum)
+	d.logger.Info("undoing blocks", zap.Uint64("last_valid_block_num", lastValidBlockNum))
+	query := fmt.Sprintf(`DELETE FROM %s.block WHERE "number" > $1`, d.Schema.String())
+	result, err := tx.Exec(query, lastValidBlockNum)
 	if err != nil {
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("fetching rows affected: %w", err)
+	}
+	d.logger.Info("undo completed", zap.Int64("row_affected", rowsAffected))
 
-	err = insertCursor(tx, d, cursor)
+	err = d.InsertCursor(cursor)
 	if err != nil {
 		return fmt.Errorf("store cursor: %w", err)
 	}
@@ -324,10 +352,10 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Curso
 	return nil
 }
 
-func generateInsertStatements(schema *Schema, tx *sql.Tx) (map[string]*sql.Stmt, error) {
+func generateInsertStatements(schema *Schema, db *sql.DB) (map[string]*sql.Stmt, error) {
 	statements := make(map[string]*sql.Stmt)
 	for n, s := range schema.insertSql {
-		stmt, err := tx.Prepare(s)
+		stmt, err := db.Prepare(s)
 		if err != nil {
 			return nil, fmt.Errorf("preparing statement %q: %w", s, err)
 		}
@@ -337,9 +365,10 @@ func generateInsertStatements(schema *Schema, tx *sql.Tx) (map[string]*sql.Stmt,
 	return statements, nil
 }
 
-func insertBlock(tx *sql.Tx, db *Database, blockNum uint64, hash string, timestamp time.Time) (block_db_id int, err error) {
-	stmt := db.insertStatements["block"]
-	row := tx.Stmt(stmt).QueryRow(blockNum, hash, timestamp)
+func (d *Database) insertBlock(blockNum uint64, hash string, timestamp time.Time) (block_db_id int, err error) {
+	d.logger.Debug("inserting block", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
+	stmt := d.insertStatement("block")
+	row := stmt.QueryRow(blockNum, hash, timestamp)
 
 	err = row.Err()
 	if err != nil {
@@ -352,9 +381,9 @@ func insertBlock(tx *sql.Tx, db *Database, blockNum uint64, hash string, timesta
 	return id, err
 }
 
-func insertCursor(tx *sql.Tx, db *Database, cursor *sink.Cursor) error {
-	stmt := db.insertStatements["cursor"]
-	_, err := tx.Stmt(stmt).Exec("cursor", cursor.String())
+func (d *Database) InsertCursor(cursor *sink.Cursor) error {
+	stmt := d.insertStatement("cursor")
+	_, err := stmt.Exec("cursor", cursor.String())
 
 	if err != nil {
 		return fmt.Errorf("inserting cursor: %w", err)

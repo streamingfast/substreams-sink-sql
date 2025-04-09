@@ -20,13 +20,6 @@ message Entity {
   }
 }
 
-/*
-CREATE TABLE  IF NOT EXISTS rel_test.customers (
-    id SERIAL PRIMARY KEY,
-    block_number INTEGER NOT NULL,
-    customer_id VARCHAR(255) UNIQUE
-);
- */
 message Customer {
   option (schema.table) = { name: "customers" };
 
@@ -34,15 +27,6 @@ message Customer {
   string name = 2;
 }
 
-/*
-CREATE TABLE  IF NOT EXISTS rel_test.orders (
-    id SERIAL PRIMARY KEY,
-    block_number INTEGER NOT NULL,
-    order_id VARCHAR(255) UNIQUE,
-    customer_ref_id VARCHAR(255)
-);
-ALTER TABLE rel_test.orders ADD CONSTRAINT fk_customer_ref_id  FOREIGN KEY (customer_ref_id) REFERENCES rel_test.customers(customer_id)
- */
 message Order {
   option (schema.table) = { name: "orders"};
 
@@ -51,20 +35,6 @@ message Order {
   repeated OrderItem items = 3;
 }
 
-/*
-CREATE TABLE IF NOT EXISTS rel_test.order_items
-(
-    id           SERIAL PRIMARY KEY,
-    block_number INTEGER      NOT NULL,
-    order_id     VARCHAR(255) NOT NULL,
-    item_id      VARCHAR(255),
-    quantity     BIGINT
-);
-
-ALTER TABLE rel_test.order_items ADD CONSTRAINT fk_order_id  FOREIGN KEY (order_id) REFERENCES rel_test.orders(order_id)
-ALTER TABLE rel_test.order_items ADD CONSTRAINT fk_item_id  FOREIGN KEY (item_id) REFERENCES rel_test.items(item_id)
-
- */
 message OrderItem {
   option (schema.table) = {
     name: "order_items",
@@ -76,15 +46,6 @@ message OrderItem {
   int64 quantity = 11;
 }
 
-
-/*
-CREATE TABLE  IF NOT EXISTS rel_test.items (
-    id SERIAL PRIMARY KEY,
-    block_number INTEGER NOT NULL,
-    item_id VARCHAR(255) UNIQUE,
-    name VARCHAR(255),
-    price DOUBLE PRECISION);
- */
 message Item {
   option (schema.table) = { name: "items" };
 
