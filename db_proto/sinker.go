@@ -3,6 +3,7 @@ package db_proto
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jhump/protoreflect/dynamic"
@@ -11,22 +12,24 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
+	"google.golang.org/appengine"
 )
 
 type Sinker struct {
 	*sink.Sinker
 	db             *sql.Database
 	useTransaction bool
+	parallel       bool
 	blockBatchSize uint64
-
-	stats  *stats.Stats
-	logger *zap.Logger
+	stats          *stats.Stats
+	logger         *zap.Logger
 }
 
-func NewSinker(logger *zap.Logger, sink *sink.Sinker, db *sql.Database, useTransaction bool, blockBatchSize int, stats *stats.Stats) *Sinker {
+func NewSinker(logger *zap.Logger, sink *sink.Sinker, db *sql.Database, useTransaction bool, blockBatchSize int, parallel bool, stats *stats.Stats) *Sinker {
 	return &Sinker{
 		db:             db,
 		useTransaction: useTransaction,
+		parallel:       parallel,
 		blockBatchSize: uint64(blockBatchSize),
 		stats:          stats,
 		Sinker:         sink,
@@ -89,19 +92,51 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 	}
 	holding = append(holding, holder)
 	if data.Clock.Number%s.blockBatchSize == 0 || s.blockBatchSize == 1 {
-		if s.useTransaction {
+		if s.useTransaction && !s.parallel {
 			if err := s.db.BeginTransaction(); err != nil {
 				return fmt.Errorf("begin tx: %w", err)
 			}
 		}
+		errs := appengine.MultiError{}
+		if s.parallel {
+			wg := sync.WaitGroup{}
+			wg.Add(len(holding))
 
-		for _, h := range holding {
-			err = s.processHolder(h)
-			if err != nil {
-				if s.useTransaction {
-					s.db.RollbackTransaction()
+			for _, h := range holding {
+				go func() {
+					db := s.db.Clone()
+					err := db.BeginTransaction()
+					if err != nil {
+						errs = append(errs, err)
+					}
+
+					err = processHolder(db, h, s.stats)
+					if err != nil {
+						db.RollbackTransaction()
+						errs = append(errs, err)
+						//return fmt.Errorf("process holder: %w", err)
+					}
+					err = db.CommitTransaction()
+					if err != nil {
+						errs = append(errs, err)
+					}
+					wg.Done()
+				}()
+			}
+			wg.Wait()
+			if len(errs) > 0 {
+				return fmt.Errorf("errors: %w", errs)
+			}
+
+		} else {
+			for _, h := range holding {
+				err = processHolder(s.db, h, s.stats)
+				if err != nil {
+					if s.useTransaction {
+						s.db.RollbackTransaction()
+					}
+					return fmt.Errorf("process holder: %w", err)
 				}
-				return fmt.Errorf("process holder: %w", err)
 			}
 		}
 
@@ -110,7 +145,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 			return fmt.Errorf("inserting cursor: %w", err)
 		}
 
-		if s.useTransaction {
+		if s.useTransaction && !s.parallel {
 			if err := s.db.CommitTransaction(); err != nil {
 				return fmt.Errorf("commit tx: %w", err)
 			}
@@ -121,21 +156,21 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 	return nil
 }
 
-func (s *Sinker) processHolder(h *Holder) (err error) {
+func processHolder(db *sql.Database, h *Holder, stats *stats.Stats) (err error) {
 	if len(h.output.GetMapOutput().GetValue()) == 0 {
 		return nil
 	}
 
 	unmarshalStartAt := time.Now()
-	md := s.db.RootMessageDescriptor
+	md := db.RootMessageDescriptor
 	dm := dynamic.NewMessage(md)
 	err = dm.Unmarshal(h.data.Output.GetMapOutput().GetValue())
 	if err != nil {
 		return fmt.Errorf("unmarshaling message: %w", err)
 	}
-	s.stats.UnmarshallingDuration.Add(time.Since(unmarshalStartAt))
+	stats.UnmarshallingDuration.Add(time.Since(unmarshalStartAt))
 
-	err = s.db.ProcessMessage(dm, h.data.Clock.Number, h.data.Clock.Id, h.data.Clock.Timestamp.AsTime(), s.stats)
+	err = db.ProcessMessage(dm, h.data.Clock.Number, h.data.Clock.Id, h.data.Clock.Timestamp.AsTime(), stats)
 	if err != nil {
 		return fmt.Errorf("process entity: %w", err)
 	}

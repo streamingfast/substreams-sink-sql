@@ -32,6 +32,7 @@ var fromProtoCmd = Command(fromProtoE,
 
 		flags.Bool("no-constraints", false, "Do not add any constraints to the database. This is useful to speed up the initial import of a large dataset.")
 		flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
+		flags.Bool("parallel", false, "Run the sinker in parallel mode. This is useful to speed up the initial import of a large dataset. This is will process blocks of a batch in parallel")
 		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
 	}),
 )
@@ -49,6 +50,12 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	useConstraints := !sflags.MustGetBool(cmd, "no-constraints")
 	useTransactions := !sflags.MustGetBool(cmd, "no-transactions")
 	blockBatchSize := sflags.MustGetInt(cmd, "block-batch-size")
+
+	parallel := sflags.MustGetBool(cmd, "parallel")
+	if parallel {
+		useConstraints = false
+		useTransactions = false
+	}
 
 	endpoint := sflags.MustGetString(cmd, "substreams-endpoint")
 	if endpoint == "" {
@@ -124,7 +131,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	schemaName := dsn.Schema()
-	schema, err := protosql.NewSchema(schemaName, rootMessageDescriptor, zlog)
+	schema, err := protosql.NewSchema(schemaName, rootMessageDescriptor, protosql.NewDialectPostgres(), zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
@@ -151,13 +158,13 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open db connection: %w", err)
 	}
 
-	database, err := protosql.NewDatabase(schema, sqlDB, outputModuleName, rootMessageDescriptor, useConstraints, zlog)
+	database, err := protosql.NewDatabase(schema, sqlDB, outputModuleName, rootMessageDescriptor, protosql.NewDialectPostgres(), useConstraints, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
 
 	stats := stats2.NewStats(zlog)
-	sinker := db_proto.NewSinker(zlog, baseSink, database, useTransactions, blockBatchSize, stats)
+	sinker := db_proto.NewSinker(zlog, baseSink, database, useTransactions, blockBatchSize, parallel, stats)
 	sinker.OnTerminating(func(err error) {
 		zlog.Error("sinker terminating", zap.Error(err))
 	})

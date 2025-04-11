@@ -73,7 +73,7 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 	}
 
 	schemaName := dsn.Schema()
-	schema, err := protosql.NewSchema(schemaName, rootMessageDescriptor, zlog)
+	schema, err := protosql.NewSchema(schemaName, rootMessageDescriptor, protosql.NewDialectPostgres(), zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
@@ -93,7 +93,10 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 
 	err = protosql.ApplyConstraints(schema, tx, zlog)
 	if err != nil {
-		tx.Rollback()
+		err := tx.Rollback()
+		if err != nil {
+			return fmt.Errorf("rollback tx: %w", err)
+		}
 		return fmt.Errorf("apply constraints: %w", err)
 	}
 

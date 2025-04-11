@@ -27,7 +27,7 @@ type Database struct {
 	tx                    *sql.Tx
 }
 
-func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useConstraints bool, logger *zap.Logger) (database *Database, err error) {
+func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, dialect Dialect, useConstraints bool, logger *zap.Logger) (database *Database, err error) {
 	logger = logger.Named("database")
 
 	if reachable, err := isDatabaseReachable(db); !reachable {
@@ -84,7 +84,7 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 				return nil, fmt.Errorf("updating sink info hash: %w", err)
 			}
 		} else {
-			err = schema.ChangeName(tempSchemaName)
+			err = schema.ChangeName(tempSchemaName, dialect)
 			if err != nil {
 				return nil, fmt.Errorf("changing schema name: %w", err)
 			}
@@ -102,7 +102,7 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 			return nil, fmt.Errorf("executing static staticSql: %w\n%s", err, staticSql)
 		}
 
-		for _, statement := range schema.tableCreateStatements {
+		for _, statement := range schema.TableCreateStatements {
 			logger.Info("executing create statement", zap.String("sql", statement))
 			_, err := tx.Exec(statement)
 			if err != nil {
@@ -151,6 +151,17 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 		RootMessageDescriptor: rootMessageDescriptor,
 		insertStatements:      insertStatements,
 	}, nil
+}
+
+func (d *Database) Clone() *Database {
+	return &Database{
+		Schema:                d.Schema,
+		Db:                    d.Db,
+		logger:                d.logger,
+		mapOutputType:         d.mapOutputType,
+		RootMessageDescriptor: d.RootMessageDescriptor,
+		insertStatements:      d.insertStatements,
+	}
 }
 
 func ApplyConstraints(schema *Schema, tx *sql.Tx, logger *zap.Logger) error {
