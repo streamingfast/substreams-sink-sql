@@ -1,4 +1,4 @@
-package sql
+package schema
 
 import (
 	"fmt"
@@ -7,12 +7,13 @@ import (
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type Column struct {
 	Name         string
 	ForeignKey   *ForeignKey
-	DataType     DataType
+	DataType     descriptorpb.FieldDescriptorProto_Type
 	IsPrimaryKey bool
 	IsUnique     bool
 	IsRepeated   bool
@@ -25,7 +26,7 @@ type Column struct {
 func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
 	out := &Column{
 		Name:        d.GetName(),
-		DataType:    mapFieldType(d),
+		DataType:    d.GetType(),
 		IsRepeated:  d.IsRepeated(),
 		IsMessage:   d.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE,
 		IsExtension: d.IsExtension(),

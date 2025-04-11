@@ -12,22 +12,25 @@ import (
 	"github.com/jhump/protoreflect/dynamic"
 	pq "github.com/lib/pq"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 	"go.uber.org/zap"
 )
 
 type Database struct {
-	Schema                *Schema
 	Db                    *sql.DB
 	logger                *zap.Logger
 	mapOutputType         string
 	insertStatements      map[string]*sql.Stmt
 	RootMessageDescriptor *desc.MessageDescriptor
 	tx                    *sql.Tx
+	Dialect               dialect.Dialect
+	schemaDeprecated      *schema.Schema
 }
 
-func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, dialect Dialect, useConstraints bool, logger *zap.Logger) (database *Database, err error) {
+func NewDatabase(schema *schema.Schema, sqlDialect dialect.Dialect, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useConstraints bool, logger *zap.Logger) (database *Database, err error) {
 	logger = logger.Named("database")
 
 	if reachable, err := isDatabaseReachable(db); !reachable {
@@ -57,9 +60,10 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 
 	originalSchemaName := schema.Name
 	generateTempSchema := false
-	if sinkInfo != nil && sinkInfo.SchemaHash != schema.Hash() {
-		fmt.Println("mismatch between schema hash and sink info hash", sinkInfo.SchemaHash, schema.Hash())
-		tempSchemaName := schema.Name + "_" + schema.Hash()
+	hash := sqlDialect.Hash()
+	if sinkInfo != nil && sinkInfo.SchemaHash != sqlDialect.Hash() {
+		fmt.Println("mismatch between schema hash and sink info hash", sinkInfo.SchemaHash, hash)
+		tempSchemaName := schema.Name + "_" + hash
 
 		tempSinkInfo, err := getSinkInfo(db, tempSchemaName)
 		if err != nil {
@@ -84,11 +88,11 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 				return nil, fmt.Errorf("updating sink info hash: %w", err)
 			}
 		} else {
-			err = schema.ChangeName(tempSchemaName, dialect)
-			if err != nil {
-				return nil, fmt.Errorf("changing schema name: %w", err)
-			}
-			generateTempSchema = true
+			//err = schema.ChangeName(tempSchemaName, dialect)
+			//if err != nil {
+			//	return nil, fmt.Errorf("changing schema name: %w", err)
+			//}
+			//generateTempSchema = true
 		}
 
 	}
@@ -96,32 +100,24 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 	if sinkInfo == nil || generateTempSchema {
 		fmt.Println("sinkInfo", sinkInfo)
 
-		staticSql := fmt.Sprintf(static_sql, schema.String(), schema.String(), schema.String(), schema.String())
-		_, err = tx.Exec(staticSql)
+		err := sqlDialect.CreateDatabase(tx)
 		if err != nil {
-			return nil, fmt.Errorf("executing static staticSql: %w\n%s", err, staticSql)
-		}
-
-		for _, statement := range schema.TableCreateStatements {
-			logger.Info("executing create statement", zap.String("sql", statement))
-			_, err := tx.Exec(statement)
-			if err != nil {
-				return nil, fmt.Errorf("executing create statement: %w %s", err, statement)
-			}
+			return nil, fmt.Errorf("creating database: %w", err)
 		}
 
 		if useConstraints {
-			err := ApplyConstraints(schema, tx, logger)
+			err = sqlDialect.ApplyConstraints(tx)
 			if err != nil {
 				return nil, fmt.Errorf("applying constraints: %w", err)
 			}
 		}
 
-		err = StoreSinkInfo(tx, schema)
+		err = StoreSinkInfo(tx, schema, sqlDialect)
 		if err != nil {
 			return nil, fmt.Errorf("storing sink info: %w", err)
 		}
-		err := tx.Commit()
+
+		err = tx.Commit()
 		if err != nil {
 			return nil, fmt.Errorf("committing transaction: %w", err)
 		}
@@ -138,13 +134,14 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 		return nil, fmt.Errorf("schema hash mismatch")
 	}
 
-	insertStatements, err := generateInsertStatements(schema, db)
+	insertStatements, err := generateInsertStatements(sqlDialect, db)
 	if err != nil {
 		return nil, fmt.Errorf("generating insertSql: %w", err)
 	}
 
 	return &Database{
-		Schema:                schema,
+		schemaDeprecated:      schema,
+		Dialect:               sqlDialect,
 		Db:                    db,
 		logger:                logger,
 		mapOutputType:         moduleOutputType,
@@ -155,40 +152,13 @@ func NewDatabase(schema *Schema, db *sql.DB, moduleOutputType string, rootMessag
 
 func (d *Database) Clone() *Database {
 	return &Database{
-		Schema:                d.Schema,
+		Dialect:               d.Dialect,
 		Db:                    d.Db,
 		logger:                d.logger,
 		mapOutputType:         d.mapOutputType,
 		RootMessageDescriptor: d.RootMessageDescriptor,
 		insertStatements:      d.insertStatements,
 	}
-}
-
-func ApplyConstraints(schema *Schema, tx *sql.Tx, logger *zap.Logger) error {
-	startAt := time.Now()
-	for _, constraint := range schema.PrimaryKeyStatements {
-		logger.Info("executing pk statement", zap.String("sql", constraint.sql))
-		_, err := tx.Exec(constraint.sql)
-		if err != nil {
-			return fmt.Errorf("executing pk statement: %w %s", err, constraint.sql)
-		}
-	}
-	for _, constraint := range schema.UniqueConstraintStatements {
-		logger.Info("executing unique statement", zap.String("sql", constraint.sql))
-		_, err := tx.Exec(constraint.sql)
-		if err != nil {
-			return fmt.Errorf("executing unique statement: %w %s", err, constraint.sql)
-		}
-	}
-	for _, constraint := range schema.ForeignKeyStatements {
-		logger.Info("executing fk constraint statement", zap.String("sql", constraint.sql))
-		_, err := tx.Exec(constraint.sql)
-		if err != nil {
-			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.sql)
-		}
-	}
-	logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
-	return nil
 }
 
 func (d *Database) BeginTransaction() (err error) {
@@ -283,14 +253,14 @@ func (d *Database) walkMessageDescriptorAndInsert(dm *dynamic.Message, blockId i
 	var id interface{}
 	if tableInfo != nil {
 		insertStartAt := time.Now()
-		table := d.Schema.tableRegistry[tableInfo.Name]
-		tableFullName := table.FullName(d.Schema)
-		stmt := d.insertStatement(tableFullName)
+		table := d.Dialect.GetTable(tableInfo.Name)
+		tableFullName := d.Dialect.FullTableName(table)
+		stmt := d.insertStatement(table.Name)
 
 		row := stmt.QueryRow(fieldValues...)
 		err := row.Err()
 		if err != nil {
-			insert := d.Schema.insertSql[tableFullName]
+			insert := d.Dialect.GetInsert(tableFullName)
 			return 0, 0, fmt.Errorf("querying insert %q: %w", insert, err)
 		}
 		err = row.Scan(&id)
@@ -344,7 +314,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Curso
 	}()
 
 	d.logger.Info("undoing blocks", zap.Uint64("last_valid_block_num", lastValidBlockNum))
-	query := fmt.Sprintf(`DELETE FROM %s.block WHERE "number" > $1`, d.Schema.String())
+	query := fmt.Sprintf(`DELETE FROM %s.block WHERE "number" > $1`, d.schemaDeprecated.String())
 	result, err := tx.Exec(query, lastValidBlockNum)
 	if err != nil {
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
@@ -363,9 +333,9 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Curso
 	return nil
 }
 
-func generateInsertStatements(schema *Schema, db *sql.DB) (map[string]*sql.Stmt, error) {
+func generateInsertStatements(dialect dialect.Dialect, db *sql.DB) (map[string]*sql.Stmt, error) {
 	statements := make(map[string]*sql.Stmt)
-	for n, s := range schema.insertSql {
+	for n, s := range dialect.GetInserts() {
 		stmt, err := db.Prepare(s)
 		if err != nil {
 			return nil, fmt.Errorf("preparing statement %q: %w", s, err)
@@ -403,8 +373,8 @@ func (d *Database) InsertCursor(cursor *sink.Cursor) error {
 	return err
 }
 
-func FetchCursor(db *sql.DB, schema *Schema) (*sink.Cursor, error) {
-	rows, err := db.Query(fmt.Sprintf("SELECT cursor FROM %s WHERE name = $1", TableName(schema, "cursor")), "cursor")
+func FetchCursor(db *sql.DB, dialect dialect.Dialect) (*sink.Cursor, error) {
+	rows, err := db.Query(dialect.GetCursorSql(), "cursor")
 	if err != nil {
 		return nil, fmt.Errorf("selecting cursor: %w", err)
 	}
@@ -452,15 +422,15 @@ func getSinkInfo(db *sql.DB, schemaName string) (*SinkInfo, error) {
 	return out, nil
 }
 
-func StoreSinkInfo(tx *sql.Tx, schema *Schema) error {
-	_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s.sink_info (schema_hash) VALUES ($1)", schema.Name), schema.Hash())
+func StoreSinkInfo(tx *sql.Tx, schema *schema.Schema, dialect dialect.Dialect) error {
+	_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s.sink_info (schema_hash) VALUES ($1)", schema.Name), dialect.Hash())
 	if err != nil {
 		return fmt.Errorf("storing schema hash: %w", err)
 	}
 	return nil
 }
 
-func UpdateSinkInfoHash(tx *sql.Tx, schema *Schema, newHash string) error {
+func UpdateSinkInfoHash(tx *sql.Tx, schema *schema.Schema, newHash string) error {
 	_, err := tx.Exec(fmt.Sprintf("UPDATE %s.sink_info SET schema_hash = $1", schema.Name), newHash)
 	if err != nil {
 		return fmt.Errorf("updating schema hash: %w", err)

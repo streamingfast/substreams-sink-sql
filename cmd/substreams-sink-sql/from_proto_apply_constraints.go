@@ -11,7 +11,8 @@ import (
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
-	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
+	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -73,7 +74,7 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 	}
 
 	schemaName := dsn.Schema()
-	schema, err := protosql.NewSchema(schemaName, rootMessageDescriptor, protosql.NewDialectPostgres(), zlog)
+	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
@@ -90,8 +91,12 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
+	sqlDialect, err := dialect.NewDialectPostgres(schemaName, schema.TableRegistry, zlog)
+	if err != nil {
+		return fmt.Errorf("creating dialect: %w", err)
+	}
 
-	err = protosql.ApplyConstraints(schema, tx, zlog)
+	err = sqlDialect.ApplyConstraints(tx)
 	if err != nil {
 		err := tx.Rollback()
 		if err != nil {

@@ -11,6 +11,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
+	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	rel "github.com/streamingfast/substreams-sink-sql/pb/test/relations"
 	"github.com/test-go/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -49,7 +50,7 @@ func TestDatabase_ProcessEntity(t *testing.T) {
 		}
 	}
 
-	schema, err := NewSchema("rel_test", rootMessageDescriptor, logger)
+	schema, err := schema2.NewSchema("rel_test", rootMessageDescriptor, logger)
 	require.NoError(t, err)
 
 	db, err := sql.Open("postgres", "dbname=postgres sslmode=disable")

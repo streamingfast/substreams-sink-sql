@@ -1,4 +1,4 @@
-package sql
+package schema
 
 import (
 	"fmt"
@@ -6,11 +6,12 @@ import (
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type PrimaryKey struct {
 	Name      string
-	DataType  DataType
+	DataType  descriptorpb.FieldDescriptorProto_Type
 	Index     int
 	Generated bool
 }
@@ -89,18 +90,10 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 	if t.PrimaryKey == nil {
 		t.PrimaryKey = &PrimaryKey{
 			Name:      "id",
-			DataType:  TypeInteger,
+			DataType:  descriptorpb.FieldDescriptorProto_TYPE_UINT64,
 			Generated: true,
 		}
 	}
 
 	return nil
-}
-
-func (t *Table) FullName(schema *Schema) string {
-	return TableName(schema, t.Name)
-}
-
-func TableName(schema *Schema, tableName string) string {
-	return fmt.Sprintf("%s.%s", schema.Name, tableName)
 }

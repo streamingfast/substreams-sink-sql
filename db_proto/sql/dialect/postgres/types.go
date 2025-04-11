@@ -1,8 +1,8 @@
-package sql
+package postgres
 
 import (
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/jhump/protoreflect/desc"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type DataType string
@@ -22,9 +22,9 @@ func (s DataType) String() string {
 	return string(s)
 }
 
-func mapFieldType(field *desc.FieldDescriptor) DataType {
+func MapFieldType(t descriptorpb.FieldDescriptorProto_Type) DataType {
 
-	switch field.GetType() {
+	switch t {
 	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
 		return TypeInteger
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:

@@ -14,6 +14,8 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
+	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams/manifest"
 	"go.uber.org/zap"
@@ -131,7 +133,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	schemaName := dsn.Schema()
-	schema, err := protosql.NewSchema(schemaName, rootMessageDescriptor, protosql.NewDialectPostgres(), zlog)
+	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
@@ -158,7 +160,11 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open db connection: %w", err)
 	}
 
-	database, err := protosql.NewDatabase(schema, sqlDB, outputModuleName, rootMessageDescriptor, protosql.NewDialectPostgres(), useConstraints, zlog)
+	sqlDialect, err := dialect.NewDialectPostgres(schemaName, schema.TableRegistry, zlog)
+	if err != nil {
+		return fmt.Errorf("creating dialect: %w", err)
+	}
+	database, err := protosql.NewDatabase(schema, sqlDialect, sqlDB, outputModuleName, rootMessageDescriptor, useConstraints, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}

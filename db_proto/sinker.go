@@ -38,7 +38,7 @@ func NewSinker(logger *zap.Logger, sink *sink.Sinker, db *sql.Database, useTrans
 }
 
 func (s *Sinker) Run(ctx context.Context) error {
-	cursor, err := sql.FetchCursor(s.db.Db, s.db.Schema)
+	cursor, err := sql.FetchCursor(s.db.Db, s.db.Dialect)
 	if err != nil {
 		return fmt.Errorf("fetch cursor: %w", err)
 	}
