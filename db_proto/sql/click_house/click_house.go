@@ -1,4 +1,4 @@
-package dialect
+package click_house
 
 //import (
 //	"fmt"

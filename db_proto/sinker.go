@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
 	sql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
@@ -17,28 +18,30 @@ import (
 
 type Sinker struct {
 	*sink.Sinker
-	db             *sql.Database
-	useTransaction bool
-	parallel       bool
-	blockBatchSize uint64
-	stats          *stats.Stats
-	logger         *zap.Logger
+	db                    sql.Database
+	useTransaction        bool
+	parallel              bool
+	blockBatchSize        uint64
+	stats                 *stats.Stats
+	logger                *zap.Logger
+	rootMessageDescriptor *desc.MessageDescriptor
 }
 
-func NewSinker(logger *zap.Logger, sink *sink.Sinker, db *sql.Database, useTransaction bool, blockBatchSize int, parallel bool, stats *stats.Stats) *Sinker {
+func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
 	return &Sinker{
-		db:             db,
-		useTransaction: useTransaction,
-		parallel:       parallel,
-		blockBatchSize: uint64(blockBatchSize),
-		stats:          stats,
-		Sinker:         sink,
-		logger:         logger,
+		db:                    db,
+		rootMessageDescriptor: rootMessageDescriptor,
+		useTransaction:        useTransaction,
+		parallel:              parallel,
+		blockBatchSize:        uint64(blockBatchSize),
+		stats:                 stats,
+		Sinker:                sink,
+		logger:                logger,
 	}
 }
 
 func (s *Sinker) Run(ctx context.Context) error {
-	cursor, err := sql.FetchCursor(s.db.Db, s.db.Dialect)
+	cursor, err := s.db.FetchCursor()
 	if err != nil {
 		return fmt.Errorf("fetch cursor: %w", err)
 	}
@@ -110,7 +113,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 						errs = append(errs, err)
 					}
 
-					err = processHolder(db, h, s.stats)
+					err = s.processHolder(h, s.stats)
 					if err != nil {
 						db.RollbackTransaction()
 						errs = append(errs, err)
@@ -130,7 +133,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 
 		} else {
 			for _, h := range holding {
-				err = processHolder(s.db, h, s.stats)
+				err = s.processHolder(h, s.stats)
 				if err != nil {
 					if s.useTransaction {
 						s.db.RollbackTransaction()
@@ -156,13 +159,13 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 	return nil
 }
 
-func processHolder(db *sql.Database, h *Holder, stats *stats.Stats) (err error) {
+func (s *Sinker) processHolder(h *Holder, stats *stats.Stats) (err error) {
 	if len(h.output.GetMapOutput().GetValue()) == 0 {
 		return nil
 	}
 
 	unmarshalStartAt := time.Now()
-	md := db.RootMessageDescriptor
+	md := s.rootMessageDescriptor
 	dm := dynamic.NewMessage(md)
 	err = dm.Unmarshal(h.data.Output.GetMapOutput().GetValue())
 	if err != nil {
@@ -170,10 +173,26 @@ func processHolder(db *sql.Database, h *Holder, stats *stats.Stats) (err error) 
 	}
 	stats.UnmarshallingDuration.Add(time.Since(unmarshalStartAt))
 
-	err = db.ProcessMessage(dm, h.data.Clock.Number, h.data.Clock.Id, h.data.Clock.Timestamp.AsTime(), stats)
+	err = processMessage(dm, s.db, h.data.Clock.Number, h.data.Clock.Id, h.data.Clock.Timestamp.AsTime(), stats)
 	if err != nil {
 		return fmt.Errorf("process entity: %w", err)
 	}
+
+	return nil
+}
+func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64, blockHash string, blockTimestamp time.Time, stats *stats.Stats) error {
+	startInsertBlock := time.Now()
+	id, err := database.InsertBlock(blockNum, blockHash, blockTimestamp)
+	if err != nil {
+		return fmt.Errorf("inserting block: %w", err)
+	}
+	stats.BlockInsertDuration.Add(time.Since(startInsertBlock))
+
+	_, sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, id, nil, stats)
+	if err != nil {
+		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
+	}
+	stats.EntitiesInsertDuration.Add(sqlDuration)
 
 	return nil
 }

@@ -56,7 +56,7 @@ func TestDatabase_ProcessEntity(t *testing.T) {
 	db, err := sql.Open("postgres", "dbname=postgres sslmode=disable")
 	require.NoError(t, err)
 
-	database, err := NewDatabase(schema, db, "test.relations.Output", rootMessageDescriptor, logger)
+	database, err := NewBaseDatabase(schema, db, "test.relations.Output", rootMessageDescriptor, logger)
 	require.NoError(t, err)
 
 	blankCursor, err := sink.NewCursor("")

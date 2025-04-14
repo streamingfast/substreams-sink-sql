@@ -1,4 +1,4 @@
-package dialect
+package postgres
 
 import (
 	"database/sql"
@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect/postgres"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
 )
 
-const postgres_static_sql = `
+const postgresStaticSql = `
 	CREATE SCHEMA IF NOT EXISTS "%s";
 
 	CREATE TABLE IF NOT EXISTS "%s".sink_info (
@@ -34,20 +34,16 @@ const postgres_static_sql = `
 `
 
 type DialectPostgres struct {
-	BaseDialect
+	*dialect.BaseDialect
 	schemaName string
 }
 
 func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Table, logger *zap.Logger) (*DialectPostgres, error) {
 	d := &DialectPostgres{
-		BaseDialect: BaseDialect{
-			tableRegistry:  tableRegistry,
-			createTableSql: map[string]string{},
-			insertSql:      map[string]string{},
-			logger:         logger,
-		},
-		schemaName: schemaName,
+		BaseDialect: dialect.NewBaseDialect(tableRegistry, logger),
+		schemaName:  schemaName,
 	}
+
 	err := d.init()
 	if err != nil {
 		return nil, fmt.Errorf("initializing dialect: %w", err)
@@ -63,23 +59,16 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 	return d, nil
 }
 func (d *DialectPostgres) GetInsert(table string) string {
-	return d.insertSql[table]
+	return d.InsertSql[table]
 }
 
 func (d *DialectPostgres) GetInserts() map[string]string {
-	return d.insertSql
+	return d.InsertSql
 }
 
 func (d *DialectPostgres) init() error {
-
 	d.AddInsertSql("block", fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(d.schemaName, "block")))
 	d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
-
-	d.primaryKeySql = append(d.primaryKeySql, &Constraint{
-		"blocks",
-		fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName),
-	})
-
 	d.AddInsertSql("cursor", fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(d.schemaName, "cursor")))
 
 	return nil
@@ -112,29 +101,29 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
 		d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
-		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, postgres.MapFieldType(pk.DataType)))
+		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.DataType)))
 	}
 
 	sb.WriteString(" block_number INTEGER NOT NULL,")
 
 	if table.ChildOf != nil {
-		parentTable, parentFound := d.tableRegistry[table.ChildOf.ParentTable]
+		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
 		if !parentFound {
-			return fmt.Errorf("parent table %q not found", table.Name)
+			return fmt.Errorf("parent table %q not found", table.ChildOf.ParentTable)
 		}
 		fieldFound := false
 		for _, parentField := range parentTable.Columns {
 
 			if parentField.Name == table.ChildOf.ParentTableField {
 
-				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, postgres.MapFieldType(parentField.DataType)))
+				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.DataType)))
 
-				foreignKey := &foreignKey{
-					name:         "fk_" + table.ChildOf.ParentTable,
-					table:        tableName,
-					field:        table.ChildOf.ParentTableField,
-					foreignTable: d.FullTableName(parentTable),
-					foreignField: parentField.Name,
+				foreignKey := &dialect.ForeignKey{
+					Name:         "fk_" + table.ChildOf.ParentTable,
+					Table:        tableName,
+					Field:        table.ChildOf.ParentTableField,
+					ForeignTable: d.FullTableName(parentTable),
+					ForeignField: parentField.Name,
 				}
 
 				d.AddForeignKeySql(table.Name, foreignKey.String())
@@ -154,7 +143,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		}
 
 		fieldName := f.Name
-		fieldType := postgres.MapFieldType(f.DataType)
+		fieldType := MapFieldType(f.DataType)
 		if f.IsUnique {
 			d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, fieldName, fieldName))
 		}
@@ -163,21 +152,21 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		case f.IsRepeated:
 			continue
 		case f.IsMessage:
-			childTable, found := d.tableRegistry[f.Message]
+			childTable, found := d.TableRegistry[f.Message]
 			if !found {
 				continue
 			}
-			foreignKey := &foreignKey{
-				name:         "fk_" + childTable.Name,
-				table:        tableName,
-				field:        f.Name,
-				foreignTable: d.FullTableName(childTable),
-				foreignField: childTable.PrimaryKey.Name,
+			foreignKey := &dialect.ForeignKey{
+				Name:         "fk_" + childTable.Name,
+				Table:        tableName,
+				Field:        f.Name,
+				ForeignTable: d.FullTableName(childTable),
+				ForeignField: childTable.PrimaryKey.Name,
 			}
 			d.AddForeignKeySql(table.Name, foreignKey.String())
 
 		case f.ForeignKey != nil:
-			foreignTable, found := d.tableRegistry[f.ForeignKey.Table]
+			foreignTable, found := d.TableRegistry[f.ForeignKey.Table]
 			if !found {
 				return fmt.Errorf("foreign table %q not found", f.ForeignKey.Table)
 			}
@@ -193,12 +182,12 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 				return fmt.Errorf("foreign field %q not found in table %q", f.ForeignKey.TableField, f.ForeignKey.Table)
 			}
 
-			foreignKey := &foreignKey{
-				name:         "fk_" + f.Name,
-				table:        tableName,
-				field:        f.Name,
-				foreignTable: d.FullTableName(foreignTable),
-				foreignField: foreignField.Name,
+			foreignKey := &dialect.ForeignKey{
+				Name:         "fk_" + f.Name,
+				Table:        tableName,
+				Field:        f.Name,
+				ForeignTable: d.FullTableName(foreignTable),
+				ForeignField: foreignField.Name,
 			}
 			d.AddForeignKeySql(table.Name, foreignKey.String())
 		}
@@ -272,14 +261,14 @@ func (d *DialectPostgres) createInsertFromDescriptor(table *schema.Table) error 
 }
 
 func (d *DialectPostgres) CreateDatabase(tx *sql.Tx) error {
-	staticSql := fmt.Sprintf(postgres_static_sql, d.schemaName, d.schemaName, d.schemaName, d.schemaName)
+	staticSql := fmt.Sprintf(postgresStaticSql, d.schemaName, d.schemaName, d.schemaName, d.schemaName)
 	_, err := tx.Exec(staticSql)
 	if err != nil {
 		return fmt.Errorf("executing static staticSql: %w\n%s", err, staticSql)
 	}
 
-	for _, statement := range d.createTableSql {
-		d.logger.Info("executing create statement", zap.String("sql", statement))
+	for _, statement := range d.CreateTableSql {
+		d.Logger.Info("executing create statement", zap.String("sql", statement))
 		_, err := tx.Exec(statement)
 		if err != nil {
 			return fmt.Errorf("executing create statement: %w %s", err, statement)
@@ -288,49 +277,47 @@ func (d *DialectPostgres) CreateDatabase(tx *sql.Tx) error {
 	return nil
 }
 
+// todo: move to postgres database ...
 func (d *DialectPostgres) ApplyConstraints(tx *sql.Tx) error {
 	startAt := time.Now()
-	for _, constraint := range d.primaryKeySql {
-		d.logger.Info("executing pk statement", zap.String("sql", constraint.sql))
-		_, err := tx.Exec(constraint.sql)
+	for _, constraint := range d.PrimaryKeySql {
+		d.Logger.Info("executing pk statement", zap.String("sql", constraint.Sql))
+		_, err := tx.Exec(constraint.Sql)
 		if err != nil {
-			return fmt.Errorf("executing pk statement: %w %s", err, constraint.sql)
+			return fmt.Errorf("executing pk statement: %w %s", err, constraint.Sql)
 		}
 	}
-	for _, constraint := range d.uniqueConstraintSql {
-		d.logger.Info("executing unique statement", zap.String("sql", constraint.sql))
-		_, err := tx.Exec(constraint.sql)
+	for _, constraint := range d.UniqueConstraintSql {
+		d.Logger.Info("executing unique statement", zap.String("sql", constraint.Sql))
+		_, err := tx.Exec(constraint.Sql)
 		if err != nil {
-			return fmt.Errorf("executing unique statement: %w %s", err, constraint.sql)
+			return fmt.Errorf("executing unique statement: %w %s", err, constraint.Sql)
 		}
 	}
-	for _, constraint := range d.foreignKeySql {
-		d.logger.Info("executing fk constraint statement", zap.String("sql", constraint.sql))
-		_, err := tx.Exec(constraint.sql)
+	for _, constraint := range d.ForeignKeySql {
+		d.Logger.Info("executing fk constraint statement", zap.String("sql", constraint.Sql))
+		_, err := tx.Exec(constraint.Sql)
 		if err != nil {
-			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.sql)
+			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.Sql)
 		}
 	}
-	d.logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
+	d.Logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
 	return nil
-}
-
-func (d *DialectPostgres) GetCursorSql() string {
-	return fmt.Sprintf("SELECT cursor FROM %s WHERE name = $1", tableName(d.schemaName, "cursor"))
 }
 
 func (d *DialectPostgres) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
 }
 
-func (d *DialectPostgres) Hash() string {
+// todo: move to postgress database
+func (d *DialectPostgres) SchemaHash() string {
 	h := fnv.New64a()
 
 	var buf []byte
 
-	// Hash tableCreateStatements
+	// SchemaHash tableCreateStatements
 	var sqls []string
-	for _, sql := range d.createTableSql {
+	for _, sql := range d.CreateTableSql {
 		sqls = append(sqls, sql)
 		//buf = append(buf, []byte(sql)...)
 	}
@@ -341,8 +328,8 @@ func (d *DialectPostgres) Hash() string {
 	}
 
 	var pk []string
-	for _, constraint := range d.primaryKeySql {
-		pk = append(pk, constraint.sql)
+	for _, constraint := range d.PrimaryKeySql {
+		pk = append(pk, constraint.Sql)
 	}
 	sort.Strings(pk)
 	for _, constraint := range pk {
@@ -350,8 +337,8 @@ func (d *DialectPostgres) Hash() string {
 	}
 
 	var fk []string
-	for _, constraint := range d.foreignKeySql {
-		fk = append(fk, constraint.sql)
+	for _, constraint := range d.ForeignKeySql {
+		fk = append(fk, constraint.Sql)
 	}
 	sort.Strings(fk)
 	for _, constraint := range fk {
@@ -359,8 +346,8 @@ func (d *DialectPostgres) Hash() string {
 	}
 
 	var uniques []string
-	for _, constraint := range d.uniqueConstraintSql {
-		uniques = append(uniques, constraint.sql)
+	for _, constraint := range d.UniqueConstraintSql {
+		uniques = append(uniques, constraint.Sql)
 	}
 	sort.Strings(uniques)
 	for _, constraint := range uniques {
@@ -368,7 +355,7 @@ func (d *DialectPostgres) Hash() string {
 	}
 
 	var inserts []string
-	for _, sql := range d.insertSql {
+	for _, sql := range d.InsertSql {
 		inserts = append(inserts, sql)
 	}
 	sort.Strings(inserts)

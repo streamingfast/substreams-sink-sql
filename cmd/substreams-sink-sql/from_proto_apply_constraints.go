@@ -11,7 +11,7 @@ import (
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -91,7 +91,7 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	sqlDialect, err := dialect.NewDialectPostgres(schemaName, schema.TableRegistry, zlog)
+	sqlDialect, err := postgres.NewDialectPostgres(schemaName, schema.TableRegistry, zlog)
 	if err != nil {
 		return fmt.Errorf("creating dialect: %w", err)
 	}

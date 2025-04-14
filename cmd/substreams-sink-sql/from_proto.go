@@ -14,7 +14,7 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams/manifest"
@@ -160,17 +160,97 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open db connection: %w", err)
 	}
 
-	sqlDialect, err := dialect.NewDialectPostgres(schemaName, schema.TableRegistry, zlog)
+	dialect, err := postgres.NewDialectPostgres(schema.Name, schema.TableRegistry, zlog)
 	if err != nil {
 		return fmt.Errorf("creating dialect: %w", err)
 	}
-	database, err := protosql.NewDatabase(schema, sqlDialect, sqlDB, outputModuleName, rootMessageDescriptor, useConstraints, zlog)
+
+	var database protosql.Database
+	database, err = postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
 
+	sinkInfo, err := database.FetchSinkInfo(schema.Name)
+	if err != nil {
+		return fmt.Errorf("fetching sink info: %w", err)
+	}
+
+	if sinkInfo == nil {
+		err := database.BeginTransaction()
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+		err = database.CreateDatabase(useConstraints, schemaName)
+		if err != nil {
+			database.RollbackTransaction()
+			return fmt.Errorf("creating database: %w", err)
+		}
+
+		err = database.StoreSinkInfo(schemaName, dialect.SchemaHash())
+		if err != nil {
+			database.RollbackTransaction()
+			return fmt.Errorf("storing sink info: %w", err)
+		}
+
+		err = database.CommitTransaction()
+
+	} else {
+		migrationNeeded := sinkInfo.SchemaHash != dialect.SchemaHash()
+		if migrationNeeded {
+
+			tempSchemaName := schema.Name + "_" + dialect.SchemaHash()
+			tempSinkInfo, err := database.FetchSinkInfo(tempSchemaName)
+			if err != nil {
+				return fmt.Errorf("fetching temp schema sink info: %w", err)
+			}
+			if tempSinkInfo != nil {
+				hash, err := database.DatabaseHash(schema.Name)
+				if err != nil {
+					return fmt.Errorf("fetching schema %q hash: %w", schema.Name, err)
+				}
+				dbTempHash, err := database.DatabaseHash(tempSchemaName)
+				if err != nil {
+					return fmt.Errorf("fetching temp schema %q hash: %w", tempSchemaName, err)
+				}
+
+				if hash != dbTempHash {
+					return fmt.Errorf("schema %s and temp schema %s have different hash", schema.Name, tempSchemaName)
+				}
+				err = database.BeginTransaction()
+				if err != nil {
+					return fmt.Errorf("begin transaction: %w", err)
+				}
+				err = database.UpdateSinkInfoHash(schemaName, tempSinkInfo.SchemaHash)
+				if err != nil {
+					database.RollbackTransaction()
+					return fmt.Errorf("updating sink info hash: %w", err)
+				}
+
+				err = database.CommitTransaction()
+				if err != nil {
+					return fmt.Errorf("commit transaction: %w", err)
+				}
+
+			} else {
+				//todo: create the temp schema ... and exit
+
+				//err = schema.ChangeName(tempSchemaName, dialect)
+				//if err != nil {
+				//	return nil, fmt.Errorf("changing schema name: %w", err)
+				//}
+				//generateTempSchema = true
+			}
+		}
+	}
+
+	err = database.PrepareStatements()
+	if err != nil {
+		return fmt.Errorf("preparing statements: %w", err)
+	}
+
 	stats := stats2.NewStats(zlog)
-	sinker := db_proto.NewSinker(zlog, baseSink, database, useTransactions, blockBatchSize, parallel, stats)
+	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, blockBatchSize, parallel, stats, zlog)
 	sinker.OnTerminating(func(err error) {
 		zlog.Error("sinker terminating", zap.Error(err))
 	})
