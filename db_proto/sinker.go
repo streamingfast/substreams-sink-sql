@@ -47,9 +47,11 @@ func (s *Sinker) Run(ctx context.Context) error {
 	}
 
 	//clean up the mess from running without a transaction
-	err = s.db.HandleBlocksUndo(cursor.Block().Num(), cursor)
-	if err != nil {
-		return fmt.Errorf("handle blocks undo from %d : %w", cursor.Block().Num(), err)
+	if cursor != nil {
+		err = s.db.HandleBlocksUndo(cursor.Block().Num(), cursor)
+		if err != nil {
+			return fmt.Errorf("handle blocks undo from %d : %w", cursor.Block().Num(), err)
+		}
 	}
 
 	s.logger.Info("fetched cursor", zap.Uint64("block_num", cursor.Block().Num()))
@@ -136,6 +138,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 				err = s.processHolder(h, s.stats)
 				if err != nil {
 					if s.useTransaction {
+						s.logger.Error("rolling back transaction", zap.Error(err))
 						s.db.RollbackTransaction()
 					}
 					return fmt.Errorf("process holder: %w", err)
@@ -182,13 +185,13 @@ func (s *Sinker) processHolder(h *Holder, stats *stats.Stats) (err error) {
 }
 func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64, blockHash string, blockTimestamp time.Time, stats *stats.Stats) error {
 	startInsertBlock := time.Now()
-	id, err := database.InsertBlock(blockNum, blockHash, blockTimestamp)
+	err := database.InsertBlock(blockNum, blockHash, blockTimestamp)
 	if err != nil {
 		return fmt.Errorf("inserting block: %w", err)
 	}
 	stats.BlockInsertDuration.Add(time.Since(startInsertBlock))
 
-	_, sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, id, nil, stats)
+	sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, blockNum, nil, stats)
 	if err != nil {
 		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 	}

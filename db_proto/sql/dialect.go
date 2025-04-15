@@ -1,4 +1,4 @@
-package dialect
+package sql
 
 import (
 	"database/sql"
@@ -14,8 +14,7 @@ type Dialect interface {
 	CreateDatabase(tx *sql.Tx) error
 	ApplyConstraints(tx *sql.Tx) error
 	GetTable(table string) *schema.Table
-	GetInsert(table string) string
-	GetInserts() map[string]string
+	GetTables() []*schema.Table
 }
 
 type BaseDialect struct {
@@ -23,7 +22,6 @@ type BaseDialect struct {
 	PrimaryKeySql       []*Constraint
 	ForeignKeySql       []*Constraint
 	UniqueConstraintSql []*Constraint
-	InsertSql           map[string]string
 	TableRegistry       map[string]*schema.Table
 	Logger              *zap.Logger
 }
@@ -31,22 +29,9 @@ type BaseDialect struct {
 func NewBaseDialect(registry map[string]*schema.Table, logger *zap.Logger) *BaseDialect {
 	return &BaseDialect{
 		CreateTableSql: make(map[string]string),
-		InsertSql:      make(map[string]string),
 		TableRegistry:  registry,
 		Logger:         logger,
 	}
-}
-
-func (d *BaseDialect) AddInsertSql(table string, sql string) {
-	d.InsertSql[table] = sql
-}
-
-func (d *BaseDialect) GetInsertSql(table string) string {
-	return d.InsertSql[table]
-}
-
-func (d *BaseDialect) GetAllInsertSql() []string {
-	return maps.Values(d.InsertSql)
 }
 
 func (d *BaseDialect) AddCreateTableSql(table string, sql string) {
@@ -71,4 +56,8 @@ func (d *BaseDialect) AddUniqueConstraintSql(table string, sql string) {
 
 func (d *BaseDialect) GetTable(table string) *schema.Table {
 	return d.TableRegistry[table]
+}
+
+func (d *BaseDialect) GetTables() []*schema.Table {
+	return maps.Values(d.TableRegistry)
 }

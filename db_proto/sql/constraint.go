@@ -1,4 +1,4 @@
-package dialect
+package sql
 
 import "fmt"
 

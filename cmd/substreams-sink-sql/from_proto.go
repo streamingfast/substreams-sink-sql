@@ -166,10 +166,11 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	var database protosql.Database
-	database, err = postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
+	pgDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
+	database = pgDatabase
 
 	sinkInfo, err := database.FetchSinkInfo(schema.Name)
 	if err != nil {
@@ -244,10 +245,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	err = database.PrepareStatements()
-	if err != nil {
-		return fmt.Errorf("preparing statements: %w", err)
-	}
+	inserter, err := postgres.NewRowInserter(pgDatabase, zlog)
+
+	database.SetInserter(inserter)
 
 	stats := stats2.NewStats(zlog)
 	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, blockBatchSize, parallel, stats, zlog)

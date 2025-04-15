@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/dialect"
+	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
 )
@@ -34,13 +34,13 @@ const postgresStaticSql = `
 `
 
 type DialectPostgres struct {
-	*dialect.BaseDialect
+	*sql2.BaseDialect
 	schemaName string
 }
 
 func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Table, logger *zap.Logger) (*DialectPostgres, error) {
 	d := &DialectPostgres{
-		BaseDialect: dialect.NewBaseDialect(tableRegistry, logger),
+		BaseDialect: sql2.NewBaseDialect(tableRegistry, logger),
 		schemaName:  schemaName,
 	}
 
@@ -50,7 +50,7 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 	}
 
 	for _, table := range tableRegistry {
-		err := d.handleTable(table)
+		err := d.createTable(table)
 		if err != nil {
 			return nil, fmt.Errorf("handling table %q: %w", table.Name, err)
 		}
@@ -58,32 +58,10 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 
 	return d, nil
 }
-func (d *DialectPostgres) GetInsert(table string) string {
-	return d.InsertSql[table]
-}
-
-func (d *DialectPostgres) GetInserts() map[string]string {
-	return d.InsertSql
-}
 
 func (d *DialectPostgres) init() error {
-	d.AddInsertSql("block", fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(d.schemaName, "block")))
 	d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
-	d.AddInsertSql("cursor", fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(d.schemaName, "cursor")))
 
-	return nil
-}
-
-func (d *DialectPostgres) handleTable(table *schema.Table) error {
-	err := d.createTable(table)
-	if err != nil {
-		return fmt.Errorf("creating table %q: %w", table.Name, err)
-	}
-
-	err = d.createInsertFromDescriptor(table)
-	if err != nil {
-		return fmt.Errorf("creating insert from descriptor for table %q: %w", table.Name, err)
-	}
 	return nil
 }
 
@@ -118,7 +96,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.DataType)))
 
-				foreignKey := &dialect.ForeignKey{
+				foreignKey := &sql2.ForeignKey{
 					Name:         "fk_" + table.ChildOf.ParentTable,
 					Table:        tableName,
 					Field:        table.ChildOf.ParentTableField,
@@ -156,7 +134,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 			if !found {
 				continue
 			}
-			foreignKey := &dialect.ForeignKey{
+			foreignKey := &sql2.ForeignKey{
 				Name:         "fk_" + childTable.Name,
 				Table:        tableName,
 				Field:        f.Name,
@@ -182,7 +160,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 				return fmt.Errorf("foreign field %q not found in table %q", f.ForeignKey.TableField, f.ForeignKey.Table)
 			}
 
-			foreignKey := &dialect.ForeignKey{
+			foreignKey := &sql2.ForeignKey{
 				Name:         "fk_" + f.Name,
 				Table:        tableName,
 				Field:        f.Name,
@@ -208,56 +186,6 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	return nil
 
-}
-
-func (d *DialectPostgres) createInsertFromDescriptor(table *schema.Table) error {
-	tableName := d.FullTableName(table)
-	fields := table.Columns
-
-	var fieldNames []string
-	var placeholders []string
-
-	fieldCount := 0
-	returningField := table.PrimaryKey.Name
-
-	fieldCount++
-	fieldNames = append(fieldNames, "block_number")
-	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
-
-	if pk := table.PrimaryKey; pk != nil && !pk.Generated {
-		fieldCount++
-		returningField = pk.Name
-		fieldNames = append(fieldNames, pk.Name)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount)) //$1
-	}
-
-	if table.ChildOf != nil {
-		fieldCount++
-		fieldNames = append(fieldNames, table.ChildOf.ParentTableField)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
-	}
-
-	for _, field := range fields {
-		if field.Name == returningField {
-			continue
-		}
-		if field.IsRepeated || field.IsExtension { //not a direct child
-			continue
-		}
-		fieldCount++
-		fieldNames = append(fieldNames, field.Name)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
-	}
-
-	insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
-		tableName,
-		strings.Join(fieldNames, ", "),
-		strings.Join(placeholders, ", "),
-		returningField,
-	)
-	d.AddInsertSql(table.Name, insertSQL)
-
-	return nil
 }
 
 func (d *DialectPostgres) CreateDatabase(tx *sql.Tx) error {
@@ -354,14 +282,15 @@ func (d *DialectPostgres) SchemaHash() string {
 		buf = append(buf, []byte(constraint)...)
 	}
 
-	var inserts []string
-	for _, sql := range d.InsertSql {
-		inserts = append(inserts, sql)
-	}
-	sort.Strings(inserts)
-	for _, sql := range inserts {
-		buf = append(buf, []byte(sql)...)
-	}
+	//todo: hum... is this useful?
+	//var inserts []string
+	//for _, sql := range d.InsertSql {
+	//	inserts = append(inserts, sql)
+	//}
+	//sort.Strings(inserts)
+	//for _, sql := range inserts {
+	//	buf = append(buf, []byte(sql)...)
+	//}
 
 	_, err := h.Write(buf)
 	if err != nil {

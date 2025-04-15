@@ -30,20 +30,14 @@ func NewDatabase(schemaName string, dialect *DialectPostgres, db *pqsql.DB, modu
 	}, nil
 }
 
-func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time) (blockDbId int, err error) {
+func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time) error {
 	d.logger.Debug("inserting block", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
-	stmt := d.WrapInsertStatement("block")
-	row := stmt.QueryRow(blockNum, hash, timestamp)
-
-	err = row.Err()
+	err := d.BaseDatabase.Inserter.Insert("block", []any{blockNum, hash, timestamp}, d.WrapInsertStatement)
 	if err != nil {
-		return -1, fmt.Errorf("inserting block %d: %w", blockNum, err)
+		return fmt.Errorf("inserting block %d: %w", blockNum, err)
 	}
 
-	var id int
-	err = row.Scan(&id)
-
-	return id, err
+	return nil
 }
 
 func (d *Database) FetchSinkInfo(schemaName string) (*sql.SinkInfo, error) {
@@ -103,9 +97,7 @@ func (d *Database) FetchCursor() (*sink.Cursor, error) {
 }
 
 func (d *Database) InsertCursor(cursor *sink.Cursor) error {
-	stmt := d.WrapInsertStatement("cursor")
-	_, err := stmt.Exec("cursor", cursor.String())
-
+	err := d.BaseDatabase.Inserter.Insert("cursor", []any{"cursor", cursor.String()}, d.WrapInsertStatement)
 	if err != nil {
 		return fmt.Errorf("inserting cursor: %w", err)
 	}
