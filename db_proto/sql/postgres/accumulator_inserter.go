@@ -110,12 +110,14 @@ func (i *AccumulatorInserter) Insert(table string, values []any, txWrapper func(
 func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 	for _, acc := range i.accumulators {
 		insert := acc.query
+		var b strings.Builder
+		b.WriteString(acc.query)
 		for _, values := range acc.rowValues {
-			insert += "("
-			insert += strings.Join(values, ", ")
-			insert += "),"
+			b.WriteString("(")
+			b.WriteString(strings.Join(values, ","))
+			b.WriteString("),")
 		}
-		insert = strings.TrimSuffix(insert, ",")
+		insert = strings.Trim(b.String(), ",")
 
 		_, err := tx.Exec(insert)
 		if err != nil {
