@@ -33,6 +33,7 @@ type Database interface {
 	BeginTransaction() error
 	CommitTransaction() error
 	RollbackTransaction()
+	Flush() (time.Duration, error)
 
 	DatabaseHash(schemaName string) (uint64, error)
 
@@ -95,8 +96,6 @@ func (d *BaseDatabase) BaseClone() *BaseDatabase {
 	}
 }
 
-var txCounter uint64
-
 func (d *BaseDatabase) BeginTransaction() (err error) {
 	d.Tx, err = d.DB.Begin()
 	if err != nil {
@@ -121,11 +120,25 @@ func (d *BaseDatabase) RollbackTransaction() {
 	}
 }
 
+func (d *BaseDatabase) Flush() (time.Duration, error) {
+	startFlush := time.Now()
+	err := d.Inserter.Flush(d.Tx)
+	if err != nil {
+		return 0, fmt.Errorf("flushing: %w", err)
+	}
+	return time.Since(startFlush), nil
+}
+
 func (d *BaseDatabase) WrapInsertStatement(stmt *sql.Stmt) *sql.Stmt {
 	if d.Tx != nil {
 		stmt = d.Tx.Stmt(stmt)
 	}
 	return stmt
+}
+
+type Parent struct {
+	field string
+	id    interface{}
 }
 
 func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent, stats *stats.Stats) (time.Duration, error) {
@@ -196,11 +209,6 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	}
 
 	return totalSqlDuration, nil
-}
-
-type Parent struct {
-	field string
-	id    interface{}
 }
 
 func (d *BaseDatabase) SetInserter(inserter Inserter) {

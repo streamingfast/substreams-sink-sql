@@ -245,7 +245,8 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	inserter, err := postgres.NewRowInserter(pgDatabase, zlog)
+	inserter, err := postgres.NewAccumulatorInserter(pgDatabase, zlog)
+	//inserter, err := postgres.NewRowInserter(pgDatabase, zlog)
 
 	database.SetInserter(inserter)
 

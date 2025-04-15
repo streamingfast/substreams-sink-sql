@@ -146,6 +146,13 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 			}
 		}
 
+		flushDuration, err := s.db.Flush()
+		if err != nil {
+			return fmt.Errorf("flushing: %w", err)
+		}
+		flushDurationPerBlock := flushDuration / time.Duration(len(holding))
+		s.stats.FlushDuration.Add(flushDurationPerBlock)
+
 		err = s.db.InsertCursor(cursor)
 		if err != nil {
 			return fmt.Errorf("inserting cursor: %w", err)

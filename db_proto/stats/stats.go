@@ -63,6 +63,7 @@ type Stats struct {
 	UnmarshallingDuration     *Average
 	BlockInsertDuration       *Average
 	EntitiesInsertDuration    *Average
+	FlushDuration             *Average
 	LastBlockProcessAt        time.Time
 	TotalProcessingDuration   time.Duration
 }
@@ -75,6 +76,7 @@ func NewStats(logger *zap.Logger) *Stats {
 		UnmarshallingDuration:     NewAverage("         Unmarshalling Duration", 250_000),
 		BlockInsertDuration:       NewAverage("          Block Insert Duration", 250_000),
 		EntitiesInsertDuration:    NewAverage("       Entities Insert Duration", 250_000),
+		FlushDuration:             NewAverage("                 Flush duration", 250_000),
 	}
 
 	go func() {
@@ -100,5 +102,7 @@ func (s *Stats) Log() {
 	s.UnmarshallingDuration.Log(s.logger)
 	s.BlockInsertDuration.Log(s.logger)
 	s.EntitiesInsertDuration.Log(s.logger)
+	s.FlushDuration.Log(s.logger)
+
 	s.logger.Info("-----------------------------------")
 }

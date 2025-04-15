@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"time"
@@ -18,6 +19,10 @@ import (
 var version = "dev"
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
+
 	Run("substreams-sink-sql", "Substreams SQL Sink",
 		sinkRunCmd,
 		sinkSetupCmd,

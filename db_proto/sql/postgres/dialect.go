@@ -283,12 +283,12 @@ func (d *DialectPostgres) SchemaHash() string {
 	}
 
 	//todo: hum... is this useful?
-	//var inserts []string
+	//var accumulators []string
 	//for _, sql := range d.InsertSql {
-	//	inserts = append(inserts, sql)
+	//	accumulators = append(accumulators, sql)
 	//}
-	//sort.Strings(inserts)
-	//for _, sql := range inserts {
+	//sort.Strings(accumulators)
+	//for _, sql := range accumulators {
 	//	buf = append(buf, []byte(sql)...)
 	//}
 

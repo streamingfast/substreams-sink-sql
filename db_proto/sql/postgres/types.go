@@ -1,6 +1,10 @@
 package postgres
 
 import (
+	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -44,4 +48,34 @@ func MapFieldType(t descriptorpb.FieldDescriptorProto_Type) DataType {
 	default:
 		return TypeText
 	}
+}
+
+func ValueToString(value any) (s string) {
+	switch v := value.(type) {
+	case string:
+		s = "'" + v + "'"
+	case int64:
+		s = strconv.FormatInt(v, 10)
+	case int32:
+		s = strconv.FormatInt(int64(v), 10)
+	case int:
+		s = strconv.FormatInt(int64(v), 10)
+	case uint64:
+		s = strconv.FormatUint(v, 10)
+	case uint32:
+		s = strconv.FormatUint(uint64(v), 10)
+	case uint:
+		s = strconv.FormatUint(uint64(v), 10)
+	case float64:
+		s = strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case bool:
+		s = strconv.FormatBool(v)
+	case time.Time:
+		s = "'" + v.Format(time.RFC3339) + "'"
+	default:
+		panic(fmt.Sprintf("unsupported type: %T", v))
+	}
+	return
 }

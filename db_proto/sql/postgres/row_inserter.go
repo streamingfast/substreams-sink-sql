@@ -118,3 +118,7 @@ func (i *RowInserter) Insert(table string, values []any, txWrapper func(stmt *sq
 
 	return nil
 }
+
+func (i *RowInserter) Flush(tx *sql.Tx) error {
+	return nil
+}
