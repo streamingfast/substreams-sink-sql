@@ -1,4 +1,4 @@
-package postgres
+package clickhouse
 
 import (
 	"database/sql"
@@ -39,14 +39,14 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*Accumulato
 		query: fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ", tableName(database.schemaName, "block")),
 	}
 
-	cursorQuery := fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))
-	cs, err := database.DB.Prepare(cursorQuery)
-	if err != nil {
-		return nil, fmt.Errorf("preparing statement %q: %w", cursorQuery, err)
-	}
+	//cursorQuery := fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))
+	//cs, err := database.DB.Prepare(cursorQuery)
+	//if err != nil {
+	//	return nil, fmt.Errorf("preparing statement %q: %w", cursorQuery, err)
+	//}
 
 	return &AccumulatorInserter{
-		cursorStmt:   cs,
+		//cursorStmt:   cs,
 		accumulators: accumulators,
 		logger:       logger,
 	}, nil
@@ -121,8 +121,6 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 
 		_, err := tx.Exec(insert)
 		if err != nil {
-			fmt.Println(acc.query)
-			fmt.Println(insert)
 			return fmt.Errorf("executing insert %s: %w", insert, err)
 		}
 	}

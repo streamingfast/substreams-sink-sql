@@ -6,14 +6,12 @@ import (
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/proto"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type PrimaryKey struct {
-	Name      string
-	DataType  descriptorpb.FieldDescriptorProto_Type
-	Index     int
-	Generated bool
+	Name            string
+	FieldDescriptor *desc.FieldDescriptor
+	Index           int
 }
 
 type ChildOf struct {
@@ -79,20 +77,12 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 			}
 
 			t.PrimaryKey = &PrimaryKey{
-				Name:     column.Name,
-				DataType: column.DataType,
-				Index:    idx,
+				Name:            column.Name,
+				FieldDescriptor: fieldDescriptor,
+				Index:           idx,
 			}
 		}
 		t.Columns = append(t.Columns, column)
-	}
-
-	if t.PrimaryKey == nil {
-		t.PrimaryKey = &PrimaryKey{
-			Name:      "id",
-			DataType:  descriptorpb.FieldDescriptorProto_TYPE_UINT64,
-			Generated: true,
-		}
 	}
 
 	return nil

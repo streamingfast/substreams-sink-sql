@@ -78,7 +78,10 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		s.stats.TotalProcessingDuration += time.Since(startAt)
 	}()
 
-	s.stats.WaitDurationBetweenBlocks.Add(time.Since(s.stats.LastBlockProcessAt))
+	if s.stats.BlockCount > 0 {
+		s.stats.WaitDurationBetweenBlocks.Add(time.Since(s.stats.LastBlockProcessAt))
+		s.stats.TotalDurationBetween += time.Since(s.stats.LastBlockProcessAt)
+	}
 	s.stats.BlockCount++
 
 	output := data.Output

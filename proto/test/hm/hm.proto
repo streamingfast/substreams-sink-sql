@@ -1,6 +1,6 @@
 syntax = "proto3";
 import "google/protobuf/descriptor.proto";
-import "schema/schema.proto";
+import "google/protobuf/timestamp.proto";import "schema/schema.proto";
 
 package test.hm;
 option go_package = "test/hm";

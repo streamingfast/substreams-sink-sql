@@ -10,11 +10,10 @@ import (
 )
 
 type Schema struct {
-	Name                   string
-	HasGeneratedPrimaryKey bool
-	TableRegistry          map[string]*Table
-	logger                 *zap.Logger
-	rootMessageDescriptor  *desc.MessageDescriptor
+	Name                  string
+	TableRegistry         map[string]*Table
+	logger                *zap.Logger
+	rootMessageDescriptor *desc.MessageDescriptor
 }
 
 func NewSchema(name string, rootMessageDescriptor *desc.MessageDescriptor, logger *zap.Logger) (*Schema, error) {
@@ -57,9 +56,6 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 			return fmt.Errorf("creating table message descriptor: %w", err)
 		}
 		s.TableRegistry[tableInfo.Name] = table
-		if table.PrimaryKey.Generated {
-			s.HasGeneratedPrimaryKey = true
-		}
 		return nil
 	})
 

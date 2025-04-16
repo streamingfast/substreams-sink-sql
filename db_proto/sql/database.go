@@ -183,15 +183,17 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 		table := d.Dialect.GetTable(tableInfo.Name)
 		err := d.Inserter.Insert(table.Name, fieldValues, d.WrapInsertStatement)
 		if err != nil {
+			fmt.Printf("fieldValues: %v\n", fieldValues)
 			return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 		}
-		id := fieldValues[table.PrimaryKey.Index+1]
-		p = &Parent{
-			field: strings.ToLower(md.GetName()),
-			id:    id,
+		if len(childs) > 0 {
+			id := fieldValues[table.PrimaryKey.Index+1]
+			p = &Parent{
+				field: strings.ToLower(md.GetName()),
+				id:    id,
+			}
+			totalSqlDuration += time.Since(insertStartAt)
 		}
-		totalSqlDuration += time.Since(insertStartAt)
-
 	}
 
 	for _, child := range childs {

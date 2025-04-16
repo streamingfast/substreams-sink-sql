@@ -11,12 +11,14 @@ type Average struct {
 	Duration   []time.Duration
 	windowSize int
 	title      string
+	lastX      int
 }
 
-func NewAverage(title string, windowSize int) *Average {
+func NewAverage(title string, windowSize int, lastX int) *Average {
 	return &Average{
 		title:      title,
 		windowSize: windowSize,
+		lastX:      lastX,
 	}
 }
 func (a *Average) Add(d time.Duration) {
@@ -52,7 +54,7 @@ func (a *Average) LastItemsAverage(count int) time.Duration {
 }
 
 func (a *Average) Log(logger *zap.Logger) {
-	logger.Info(a.title, zap.Duration("average", a.Average()), zap.Duration("last 1000 average", a.LastItemsAverage(1000)))
+	logger.Info(a.title, zap.Duration("average", a.Average()), zap.Duration("last X average", a.LastItemsAverage(a.lastX)))
 }
 
 type Stats struct {
@@ -66,17 +68,18 @@ type Stats struct {
 	FlushDuration             *Average
 	LastBlockProcessAt        time.Time
 	TotalProcessingDuration   time.Duration
+	TotalDurationBetween      time.Duration
 }
 
 func NewStats(logger *zap.Logger) *Stats {
 	s := &Stats{
 		logger:                    logger,
-		WaitDurationBetweenBlocks: NewAverage("   Wait Duration Between Blocks", 250_000),
-		BlockProcessingDuration:   NewAverage("      Block Processing Duration", 250_000),
-		UnmarshallingDuration:     NewAverage("         Unmarshalling Duration", 250_000),
-		BlockInsertDuration:       NewAverage("          Block Insert Duration", 250_000),
-		EntitiesInsertDuration:    NewAverage("       Entities Insert Duration", 250_000),
-		FlushDuration:             NewAverage("                 Flush duration", 250_000),
+		WaitDurationBetweenBlocks: NewAverage("   Wait Duration Between Blocks", 250_000, 1000),
+		BlockProcessingDuration:   NewAverage("      Block Processing Duration", 250_000, 1000),
+		UnmarshallingDuration:     NewAverage("         Unmarshalling Duration", 250_000, 1000),
+		BlockInsertDuration:       NewAverage("          Block Insert Duration", 250_000, 1000),
+		EntitiesInsertDuration:    NewAverage("       Entities Insert Duration", 250_000, 1000),
+		FlushDuration:             NewAverage("                 Flush duration", 1000, 10),
 	}
 
 	go func() {
@@ -96,7 +99,7 @@ func (s *Stats) Log() {
 	}
 
 	s.logger.Info("-----------------------------------")
-	s.logger.Info("Stats", zap.Int("block_count", s.BlockCount), zap.Duration("Processing Time", s.TotalProcessingDuration))
+	s.logger.Info("Stats", zap.Int("block_count", s.BlockCount), zap.Duration("Processing Time", s.TotalProcessingDuration), zap.Duration("Total Wait Duration", s.TotalDurationBetween), zap.Duration("Total Duration", s.TotalDurationBetween+s.TotalProcessingDuration), zap.Time("Last Block Process At", s.LastBlockProcessAt))
 	s.WaitDurationBetweenBlocks.Log(s.logger)
 	s.BlockProcessingDuration.Log(s.logger)
 	s.UnmarshallingDuration.Log(s.logger)

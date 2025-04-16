@@ -1,4 +1,4 @@
-package postgres
+package clickhouse
 
 import (
 	"database/sql"
@@ -14,32 +14,26 @@ import (
 	"go.uber.org/zap"
 )
 
-const postgresStaticSql = `
-	CREATE SCHEMA IF NOT EXISTS "%s";
-
-	CREATE TABLE IF NOT EXISTS "%s".sink_info (
-		schema_hash TEXT PRIMARY KEY
-	);
-
-	CREATE TABLE IF NOT EXISTS "%s".cursor (
-		name TEXT PRIMARY KEY,
-		cursor TEXT NOT NULL
-	);
-
-	CREATE TABLE IF NOT EXISTS "%s".block (
-		number integer,
-		hash TEXT NOT NULL,
-		timestamp TIMESTAMP NOT NULL
-	);
+const staticSqlCreatDatabase = `
+	CREATE DATABASE IF NOT EXISTS %s;
+`
+const staticSqlCreateBlock = `
+	CREATE TABLE IF NOT EXISTS %s.block  (
+		number    integer,
+		hash      text,
+		timestamp timestamp
+	)
+	ENGINE = MergeTree()
+	PRIMARY KEY (number)
 `
 
-type DialectPostgres struct {
+type DialectClickHouse struct {
 	*sql2.BaseDialect
 	schemaName string
 }
 
-func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Table, logger *zap.Logger) (*DialectPostgres, error) {
-	d := &DialectPostgres{
+func NewDialectClickHouse(schemaName string, tableRegistry map[string]*schema.Table, logger *zap.Logger) (*DialectClickHouse, error) {
+	d := &DialectClickHouse{
 		BaseDialect: sql2.NewBaseDialect(tableRegistry, logger),
 		schemaName:  schemaName,
 	}
@@ -59,13 +53,13 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 	return d, nil
 }
 
-func (d *DialectPostgres) init() error {
-	d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
+func (d *DialectClickHouse) init() error {
+	//d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
 
 	return nil
 }
 
-func (d *DialectPostgres) createTable(table *schema.Table) error {
+func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	var sb strings.Builder
 
 	tableName := d.FullTableName(table)
@@ -75,11 +69,11 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 	if table.PrimaryKey != nil {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
-		d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
+		//d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
 		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor)))
 	}
 
-	sb.WriteString(" block_number INTEGER NOT NULL,")
+	sb.WriteString(" block_number Int64 NOT NULL,")
 
 	if table.ChildOf != nil {
 		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
@@ -93,15 +87,15 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor)))
 
-				foreignKey := &sql2.ForeignKey{
-					Name:         "fk_" + table.ChildOf.ParentTable,
-					Table:        tableName,
-					Field:        table.ChildOf.ParentTableField,
-					ForeignTable: d.FullTableName(parentTable),
-					ForeignField: parentField.Name,
-				}
-
-				d.AddForeignKeySql(table.Name, foreignKey.String())
+				//foreignKey := &sql2.ForeignKey{
+				//	Name:         "fk_" + table.ChildOf.ParentTable,
+				//	Table:        tableName,
+				//	Field:        table.ChildOf.ParentTableField,
+				//	ForeignTable: d.FullTableName(parentTable),
+				//	ForeignField: parentField.Name,
+				//}
+				//
+				//d.AddForeignKeySql(table.Name, foreignKey.String())
 
 				fieldFound = true
 				break
@@ -118,56 +112,55 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		}
 
 		fieldName := f.Name
-		fmt.Printf("table %q field %q\n", table.Name, fieldName)
+		//if f.IsUnique {
+		//	d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, fieldName, fieldName))
+		//}
 
 		switch {
 		case f.IsRepeated:
 			continue
-		case f.IsMessage && !IsWellKnownType(f.FieldDescriptor):
-			childTable, found := d.TableRegistry[f.Message]
-			if !found {
-				continue
-			}
-			foreignKey := &sql2.ForeignKey{
-				Name:         "fk_" + childTable.Name,
-				Table:        tableName,
-				Field:        f.Name,
-				ForeignTable: d.FullTableName(childTable),
-				ForeignField: childTable.PrimaryKey.Name,
-			}
-			d.AddForeignKeySql(table.Name, foreignKey.String())
+		case f.IsMessage:
+			//childTable, found := d.TableRegistry[f.Message]
+			//if !found {
+			//	continue
+			//}
+			//foreignKey := &sql2.ForeignKey{
+			//	Name:         "fk_" + childTable.Name,
+			//	Table:        tableName,
+			//	Field:        f.Name,
+			//	ForeignTable: d.FullTableName(childTable),
+			//	ForeignField: childTable.PrimaryKey.Name,
+			//}
+			//d.AddForeignKeySql(table.Name, foreignKey.String())
 
 		case f.ForeignKey != nil:
-			foreignTable, found := d.TableRegistry[f.ForeignKey.Table]
-			if !found {
-				return fmt.Errorf("foreign table %q not found", f.ForeignKey.Table)
-			}
-
-			var foreignField *schema.Column
-			for _, field := range foreignTable.Columns {
-				if field.Name == f.ForeignKey.TableField {
-					foreignField = field
-					break
-				}
-			}
-			if foreignField == nil {
-				return fmt.Errorf("foreign field %q not found in table %q", f.ForeignKey.TableField, f.ForeignKey.Table)
-			}
-
-			foreignKey := &sql2.ForeignKey{
-				Name:         "fk_" + f.Name,
-				Table:        tableName,
-				Field:        f.Name,
-				ForeignTable: d.FullTableName(foreignTable),
-				ForeignField: foreignField.Name,
-			}
-			d.AddForeignKeySql(table.Name, foreignKey.String())
+			//foreignTable, found := d.TableRegistry[f.ForeignKey.Table]
+			//if !found {
+			//	return fmt.Errorf("foreign table %q not found", f.ForeignKey.Table)
+			//}
+			//
+			//var foreignField *schema.Column
+			//for _, field := range foreignTable.Columns {
+			//	if field.Name == f.ForeignKey.TableField {
+			//		foreignField = field
+			//		break
+			//	}
+			//}
+			//if foreignField == nil {
+			//	return fmt.Errorf("foreign field %q not found in table %q", f.ForeignKey.TableField, f.ForeignKey.Table)
+			//}
+			//
+			//foreignKey := &sql2.ForeignKey{
+			//	Name:         "fk_" + f.Name,
+			//	Table:        tableName,
+			//	Field:        f.Name,
+			//	ForeignTable: d.FullTableName(foreignTable),
+			//	ForeignField: foreignField.Name,
+			//}
+			//d.AddForeignKeySql(table.Name, foreignKey.String())
 		}
+		//fmt.Printf("Table %s, field %s\n", table.Name, fieldName)
 		fieldType := MapFieldType(f.FieldDescriptor)
-		if f.IsUnique {
-			d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, fieldName, fieldName))
-		}
-
 		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
 		sb.WriteString(",")
 	}
@@ -178,20 +171,26 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 	sb = strings.Builder{}
 	sb.WriteString(temp)
 
-	sb.WriteString(");\n")
+	sb.WriteString(fmt.Sprintf(") ENGINE = MergeTree() ORDER BY (%s);", primaryKeyFieldName))
 
-	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.block(number) ON DELETE CASCADE", tableName, d.schemaName))
+	//sb.WriteString(");\n")
+
+	//d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.block(number) ON DELETE CASCADE", tableName, d.schemaName))
 	d.AddCreateTableSql(table.Name, sb.String())
 
 	return nil
 
 }
 
-func (d *DialectPostgres) CreateDatabase(tx *sql.Tx) error {
-	staticSql := fmt.Sprintf(postgresStaticSql, d.schemaName, d.schemaName, d.schemaName, d.schemaName)
-	_, err := tx.Exec(staticSql)
+func (d *DialectClickHouse) CreateDatabase(tx *sql.Tx) error {
+	_, err := tx.Exec(fmt.Sprintf(staticSqlCreatDatabase, d.schemaName))
 	if err != nil {
-		return fmt.Errorf("executing static staticSql: %w\n%s", err, staticSql)
+		return fmt.Errorf("executing static staticSqlCreatDatabase: %w\n%s", err, staticSqlCreatDatabase)
+	}
+
+	_, err = tx.Exec(fmt.Sprintf(staticSqlCreateBlock, d.schemaName))
+	if err != nil {
+		return fmt.Errorf("executing static staticSqlCreateBlock: %w\n%s", err, staticSqlCreateBlock)
 	}
 
 	for _, statement := range d.CreateTableSql {
@@ -205,7 +204,7 @@ func (d *DialectPostgres) CreateDatabase(tx *sql.Tx) error {
 }
 
 // todo: move to postgres database ...
-func (d *DialectPostgres) ApplyConstraints(tx *sql.Tx) error {
+func (d *DialectClickHouse) ApplyConstraints(tx *sql.Tx) error {
 	startAt := time.Now()
 	for _, constraint := range d.PrimaryKeySql {
 		d.Logger.Info("executing pk statement", zap.String("sql", constraint.Sql))
@@ -232,12 +231,12 @@ func (d *DialectPostgres) ApplyConstraints(tx *sql.Tx) error {
 	return nil
 }
 
-func (d *DialectPostgres) FullTableName(table *schema.Table) string {
+func (d *DialectClickHouse) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
 }
 
 // todo: move to postgress database
-func (d *DialectPostgres) SchemaHash() string {
+func (d *DialectClickHouse) SchemaHash() string {
 	h := fnv.New64a()
 
 	var buf []byte

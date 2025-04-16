@@ -7,17 +7,16 @@ import (
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/proto"
-	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type Column struct {
-	Name         string
-	ForeignKey   *ForeignKey
-	DataType     descriptorpb.FieldDescriptorProto_Type
-	IsPrimaryKey bool
-	IsUnique     bool
-	IsRepeated   bool
-	IsExtension  bool
+	Name            string
+	ForeignKey      *ForeignKey
+	FieldDescriptor *desc.FieldDescriptor
+	IsPrimaryKey    bool
+	IsUnique        bool
+	IsRepeated      bool
+	IsExtension     bool
 	//todo: naming ...
 	IsMessage bool
 	Message   string
@@ -25,11 +24,11 @@ type Column struct {
 
 func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
 	out := &Column{
-		Name:        d.GetName(),
-		DataType:    d.GetType(),
-		IsRepeated:  d.IsRepeated(),
-		IsMessage:   d.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE,
-		IsExtension: d.IsExtension(),
+		Name:            d.GetName(),
+		FieldDescriptor: d,
+		IsRepeated:      d.IsRepeated(),
+		IsMessage:       d.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE,
+		IsExtension:     d.IsExtension(),
 	}
 
 	fieldInfo := proto.FieldInfo(d)

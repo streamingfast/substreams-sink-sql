@@ -2,12 +2,16 @@ package postgres
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type RowInserter struct {
@@ -65,13 +69,16 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 	var placeholders []string
 
 	fieldCount := 0
-	returningField := table.PrimaryKey.Name
+	returningField := ""
+	if table.PrimaryKey != nil {
+		returningField = table.PrimaryKey.Name
+	}
 
 	fieldCount++
 	fieldNames = append(fieldNames, "block_number")
 	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 
-	if pk := table.PrimaryKey; pk != nil && !pk.Generated {
+	if pk := table.PrimaryKey; pk != nil {
 		fieldCount++
 		returningField = pk.Name
 		fieldNames = append(fieldNames, pk.Name)
@@ -96,11 +103,10 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 		placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 	}
 
-	return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) RETURNING %s",
+	return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		tableName,
 		strings.Join(fieldNames, ", "),
 		strings.Join(placeholders, ", "),
-		returningField,
 	), nil
 
 }
@@ -109,6 +115,17 @@ func (i *RowInserter) Insert(table string, values []any, txWrapper func(stmt *sq
 	i.logger.Debug("inserting row", zap.String("table", table), zap.Any("values", values))
 	stmt := i.insertStatements[table]
 	stmt = txWrapper(stmt)
+
+	for i, value := range values {
+		switch v := value.(type) {
+		case uint64:
+			values[i] = strconv.FormatUint(v, 10)
+		case []uint8:
+			values[i] = base64.StdEncoding.EncodeToString(v)
+		case *timestamppb.Timestamp:
+			values[i] = "'" + v.AsTime().Format(time.RFC3339) + "'"
+		}
+	}
 
 	_, err := stmt.Exec(values...)
 	if err != nil {

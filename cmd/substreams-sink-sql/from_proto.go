@@ -132,12 +132,13 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	//todo: fix me
+	//schemaName := "test"
 	schemaName := dsn.Schema()
 	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
-	fmt.Println(schema.String())
 
 	baseSink, err := sink.NewFromViper(
 		cmd,
@@ -154,7 +155,10 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	connectionString := dsn.ConnString()
-	fmt.Println(connectionString)
+	//todo: fix me
+	//connectionString = "http://localhost:8123?secure=false"
+
+	fmt.Println("connection string", connectionString)
 	sqlDB, err := sql.Open(dsn.Driver(), connectionString)
 	if err != nil {
 		return fmt.Errorf("open db connection: %w", err)
@@ -165,12 +169,21 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating dialect: %w", err)
 	}
 
+	//dialect, err := clickhouse.NewDialectClickHouse(schema.Name, schema.TableRegistry, zlog)
+	//if err != nil {
+	//	return fmt.Errorf("creating dialect: %w", err)
+	//}
+
 	var database protosql.Database
-	pgDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
+	//implDatabase, err := clickhouse.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
+	//if err != nil {
+	//	return fmt.Errorf("creating database: %w", err)
+	//}
+	implDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
-	database = pgDatabase
+	database = implDatabase
 
 	sinkInfo, err := database.FetchSinkInfo(schema.Name)
 	if err != nil {
@@ -245,8 +258,12 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	inserter, err := postgres.NewAccumulatorInserter(pgDatabase, zlog)
-	//inserter, err := postgres.NewRowInserter(pgDatabase, zlog)
+	//inserter, err := clickhouse.NewAccumulatorInserter(implDatabase, zlog)
+	//inserter, err := postgres.NewAccumulatorInserter(implDatabase, zlog)
+	inserter, err := postgres.NewRowInserter(implDatabase, zlog)
+	if err != nil {
+		return fmt.Errorf("creating inserter: %w", err)
+	}
 
 	database.SetInserter(inserter)
 
