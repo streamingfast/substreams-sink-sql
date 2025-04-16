@@ -10,7 +10,6 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 	"go.uber.org/zap"
 )
@@ -22,7 +21,7 @@ type Database interface {
 
 	CreateDatabase(useConstraints bool, schemaName string) error
 	SetInserter(inserter Inserter)
-	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent, stats *stats.Stats) (time.Duration, error)
+	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent) (time.Duration, error)
 	InsertBlock(blockNum uint64, hash string, timestamp time.Time) error
 
 	HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Cursor) error
@@ -141,7 +140,7 @@ type Parent struct {
 	id    interface{}
 }
 
-func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent, stats *stats.Stats) (time.Duration, error) {
+func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent) (time.Duration, error) {
 	if dm == nil {
 		return 0, fmt.Errorf("received a nil message")
 	}
@@ -164,7 +163,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				fieldValues = append(fieldValues, nil)
 				continue //un-use oneOf field
 			}
-			sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil, stats)
+			sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil)
 			if err != nil {
 				return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
 			}
@@ -192,8 +191,8 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				field: strings.ToLower(md.GetName()),
 				id:    id,
 			}
-			totalSqlDuration += time.Since(insertStartAt)
 		}
+		totalSqlDuration += time.Since(insertStartAt)
 	}
 
 	for _, child := range childs {
@@ -202,7 +201,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 			if !ok {
 				panic("expected *dynamic.Message")
 			}
-			sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, p, stats)
+			sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, p)
 			if err != nil {
 				return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 			}

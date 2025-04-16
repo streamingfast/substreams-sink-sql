@@ -201,7 +201,7 @@ func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64,
 	}
 	stats.BlockInsertDuration.Add(time.Since(startInsertBlock))
 
-	sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, blockNum, nil, stats)
+	sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, blockNum, nil)
 	if err != nil {
 		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 	}
