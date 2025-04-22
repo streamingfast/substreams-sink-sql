@@ -26,7 +26,7 @@ const postgresStaticSql = `
 		cursor TEXT NOT NULL
 	);
 
-	CREATE TABLE IF NOT EXISTS "%s".block (
+	CREATE TABLE IF NOT EXISTS "%s".blocks (
 		number integer,
 		hash TEXT NOT NULL,
 		timestamp TIMESTAMP NOT NULL
@@ -60,8 +60,7 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 }
 
 func (d *DialectPostgres) init() error {
-	d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
-
+	d.AddPrimaryKeySql("blocks", fmt.Sprintf("alter table %s.blocks add constraint block_pk primary key (number);", d.schemaName))
 	return nil
 }
 
@@ -179,7 +178,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	sb.WriteString(");\n")
 
-	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.block(number) ON DELETE CASCADE", tableName, d.schemaName))
+	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.blocks(number) ON DELETE CASCADE", tableName, d.schemaName))
 	d.AddCreateTableSql(table.Name, sb.String())
 
 	return nil

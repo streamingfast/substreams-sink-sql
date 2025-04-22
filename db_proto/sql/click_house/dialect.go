@@ -18,7 +18,7 @@ const staticSqlCreatDatabase = `
 	CREATE DATABASE IF NOT EXISTS %s;
 `
 const staticSqlCreateBlock = `
-	CREATE TABLE IF NOT EXISTS %s.block  (
+	CREATE TABLE IF NOT EXISTS %s.blocks  (
 		number    integer,
 		hash      text,
 		timestamp timestamp
@@ -203,7 +203,6 @@ func (d *DialectClickHouse) CreateDatabase(tx *sql.Tx) error {
 	return nil
 }
 
-// todo: move to postgres database ...
 func (d *DialectClickHouse) ApplyConstraints(tx *sql.Tx) error {
 	startAt := time.Now()
 	for _, constraint := range d.PrimaryKeySql {
@@ -235,7 +234,6 @@ func (d *DialectClickHouse) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
 }
 
-// todo: move to postgress database
 func (d *DialectClickHouse) SchemaHash() string {
 	h := fnv.New64a()
 

@@ -35,8 +35,8 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*Accumulato
 			query: query,
 		}
 	}
-	accumulators["block"] = &accumulator{
-		query: fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ", tableName(database.schemaName, "block")),
+	accumulators["blocks"] = &accumulator{
+		query: fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ", tableName(database.schemaName, "blocks")),
 	}
 
 	cursorQuery := fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))

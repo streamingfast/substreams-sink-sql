@@ -43,7 +43,7 @@ func (s *Schema) ChangeName(name string) error {
 }
 
 func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
-	err := s.walkMessageDescriptor(rootMessageDescriptor, func(md *desc.MessageDescriptor) error {
+	err := s.walkMessageDescriptor(rootMessageDescriptor, 0, func(md *desc.MessageDescriptor, ordinal int) error {
 		tableInfo := proto.TableInfo(md)
 		if tableInfo == nil {
 			return nil
@@ -51,7 +51,7 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 		if _, found := s.TableRegistry[tableInfo.Name]; found {
 			return nil
 		}
-		table, err := NewTable(md)
+		table, err := NewTable(md, ordinal)
 		if err != nil {
 			return fmt.Errorf("creating table message descriptor: %w", err)
 		}
@@ -66,17 +66,17 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 	return nil
 }
 
-func (s *Schema) walkMessageDescriptor(md *desc.MessageDescriptor, task func(md *desc.MessageDescriptor) error) error {
+func (s *Schema) walkMessageDescriptor(md *desc.MessageDescriptor, ordinal int, task func(md *desc.MessageDescriptor, ordinal int) error) error {
 	for _, field := range md.GetFields() {
 		if field.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE {
-			err := s.walkMessageDescriptor(field.GetMessageType(), task)
+			err := s.walkMessageDescriptor(field.GetMessageType(), ordinal+1, task)
 			if err != nil {
 				return fmt.Errorf("walking field %q message descriptor: %w", field.GetName(), err)
 			}
 		}
 	}
 
-	err := task(md)
+	err := task(md, ordinal)
 	if err != nil {
 		return fmt.Errorf("running task on message descriptor %q: %w", md.GetName(), err)
 	}

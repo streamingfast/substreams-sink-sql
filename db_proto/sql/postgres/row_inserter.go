@@ -40,12 +40,12 @@ func NewRowInserter(database *Database, logger *zap.Logger) (*RowInserter, error
 		insertStatements[table.Name] = stmt
 	}
 
-	insertQueries["block"] = fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(database.schemaName, "block"))
-	bs, err := database.DB.Prepare(insertQueries["block"])
+	insertQueries["blocks"] = fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(database.schemaName, "blocks"))
+	bs, err := database.DB.Prepare(insertQueries["blocks"])
 	if err != nil {
-		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["block"], err)
+		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["blocks"], err)
 	}
-	insertStatements["block"] = bs
+	insertStatements["blocks"] = bs
 
 	insertQueries["cursor"] = fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))
 	cs, err := database.DB.Prepare(insertQueries["cursor"])

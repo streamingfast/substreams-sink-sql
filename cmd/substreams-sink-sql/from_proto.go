@@ -36,6 +36,8 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
 		flags.Bool("parallel", false, "Run the sinker in parallel mode. This is useful to speed up the initial import of a large dataset. This is will process blocks of a batch in parallel")
 		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
+		flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
+		flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
 	}),
 )
 
@@ -165,24 +167,29 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	dialect, err := postgres.NewDialectPostgres(schema.Name, schema.TableRegistry, zlog)
+	//dialect, err := clickhouse.NewDialectClickHouse(schema.Name, schema.TableRegistry, zlog)
 	if err != nil {
 		return fmt.Errorf("creating dialect: %w", err)
 	}
 
-	//dialect, err := clickhouse.NewDialectClickHouse(schema.Name, schema.TableRegistry, zlog)
-	//if err != nil {
-	//	return fmt.Errorf("creating dialect: %w", err)
-	//}
-
 	var database protosql.Database
-	//implDatabase, err := clickhouse.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
-	//if err != nil {
-	//	return fmt.Errorf("creating database: %w", err)
-	//}
+	//implDatabase, err := clickhouse.NewDatabase(
+	//	schemaName,
+	//	dialect,
+	//	sqlDB,
+	//	outputModuleName,
+	//	rootMessageDescriptor,
+	//	sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
+	//	sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
+	//	zlog,
+	//)
 	implDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
+	//if err != nil {
+	//	return fmt.Errorf("creating database: %w", err)
+	//}
 	database = implDatabase
 
 	sinkInfo, err := database.FetchSinkInfo(schema.Name)

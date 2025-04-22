@@ -48,7 +48,7 @@ func (s *Sinker) Run(ctx context.Context) error {
 
 	//clean up the mess from running without a transaction
 	if cursor != nil {
-		err = s.db.HandleBlocksUndo(cursor.Block().Num(), cursor)
+		err = s.db.HandleBlocksUndo(cursor.Block().Num())
 		if err != nil {
 			return fmt.Errorf("handle blocks undo from %d : %w", cursor.Block().Num(), err)
 		}
@@ -156,7 +156,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		flushDurationPerBlock := flushDuration / time.Duration(len(holding))
 		s.stats.FlushDuration.Add(flushDurationPerBlock)
 
-		err = s.db.InsertCursor(cursor)
+		err = s.db.StoreCursor(cursor)
 		if err != nil {
 			return fmt.Errorf("inserting cursor: %w", err)
 		}
@@ -216,9 +216,14 @@ func (s *Sinker) HandleBlockUndoSignal(ctx context.Context, undoSignal *pbsubstr
 
 	s.logger.Info("Handling undo block signal", zap.Stringer("block", cursor.Block()), zap.Stringer("cursor", cursor))
 
-	err = s.db.HandleBlocksUndo(lastValidBlockNum, cursor)
+	err = s.db.HandleBlocksUndo(lastValidBlockNum)
 	if err != nil {
 		return fmt.Errorf("handle blocks undo from %d : %w", lastValidBlockNum, err)
+	}
+
+	err = s.db.StoreCursor(cursor)
+	if err != nil {
+		return fmt.Errorf("inserting cursor: %w", err)
 	}
 
 	return nil

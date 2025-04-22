@@ -32,7 +32,7 @@ func NewDatabase(schemaName string, dialect *DialectPostgres, db *pqsql.DB, modu
 
 func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time) error {
 	d.logger.Debug("inserting block", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
-	err := d.BaseDatabase.Inserter.Insert("block", []any{blockNum, hash, timestamp}, d.WrapInsertStatement)
+	err := d.BaseDatabase.Inserter.Insert("blocks", []any{blockNum, hash, timestamp}, d.WrapInsertStatement)
 	if err != nil {
 		return fmt.Errorf("inserting block %d: %w", blockNum, err)
 	}
@@ -96,7 +96,7 @@ func (d *Database) FetchCursor() (*sink.Cursor, error) {
 	return nil, nil
 }
 
-func (d *Database) InsertCursor(cursor *sink.Cursor) error {
+func (d *Database) StoreCursor(cursor *sink.Cursor) error {
 	err := d.BaseDatabase.Inserter.Insert("cursor", []any{"cursor", cursor.String()}, d.WrapInsertStatement)
 	if err != nil {
 		return fmt.Errorf("inserting cursor: %w", err)
@@ -105,7 +105,7 @@ func (d *Database) InsertCursor(cursor *sink.Cursor) error {
 	return err
 }
 
-func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Cursor) (err error) {
+func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) (err error) {
 	tx, err := d.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("HandleBlocksUndo beginning transaction: %w", err)
@@ -124,7 +124,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Curso
 	}()
 
 	d.logger.Info("undoing blocks", zap.Uint64("last_valid_block_num", lastValidBlockNum))
-	query := fmt.Sprintf(`DELETE FROM %s.block WHERE "number" > $1`, d.schemaName)
+	query := fmt.Sprintf(`DELETE FROM %s.blocks WHERE "number" > $1`, d.schemaName)
 	result, err := tx.Exec(query, lastValidBlockNum)
 	if err != nil {
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
@@ -134,11 +134,6 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Curso
 		return fmt.Errorf("fetching rows affected: %w", err)
 	}
 	d.logger.Info("undo completed", zap.Int64("row_affected", rowsAffected))
-
-	err = d.InsertCursor(cursor)
-	if err != nil {
-		return fmt.Errorf("store cursor: %w", err)
-	}
 
 	return nil
 }

@@ -36,16 +36,18 @@ type Table struct {
 	PrimaryKey *PrimaryKey
 	ChildOf    *ChildOf
 	Columns    []*Column
+	Ordinal    int
 }
 
-func NewTable(descriptor *desc.MessageDescriptor) (*Table, error) {
+func NewTable(descriptor *desc.MessageDescriptor, ordinal int) (*Table, error) {
 	tableInfo := proto.TableInfo(descriptor)
 	if tableInfo == nil {
 		return nil, nil
 	}
 
 	table := &Table{
-		Name: descriptor.GetName(),
+		Name:    descriptor.GetName(),
+		Ordinal: ordinal,
 	}
 	table.Name = tableInfo.Name
 

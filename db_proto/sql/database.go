@@ -24,10 +24,10 @@ type Database interface {
 	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent) (time.Duration, error)
 	InsertBlock(blockNum uint64, hash string, timestamp time.Time) error
 
-	HandleBlocksUndo(lastValidBlockNum uint64, cursor *sink.Cursor) error
+	HandleBlocksUndo(lastValidBlockNumber uint64) error
 
 	FetchCursor() (*sink.Cursor, error)
-	InsertCursor(cursor *sink.Cursor) error
+	StoreCursor(cursor *sink.Cursor) error
 
 	BeginTransaction() error
 	CommitTransaction() error
