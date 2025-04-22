@@ -93,7 +93,7 @@ func ValueToString(value any) (s string) {
 	case float32:
 		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case []uint8:
-		s = base64.StdEncoding.EncodeToString(v)
+		s = "'" + base64.StdEncoding.EncodeToString(v) + "'"
 	case bool:
 		s = strconv.FormatBool(v)
 	case time.Time:

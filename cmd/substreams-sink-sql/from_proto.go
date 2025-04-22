@@ -259,8 +259,8 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	//inserter, err := clickhouse.NewAccumulatorInserter(implDatabase, zlog)
-	//inserter, err := postgres.NewAccumulatorInserter(implDatabase, zlog)
-	inserter, err := postgres.NewRowInserter(implDatabase, zlog)
+	inserter, err := postgres.NewAccumulatorInserter(implDatabase, zlog)
+	//inserter, err := postgres.NewRowInserter(implDatabase, zlog)
 	if err != nil {
 		return fmt.Errorf("creating inserter: %w", err)
 	}

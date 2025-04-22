@@ -109,6 +109,9 @@ func (i *AccumulatorInserter) Insert(table string, values []any, txWrapper func(
 
 func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 	for _, acc := range i.accumulators {
+		if len(acc.rowValues) == 0 {
+			continue
+		}
 		insert := acc.query
 		var b strings.Builder
 		b.WriteString(acc.query)
@@ -123,6 +126,7 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 		if err != nil {
 			return fmt.Errorf("executing insert %s: %w", insert, err)
 		}
+		acc.rowValues = acc.rowValues[:0]
 	}
 
 	return nil

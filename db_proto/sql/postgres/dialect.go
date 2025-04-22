@@ -118,7 +118,6 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		}
 
 		fieldName := f.Name
-		fmt.Printf("table %q field %q\n", table.Name, fieldName)
 
 		switch {
 		case f.IsRepeated:

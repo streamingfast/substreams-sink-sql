@@ -4,6 +4,8 @@ go 1.23.1
 
 toolchain go1.23.6
 
+replace github.com/streamingfast/substreams-sink => ../substreams-sink
+
 require (
 	github.com/AfterShip/clickhouse-sql-parser v0.4.5-0.20250321030459-a0eef0f2459e
 	github.com/ClickHouse/clickhouse-go/v2 v2.25.0
@@ -16,10 +18,9 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
-	github.com/streamingfast/substreams v1.11.1
+	github.com/streamingfast/substreams v1.12.1
 	github.com/streamingfast/substreams-sink v0.5.0
 	github.com/streamingfast/substreams-sink-database-changes v1.1.3
-	github.com/streamingfast/substreams-sink-map-sql v0.0.0-20250328155027-0003fb767c70
 	github.com/stretchr/testify v1.10.0
 	github.com/test-go/testify v1.1.4
 	github.com/wk8/go-ordered-map/v2 v2.1.7
@@ -83,6 +84,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
+	github.com/sercand/kuberesolver/v5 v5.1.1 // indirect
 	github.com/sethvargo/go-retry v0.2.3 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/afero v1.10.0 // indirect
@@ -135,10 +137,10 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.0 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20241108153156-a5c6bc006f41
+	github.com/streamingfast/bstream v0.0.2-0.20250108204816-fd52ed027320
 	github.com/streamingfast/cli v0.0.4-0.20241119021815-815afa473375
 	github.com/streamingfast/dbin v0.9.1-0.20231117225723-59790c798e2c // indirect
-	github.com/streamingfast/dgrpc v0.0.0-20240219152146-57bb131c39ca // indirect
+	github.com/streamingfast/dgrpc v0.0.0-20250115215805-6f4ad2be7eef // indirect
 	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
 	github.com/streamingfast/dmetrics v0.0.0-20240214191810-524a5c58fbaa
 	github.com/streamingfast/dstore v0.1.1-0.20241011152904-9acd6205dc14
@@ -157,7 +159,7 @@ require (
 	golang.org/x/term v0.20.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	google.golang.org/api v0.172.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
+	google.golang.org/appengine v1.6.8
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
 	google.golang.org/grpc v1.64.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1

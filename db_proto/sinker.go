@@ -205,6 +205,7 @@ func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64,
 	if err != nil {
 		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 	}
+
 	stats.EntitiesInsertDuration.Add(sqlDuration)
 
 	return nil
