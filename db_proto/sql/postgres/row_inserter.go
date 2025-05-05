@@ -99,7 +99,7 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 			continue
 		}
 		fieldCount++
-		fieldNames = append(fieldNames, field.Name)
+		fieldNames = append(fieldNames, field.QuotedName())
 		placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 	}
 

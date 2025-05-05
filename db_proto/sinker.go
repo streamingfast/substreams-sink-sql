@@ -25,9 +25,10 @@ type Sinker struct {
 	stats                 *stats.Stats
 	logger                *zap.Logger
 	rootMessageDescriptor *desc.MessageDescriptor
+	useConstraints        bool
 }
 
-func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
+func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, useConstraints bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
 	return &Sinker{
 		db:                    db,
 		rootMessageDescriptor: rootMessageDescriptor,
@@ -71,6 +72,10 @@ type Holder struct {
 var holding []*Holder
 
 func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) (err error) {
+	if (isLive != nil && *isLive) && s.useConstraints {
+		return fmt.Errorf("live mode is not supported without constraints")
+	}
+
 	startAt := time.Now()
 	defer func() {
 		s.stats.LastBlockProcessAt = time.Now()
@@ -99,7 +104,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		cursor: cursor,
 	}
 	holding = append(holding, holder)
-	if data.Clock.Number%s.blockBatchSize == 0 || s.blockBatchSize == 1 {
+	if data.Clock.Number%s.blockBatchSize == 0 || s.blockBatchSize == 1 || (isLive != nil && *isLive) {
 		if s.useTransaction && !s.parallel {
 			if err := s.db.BeginTransaction(); err != nil {
 				return fmt.Errorf("begin tx: %w", err)

@@ -145,37 +145,62 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 		return 0, fmt.Errorf("received a nil message")
 	}
 
-	totalSqlDuration := time.Duration(0)
 	var fieldValues []any
 	fieldValues = append(fieldValues, blockNum)
+
+	md := dm.GetMessageDescriptor()
+	tableInfo := proto.TableInfo(md)
+
+	primaryKey := ""
+	if tableInfo != nil {
+		table := d.Dialect.GetTable(tableInfo.Name)
+		if table.PrimaryKey != nil {
+			primaryKey = table.PrimaryKey.Name
+			pkValue := dm.GetFieldByName(primaryKey)
+			if pkValue == nil {
+				return 0, fmt.Errorf("missing primary key field %q for table %q", primaryKey, tableInfo.Name)
+			}
+			fieldValues = append(fieldValues, pkValue)
+		}
+	}
+
+	totalSqlDuration := time.Duration(0)
 
 	if parent != nil {
 		fieldValues = append(fieldValues, parent.id)
 	}
 
-	var childs [][]interface{}
+	var childs []*dynamic.Message
+
 	for _, fd := range dm.GetKnownFields() {
+		if fd.GetName() == primaryKey {
+			continue
+		}
 		fv := dm.GetField(fd)
 		if v, ok := fv.([]interface{}); ok {
-			childs = append(childs, v) //need to be handled after current message inserted
+			for _, c := range v {
+				fm, ok := c.(*dynamic.Message)
+				if !ok {
+					panic("expected *dynamic.Message")
+				}
+				childs = append(childs, fm) //n
+			}
 		} else if fm, ok := fv.(*dynamic.Message); ok {
 			if fm == nil {
-				fieldValues = append(fieldValues, nil)
 				continue //un-use oneOf field
 			}
-			sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil)
-			if err != nil {
-				return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
-			}
-			totalSqlDuration += sqlDuration
+			childs = append(childs, fm) //need to be handled after current message inserted
+			//sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil)
+			//if err != nil {
+			//	return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
+			//}
+			//totalSqlDuration += sqlDuration
 		} else {
 			fieldValues = append(fieldValues, fv)
 		}
 	}
 
-	md := dm.GetMessageDescriptor()
 	var p *Parent
-	tableInfo := proto.TableInfo(md)
 
 	if tableInfo != nil {
 		insertStartAt := time.Now()
@@ -186,6 +211,9 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 			return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 		}
 		if len(childs) > 0 {
+			if table.PrimaryKey == nil {
+				return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
+			}
 			id := fieldValues[table.PrimaryKey.Index+1]
 			p = &Parent{
 				field: strings.ToLower(md.GetName()),
@@ -195,18 +223,12 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 		totalSqlDuration += time.Since(insertStartAt)
 	}
 
-	for _, child := range childs {
-		for _, c := range child {
-			fm, ok := c.(*dynamic.Message)
-			if !ok {
-				panic("expected *dynamic.Message")
-			}
-			sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, p)
-			if err != nil {
-				return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
-			}
-			totalSqlDuration += sqlDuration
+	for _, fm := range childs {
+		sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, p)
+		if err != nil {
+			return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 		}
+		totalSqlDuration += sqlDuration
 	}
 
 	return totalSqlDuration, nil

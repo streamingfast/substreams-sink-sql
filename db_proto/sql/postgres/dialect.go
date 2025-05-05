@@ -116,7 +116,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 			continue
 		}
 
-		fieldName := f.Name
+		fieldQuotedName := f.QuotedName()
 
 		switch {
 		case f.IsRepeated:
@@ -129,7 +129,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 			foreignKey := &sql2.ForeignKey{
 				Name:         "fk_" + childTable.Name,
 				Table:        tableName,
-				Field:        f.Name,
+				Field:        fieldQuotedName,
 				ForeignTable: d.FullTableName(childTable),
 				ForeignField: childTable.PrimaryKey.Name,
 			}
@@ -163,10 +163,10 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		}
 		fieldType := MapFieldType(f.FieldDescriptor)
 		if f.IsUnique {
-			d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, fieldName, fieldName))
+			d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, f.Name, fieldQuotedName))
 		}
 
-		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
+		sb.WriteString(fmt.Sprintf("%s %s", fieldQuotedName, fieldType))
 		sb.WriteString(",")
 	}
 

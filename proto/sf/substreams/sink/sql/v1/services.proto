@@ -22,6 +22,7 @@ message Service {
   Engine engine = 7;
 
   RESTFrontend rest_frontend = 8;
+
 }
 
 // https://www.getdbt.com/product/what-is-dbt

@@ -33,13 +33,27 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.StringP("stop-block", "t", "0", "Stop block to end stream at, exclusively. If the start-block is positive, a '+' prefix can indicate 'relative to start-block'")
 
 		flags.Bool("no-constraints", false, "Do not add any constraints to the database. This is useful to speed up the initial import of a large dataset.")
-		flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
-		flags.Bool("parallel", false, "Run the sinker in parallel mode. This is useful to speed up the initial import of a large dataset. This is will process blocks of a batch in parallel")
+		//flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
+		//flags.Bool("parallel", false, "Run the sinker in parallel mode. This is useful to speed up the initial import of a large dataset. This is will process blocks of a batch in parallel")
 		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
-		flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
-		flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
+		//flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
+		//flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
 	}),
 )
+
+//now
+//todo: add dbt runner
+//todo: add a validator on top of schema to validate all the relations
+//todo: migration tool
+
+//todo: automatic index creation on block_number and all relation fields ...
+
+// Later
+//todo: add index support
+//todo: post generate index
+//todo: external process
+//todo: handle network
+//todo: fix DSN for clickhouse
 
 func fromProtoE(cmd *cobra.Command, args []string) error {
 	//app := NewApplication(cmd.Context())
@@ -52,14 +66,17 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	useConstraints := !sflags.MustGetBool(cmd, "no-constraints")
-	useTransactions := !sflags.MustGetBool(cmd, "no-transactions")
+	//useTransactions := !sflags.MustGetBool(cmd, "no-transactions")
 	blockBatchSize := sflags.MustGetInt(cmd, "block-batch-size")
 
-	parallel := sflags.MustGetBool(cmd, "parallel")
-	if parallel {
-		useConstraints = false
-		useTransactions = false
-	}
+	useTransactions := true
+	parallel := false
+
+	//parallel := sflags.MustGetBool(cmd, "parallel")
+	//if parallel {
+	//	useConstraints = false
+	//	useTransactions = false
+	//}
 
 	endpoint := sflags.MustGetString(cmd, "substreams-endpoint")
 	if endpoint == "" {
@@ -98,7 +115,6 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing dsn: %w", err)
 	}
 
-	//todo: handle network
 	//todo: handle params
 	spkg, _, _, _, err := sink.ReadManifestAndModuleAndBlockRange(manifestPath, "", nil, outputModuleName, "", false, "", zlog)
 	if err != nil {
@@ -187,9 +203,6 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}
-	//if err != nil {
-	//	return fmt.Errorf("creating database: %w", err)
-	//}
 	database = implDatabase
 
 	sinkInfo, err := database.FetchSinkInfo(schema.Name)
@@ -266,16 +279,24 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	//inserter, err := clickhouse.NewAccumulatorInserter(implDatabase, zlog)
-	inserter, err := postgres.NewAccumulatorInserter(implDatabase, zlog)
-	//inserter, err := postgres.NewRowInserter(implDatabase, zlog)
-	if err != nil {
-		return fmt.Errorf("creating inserter: %w", err)
+
+	var inserter protosql.Inserter
+	if useConstraints {
+		inserter, err = postgres.NewRowInserter(implDatabase, zlog)
+		if err != nil {
+			return fmt.Errorf("creating row inserter: %w", err)
+		}
+	} else {
+		inserter, err = postgres.NewAccumulatorInserter(implDatabase, zlog)
+		if err != nil {
+			return fmt.Errorf("creating accumulator inserter: %w", err)
+		}
 	}
 
 	database.SetInserter(inserter)
 
 	stats := stats2.NewStats(zlog)
-	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, blockBatchSize, parallel, stats, zlog)
+	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, useConstraints, blockBatchSize, parallel, stats, zlog)
 	sinker.OnTerminating(func(err error) {
 		zlog.Error("sinker terminating", zap.Error(err))
 	})

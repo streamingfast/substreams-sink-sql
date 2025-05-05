@@ -75,7 +75,7 @@ func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (s
 		if field.IsRepeated || field.IsExtension { //not a direct child
 			continue
 		}
-		fieldNames = append(fieldNames, field.Name)
+		fieldNames = append(fieldNames, field.QuotedName())
 	}
 
 	return fmt.Sprintf("INSERT INTO %s (%s) VALUES ",

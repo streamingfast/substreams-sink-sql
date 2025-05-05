@@ -69,10 +69,16 @@ func NewTable(descriptor *desc.MessageDescriptor, ordinal int) (*Table, error) {
 
 func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 	for idx, fieldDescriptor := range descriptor.GetFields() {
+
+		if fieldDescriptor.GetOneOf() != nil {
+			continue
+		}
+
 		column, err := NewColumn(fieldDescriptor)
 		if err != nil {
 			return fmt.Errorf("error processing column %q: %w", fieldDescriptor.GetName(), err)
 		}
+
 		if column.IsPrimaryKey {
 			if t.PrimaryKey != nil {
 				return fmt.Errorf("multiple primary keys are not supported in message")

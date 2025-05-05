@@ -50,8 +50,11 @@ func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
 	if out.IsMessage {
 		out.Message = d.GetMessageType().GetName()
 	}
-
 	return out, nil
+}
+
+func (c *Column) QuotedName() string {
+	return fmt.Sprintf("%q", c.Name)
 }
 
 type ForeignKey struct {

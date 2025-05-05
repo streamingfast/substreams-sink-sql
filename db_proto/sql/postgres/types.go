@@ -67,6 +67,8 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 		return TypeVarchar
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
 		return TypeText
+	case descriptor.FieldDescriptorProto_TYPE_ENUM:
+		return TypeText
 	default:
 		panic(fmt.Sprintf("unsupported type: %s", t))
 	}

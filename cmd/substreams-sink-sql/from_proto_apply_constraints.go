@@ -19,7 +19,7 @@ import (
 var fromProtoApplyConstraintsCmd = Command(fromProtoApplyConstraintsCmdE,
 	"from-proto-apply-constraints <dsn> [<manifest> [<module_name>]]",
 	"",
-	RangeArgs(2, 3),
+	ExactArgs(3),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags, ignoreUndoBufferSize{})
 	}),
