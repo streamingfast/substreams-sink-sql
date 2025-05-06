@@ -152,6 +152,8 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		FlushCount.Inc()
 		FlushedRowsCount.AddInt(rowFlushedCount)
 		FlushDuration.AddInt64(flushDuration.Nanoseconds())
+		FlushedHeadBlockTimeDrift.SetBlockTime(data.Clock.GetTimestamp().AsTime())
+		FlushedHeadBlockNumber.SetUint64(data.Clock.GetNumber())
 
 		s.stats.RecordBlock(cursor.Block())
 		s.stats.RecordFlushDuration(flushDuration)

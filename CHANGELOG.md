@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Fixed a bug with not flushing rows on stream completion.
 * Added `--clickhouse-cluster` flag. If non-empty the sink will apply a `ON CLUSTER <cluster>` clause when setting up tables and replace table engines with their `Replicated` counterparts.
+* Added flushed block number and time drift metrics.
 
 ## v4.5.0
 
