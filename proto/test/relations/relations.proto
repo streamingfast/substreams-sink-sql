@@ -2,7 +2,7 @@ syntax = "proto3";
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/timestamp.proto";
 
-import "schema/schema.proto";
+import "sf/substreams/sink/sql/schema/v1/schema.proto";
 
 package test.relations;
 option go_package = "test/relations";
@@ -25,9 +25,9 @@ message Entity {
 }
 
 message TypesTest {
-  option (schema.table) = { name: "types_tests" };
+  option (sf.substreams.sink.sql.schema.v1.table) = { name: "types_tests" };
 
-  uint64 id =1 [(schema.field) = { primary_key: true }];
+  uint64 id =1 [(sf.substreams.sink.sql.schema.v1.field) = { primary_key: true }];
   // Field for each protobuf native type
   double double_field = 2;
   float float_field = 3;
@@ -50,35 +50,35 @@ message TypesTest {
 }
 
 message Customer {
-  option (schema.table) = { name: "customers" };
+  option (sf.substreams.sink.sql.schema.v1.table) = { name: "customers" };
 
-  string customer_id = 1 [(schema.field) = { primary_key: true }];
+  string customer_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = { primary_key: true }];
   string name = 2;
 }
 
 message Order {
-  option (schema.table) = { name: "orders"};
+  option (sf.substreams.sink.sql.schema.v1.table) = { name: "orders"};
 
-  string order_id = 1 [(schema.field) = {  primary_key: true}];
-  string customer_ref_id = 2 [(schema.field) = { foreign_key: "customers on customer_id"}];
+  string order_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = {  primary_key: true}];
+  string customer_ref_id = 2 [(sf.substreams.sink.sql.schema.v1.field) = { foreign_key: "customers on customer_id"}];
   repeated OrderItem items = 3;
 }
 
 message OrderItem {
-  option (schema.table) = {
+  option (sf.substreams.sink.sql.schema.v1.table) = {
     name: "order_items",
     child_of: "orders on order_id"
   };
 
   // can also leverage orders._id using "order on order_id" if order do not have a external unique identifier
-  string item_id = 2 [(schema.field) = { foreign_key: "items on item_id"}];
+  string item_id = 2 [(sf.substreams.sink.sql.schema.v1.field) = { foreign_key: "items on item_id"}];
   int64 quantity = 11;
 }
 
 message Item {
-  option (schema.table) = { name: "items" };
+  option (sf.substreams.sink.sql.schema.v1.table) = { name: "items" };
 
-  string item_id = 1 [(schema.field) = { unique: true }];
+  string item_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = { unique: true }];
 
   string name = 10;
   double price = 11;

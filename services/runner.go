@@ -3,7 +3,7 @@ package services
 import (
 	"time"
 
-	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1"
+	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
 	"go.uber.org/zap"
 )
 

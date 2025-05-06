@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/spf13/pflag"
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
-	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/v1"
+	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"
 )
@@ -23,13 +24,14 @@ var (
 var supportedOutputTypes = "sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges"
 
 var (
-	supportedDeployableUnits   []string
-	supportedDeployableService = "sf.substreams.sink.sql.v1.Service"
+	supportedDeployableUnits              []string
+	deprecated_supportedDeployableService = "sf.substreams.sink.sql.v1.Service"
+	supportedDeployableService            = "sf.substreams.sink.sql.service.v1.Service"
 )
 
 func init() {
 	supportedDeployableUnits = []string{
-		supportedDeployableService,
+		deprecated_supportedDeployableService,
 	}
 }
 
@@ -39,9 +41,10 @@ func extractSinkService(pkg *pbsubstreams.Package) (*pbsql.Service, error) {
 	}
 
 	switch pkg.SinkConfig.TypeUrl {
-	case supportedDeployableService:
+	case deprecated_supportedDeployableService, supportedDeployableService:
 		service := &pbsql.Service{}
-		if err := pkg.SinkConfig.UnmarshalTo(service); err != nil {
+
+		if err := proto.Unmarshal(pkg.SinkConfig.Value, service); err != nil {
 			return nil, fmt.Errorf("failed to proto unmarshal: %w", err)
 		}
 		return service, nil

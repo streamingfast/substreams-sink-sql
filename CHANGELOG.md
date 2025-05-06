@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+* New proto definition base sql sink feature. go run `substreams-sink-sql from-proto`
+  * That feature inspect the protobuf structure of your output module and create database tables and constraints base on new protobuf options.
+  * 
+  * Only support Postgresql database at this point. 
 
 * Improved batch block flush logic to flush after a certain number of blocks instead of taking by modulo.
 
