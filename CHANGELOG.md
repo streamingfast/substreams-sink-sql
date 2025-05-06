@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 * New proto definition base sql sink feature. go run `substreams-sink-sql from-proto`
-  * That feature inspect the protobuf structure of your output module and create database tables and constraints base on new protobuf options.
-  * 
+  * That feature inspect the protobuf structure of your output module and create database tables and constraints base on new protobuf options then ingest the your module output data.
+  * Protobuf option: https://buf.build/streamingfast/substreams-sink-sql/docs/main:sf.substreams.sink.sql.schema.v1
   * Only support Postgresql database at this point. 
 
 * Improved batch block flush logic to flush after a certain number of blocks instead of taking by modulo.
