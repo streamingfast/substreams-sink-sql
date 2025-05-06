@@ -44,11 +44,9 @@ var fromProtoCmd = Command(fromProtoE,
 
 //now
 //todo: add a validator on top of schema to validate all the relations
-//todo: migration tool
-
-//todo: automatic index creation on block_number and all relation fields ...
 
 // Later
+//todo: migration tool
 //todo: add index support
 //todo: post generate index
 //todo: external process
