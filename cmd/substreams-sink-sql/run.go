@@ -22,7 +22,7 @@ func (i ignoreUndoBufferSize) IsIgnored(in string) bool {
 }
 
 var sinkRunCmd = Command(sinkRunE,
-	"run <dsn> [<manifest> [<module_name>]] ",
+	"run <dsn> <manifest> [<start>:<stop>]",
 	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {

@@ -33,7 +33,7 @@ func init() {
 	}
 }
 
-func extractSinkConfig(pkg *pbsubstreams.Package) (*pbsql.Service, error) {
+func extractSinkService(pkg *pbsubstreams.Package) (*pbsql.Service, error) {
 	if pkg.SinkConfig == nil {
 		return nil, fmt.Errorf("no sink config found in spkg")
 	}

@@ -17,15 +17,16 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
+	"github.com/streamingfast/substreams-sink-sql/services"
 	"github.com/streamingfast/substreams/manifest"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 var fromProtoCmd = Command(fromProtoE,
-	"from-proto <dsn> [<manifest> [<module_name>]]",
+	"from-proto <dsn> <manifest>",
 	"",
-	RangeArgs(2, 3),
+	ExactArgs(2),
 	Flags(func(flags *pflag.FlagSet) {
 		sink.AddFlagsToSet(flags, ignoreUndoBufferSize{})
 		flags.StringP("substreams-endpoint", "e", "", "Substreams gRPC endpoint. If empty, will be replaced by the SUBSTREAMS_ENDPOINT_{network_name} environment variable, where `network_name` is determined from the substreams manifest. Some network names have default endpoints.")
@@ -42,7 +43,6 @@ var fromProtoCmd = Command(fromProtoE,
 )
 
 //now
-//todo: add dbt runner
 //todo: add a validator on top of schema to validate all the relations
 //todo: migration tool
 
@@ -60,10 +60,6 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 
 	dsnString := args[0]
 	manifestPath := args[1]
-	outputModuleName := args[2]
-	if outputModuleName == "" {
-		outputModuleName = sink.InferOutputModuleFromPackage
-	}
 
 	useConstraints := !sflags.MustGetBool(cmd, "no-constraints")
 	//useTransactions := !sflags.MustGetBool(cmd, "no-transactions")
@@ -116,14 +112,25 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	//todo: handle params
-	spkg, _, _, _, err := sink.ReadManifestAndModuleAndBlockRange(manifestPath, "", nil, outputModuleName, "", false, "", zlog)
+	spkg, module, _, _, err := sink.ReadManifestAndModuleAndBlockRange(manifestPath, "", nil, sink.InferOutputModuleFromPackage, "", false, "", zlog)
 	if err != nil {
 		return fmt.Errorf("reading manifest: %w", err)
 	}
 
+	outputModuleName := module.Name
 	outputType := proto.ModuleOutputType(spkg, outputModuleName)
 	if outputType == "" {
 		return fmt.Errorf("could not find output type for module %s", outputModuleName)
+	}
+
+	service, err := extractSinkService(spkg)
+	if err != nil {
+		return fmt.Errorf("extracting sink service: %w", err)
+	}
+
+	err = services.Run(service, zlog)
+	if err != nil {
+		return fmt.Errorf("running service: %w", err)
 	}
 
 	protoFiles := map[string]*descriptorpb.FileDescriptorProto{}
