@@ -57,11 +57,21 @@ message Customer {
 }
 
 message Order {
-  option (sf.substreams.sink.sql.schema.v1.table) = { name: "orders"};
-
+  option (sf.substreams.sink.sql.schema.v1.table) = {
+    name: "orders"
+  };
   string order_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = {  primary_key: true}];
   string customer_ref_id = 2 [(sf.substreams.sink.sql.schema.v1.field) = { foreign_key: "customers on customer_id"}];
   repeated OrderItem items = 3;
+  OrderExtension extension = 4;
+}
+
+message OrderExtension {
+  option (sf.substreams.sink.sql.schema.v1.table) = {
+    name: "order_extensions",
+    child_of: "orders on order_id"
+  };
+  string description = 1;
 }
 
 message OrderItem {

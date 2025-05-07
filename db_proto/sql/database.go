@@ -10,6 +10,7 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
+	pbSchema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 	"go.uber.org/zap"
 )
@@ -48,9 +49,10 @@ type BaseDatabase struct {
 	Tx                    *sql.Tx
 	Dialect               Dialect
 	Inserter              Inserter
+	useProtoOptions       bool
 }
 
-func NewBaseDatabase(sqlDialect Dialect, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, logger *zap.Logger) (database *BaseDatabase, err error) {
+func NewBaseDatabase(sqlDialect Dialect, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, logger *zap.Logger) (database *BaseDatabase, err error) {
 	logger = logger.Named("database")
 
 	if reachable, err := isDatabaseReachable(db); !reachable {
@@ -64,6 +66,7 @@ func NewBaseDatabase(sqlDialect Dialect, db *sql.DB, moduleOutputType string, ro
 		mapOutputType:         moduleOutputType,
 		RootMessageDescriptor: rootMessageDescriptor,
 		insertStatements:      make(map[string]*sql.Stmt),
+		useProtoOptions:       useProtoOptions,
 	}, nil
 }
 
@@ -151,16 +154,26 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	md := dm.GetMessageDescriptor()
 	tableInfo := proto.TableInfo(md)
 
+	if tableInfo == nil && !d.useProtoOptions {
+		tableInfo = &pbSchema.Table{
+			Name: md.GetName(),
+		}
+	}
+
+	d.logger.Debug("Walking message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Any("table_info", tableInfo))
 	primaryKey := ""
 	if tableInfo != nil {
-		table := d.Dialect.GetTable(tableInfo.Name)
-		if table.PrimaryKey != nil {
-			primaryKey = table.PrimaryKey.Name
-			pkValue := dm.GetFieldByName(primaryKey)
-			if pkValue == nil {
-				return 0, fmt.Errorf("missing primary key field %q for table %q", primaryKey, tableInfo.Name)
+		if table := d.Dialect.GetTable(tableInfo.Name); table != nil {
+			if table.PrimaryKey != nil {
+				primaryKey = table.PrimaryKey.Name
+				pkValue := dm.GetFieldByName(primaryKey)
+				if pkValue == nil {
+					return 0, fmt.Errorf("missing primary key field %q for table %q", primaryKey, tableInfo.Name)
+				}
+				fieldValues = append(fieldValues, pkValue)
 			}
-			fieldValues = append(fieldValues, pkValue)
+		} else {
+			return 0, fmt.Errorf("table %q not found", tableInfo.Name)
 		}
 	}
 
@@ -190,11 +203,6 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				continue //un-use oneOf field
 			}
 			childs = append(childs, fm) //need to be handled after current message inserted
-			//sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil)
-			//if err != nil {
-			//	return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
-			//}
-			//totalSqlDuration += sqlDuration
 		} else {
 			fieldValues = append(fieldValues, fv)
 		}
@@ -210,7 +218,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 			fmt.Printf("fieldValues: %v\n", fieldValues)
 			return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 		}
-		if len(childs) > 0 {
+		if len(childs) > 0 && d.useProtoOptions {
 			if table.PrimaryKey == nil {
 				return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
 			}

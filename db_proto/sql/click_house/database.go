@@ -31,9 +31,10 @@ func NewDatabase(
 	rootMessageDescriptor *desc.MessageDescriptor,
 	sinkInfoFolder string,
 	cursorFilePath string,
+	useProtoOptions bool,
 	logger *zap.Logger,
 ) (*Database, error) {
-	baseDB, err := sql.NewBaseDatabase(dialect, db, moduleOutputType, rootMessageDescriptor, logger)
+	baseDB, err := sql.NewBaseDatabase(dialect, db, moduleOutputType, rootMessageDescriptor, useProtoOptions, logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating base database: %w", err)
 	}

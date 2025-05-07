@@ -126,6 +126,9 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 			if !found {
 				continue
 			}
+			if childTable.PrimaryKey == nil {
+				continue
+			}
 			foreignKey := &sql2.ForeignKey{
 				Name:         "fk_" + childTable.Name,
 				Table:        tableName,

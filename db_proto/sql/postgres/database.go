@@ -18,8 +18,8 @@ type Database struct {
 	logger     *zap.Logger
 }
 
-func NewDatabase(schemaName string, dialect *DialectPostgres, db *pqsql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, logger *zap.Logger) (*Database, error) {
-	baseDB, err := sql.NewBaseDatabase(dialect, db, moduleOutputType, rootMessageDescriptor, logger)
+func NewDatabase(schemaName string, dialect *DialectPostgres, db *pqsql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, logger *zap.Logger) (*Database, error) {
+	baseDB, err := sql.NewBaseDatabase(dialect, db, moduleOutputType, rootMessageDescriptor, useProtoOptions, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create base database: %w", err)
 	}

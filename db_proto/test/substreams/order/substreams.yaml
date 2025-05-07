@@ -8,10 +8,11 @@ imports:
 
 protobuf:
   files:
-    - test/relations/relations.proto
-    - schema/schema.proto
+    - proto/test/relations/relations.proto
+  descriptorSets:
+    - module: buf.build/streamingfast/substreams-sink-sql
   importPaths:
-    - ../../../../proto
+    - ./proto
   excludePaths:
     - sf/substreams/rpc
     - sf/substreams/v1
@@ -44,3 +45,12 @@ modules:
   # see https://substreams.dev/streamingfast/solana-common/latest for details
 
 network: solana-mainnet-beta
+
+sink:
+  module: map_output
+  type: sf.substreams.sink.sql.v1.Service
+#  config:
+#    dbt_config:
+#      files: ./dbt
+#      run_interval_seconds: 300
+#      enabled: true

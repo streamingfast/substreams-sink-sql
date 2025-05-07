@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	descriptor2 "github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
-	"github.com/streamingfast/substreams-sink-sql/proto"
+	pbSchmema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 )
 
 type PrimaryKey struct {
@@ -39,12 +40,7 @@ type Table struct {
 	Ordinal    int
 }
 
-func NewTable(descriptor *desc.MessageDescriptor, ordinal int) (*Table, error) {
-	tableInfo := proto.TableInfo(descriptor)
-	if tableInfo == nil {
-		return nil, nil
-	}
-
+func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int) (*Table, error) {
 	table := &Table{
 		Name:    descriptor.GetName(),
 		Ordinal: ordinal,
@@ -72,6 +68,16 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 
 		if fieldDescriptor.GetOneOf() != nil {
 			continue
+		}
+
+		if fieldDescriptor.IsRepeated() {
+			continue
+		}
+
+		if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE {
+			if fieldDescriptor.AsFieldDescriptorProto().GetTypeName() != ".google.protobuf.Timestamp" {
+				continue
+			}
 		}
 
 		column, err := NewColumn(fieldDescriptor)

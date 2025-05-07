@@ -34,6 +34,7 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.StringP("stop-block", "t", "0", "Stop block to end stream at, exclusively. If the start-block is positive, a '+' prefix can indicate 'relative to start-block'")
 
 		flags.Bool("no-constraints", false, "Do not add any constraints to the database. This is useful to speed up the initial import of a large dataset.")
+		flags.Bool("no-proto-option", false, "this tell the schema manager to not rely on proto option to generate the schema.")
 		//flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
 		//flags.Bool("parallel", false, "Run the sinker in parallel mode. This is useful to speed up the initial import of a large dataset. This is will process blocks of a batch in parallel")
 		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
@@ -62,6 +63,11 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	useConstraints := !sflags.MustGetBool(cmd, "no-constraints")
 	//useTransactions := !sflags.MustGetBool(cmd, "no-transactions")
 	blockBatchSize := sflags.MustGetInt(cmd, "block-batch-size")
+	useProtoOption := !sflags.MustGetBool(cmd, "no-proto-option")
+
+	if !useProtoOption {
+		useConstraints = false
+	}
 
 	useTransactions := true
 	parallel := false
@@ -158,7 +164,8 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	//todo: fix me
 	//schemaName := "test"
 	schemaName := dsn.Schema()
-	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, zlog)
+
+	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, useProtoOption, zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
@@ -204,7 +211,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	//	sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
 	//	zlog,
 	//)
-	implDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, zlog)
+	implDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, useProtoOption, zlog)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
 	}

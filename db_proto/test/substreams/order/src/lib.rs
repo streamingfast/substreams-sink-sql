@@ -4,6 +4,7 @@ use std::i64;
 use pb::test as model;
 
 use substreams_solana::pb::sf::solana::r#type::v1::Block;
+use crate::pb::test::relations::OrderExtension;
 
 #[substreams::handlers::map]
 fn map_output(block: Block) -> model::relations::Output {
@@ -72,6 +73,7 @@ fn map_output(block: Block) -> model::relations::Output {
                     },
                     // model::relations::OrderItem { item_id: format!("item.id.{}", block.slot+1), quantity: 20 },
                 ],
+                extension: Some(OrderExtension{ description: "desc".to_string() }),
             },
         }),
     });

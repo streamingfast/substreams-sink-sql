@@ -35,6 +35,8 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 		outputModuleName = sink.InferOutputModuleFromPackage
 	}
 
+	withProtoOption := true
+
 	spkg, _, _, _, err := sink.ReadManifestAndModuleAndBlockRange(manifestPath, "", nil, outputModuleName, "", false, "", zlog)
 	if err != nil {
 		return fmt.Errorf("reading manifest: %w", err)
@@ -74,7 +76,7 @@ func fromProtoApplyConstraintsCmdE(cmd *cobra.Command, args []string) error {
 	}
 
 	schemaName := dsn.Schema()
-	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, zlog)
+	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, withProtoOption, zlog)
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
