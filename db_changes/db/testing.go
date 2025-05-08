@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/streamingfast/logging"
 	"github.com/stretchr/testify/require"
-
 	"go.uber.org/zap"
 )
 
@@ -17,13 +17,14 @@ const testHistoryTableName = "substreams_history"
 
 func NewTestLoader(
 	t *testing.T,
+	dsnRaw string,
+	schema string,
+	testTx *TestTx,
+	tables map[string]*TableInfo,
 	zlog *zap.Logger,
 	tracer logging.Tracer,
-	schema string,
-	tables map[string]*TableInfo,
-) (*Loader, *TestTx) {
-	dsn, err := ParseDSN(fmt.Sprintf("psql://x:5432/x?schemaName=%s", schema))
-
+) *Loader {
+	dsn, err := ParseDSN(dsnRaw)
 	require.NoError(t, err)
 
 	loader, err := NewLoader(
@@ -38,10 +39,12 @@ func NewTestLoader(
 	)
 	require.NoError(t, err)
 
-	loader.testTx = &TestTx{}
+	if testTx != nil {
+		loader.testTx = testTx
+	}
 	loader.tables = tables
 	loader.cursorTable = tables[testCursorTableName]
-	return loader, loader.testTx
+	return loader
 
 }
 
@@ -53,12 +56,39 @@ func TestTables(schema string) map[string]*TableInfo {
 			"to":   NewColumnInfo("to", "text", ""),
 		}),
 		testCursorTableName: mustNewTableInfo(schema, testCursorTableName, []string{"id"}, map[string]*ColumnInfo{
-			"block_num": NewColumnInfo("id", "int64", ""),
-			"block_id":  NewColumnInfo("from", "text", ""),
+			"block_num": NewColumnInfo("block_num", "bigint", ""),
+			"block_id":  NewColumnInfo("block_id", "text", ""),
 			"cursor":    NewColumnInfo("cursor", "text", ""),
 			"id":        NewColumnInfo("id", "text", ""),
 		}),
 	}
+}
+
+func GenerateCreateTableSQL(tables map[string]*TableInfo) string {
+	var sqlStatements []string
+	for _, tableInfo := range tables {
+		if tableInfo.name == testCursorTableName {
+			continue
+		}
+
+		var columns []string
+		for _, colInfo := range tableInfo.columnsByName {
+			columns = append(columns, fmt.Sprintf("%s %s", colInfo.escapedName, colInfo.databaseTypeName))
+		}
+		var pkColumns []string
+		for _, pkCol := range tableInfo.primaryColumns {
+			pkColumns = append(pkColumns, pkCol.escapedName)
+		}
+		pk := fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(pkColumns, ", "))
+		columns = append(columns, pk)
+		createStmt := fmt.Sprintf(
+			"CREATE TABLE %s (%s);",
+			tableInfo.identifier,
+			strings.Join(columns, ", "),
+		)
+		sqlStatements = append(sqlStatements, createStmt)
+	}
+	return strings.Join(sqlStatements, "\n")
 }
 
 func mustNewTableInfo(schema, name string, pkList []string, columnsByName map[string]*ColumnInfo) *TableInfo {

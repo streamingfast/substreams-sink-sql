@@ -107,7 +107,7 @@ func NewLoader(
 		zap.Int("live_block_flush_interval", liveBlockFlushInterval),
 		zap.Stringer("on_module_hash_mismatch", moduleMismatchMode),
 		zap.Bool("handle_reorgs", l.handleReorgs),
-		zap.String("dialect", fmt.Sprintf("%t", l.dialect)),
+		zap.String("dialect", fmt.Sprintf("%T", l.dialect)),
 	)
 
 	return l, nil
@@ -298,10 +298,10 @@ func (l *Loader) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 
 // Setup creates the schemaName, cursors and history table where the <schemaBytes> is a byte array
 // taken from somewhere.
-func (l *Loader) Setup(ctx context.Context, schemaName string, withPostgraphile bool) error {
-	if schemaName != "" {
-		if err := l.dialect.ExecuteSetupScript(ctx, l, schemaName); err != nil {
-			return fmt.Errorf("exec schemaName: %w", err)
+func (l *Loader) Setup(ctx context.Context, schemaName string, userSql string, withPostgraphile bool) error {
+	if userSql != "" {
+		if err := l.dialect.ExecuteSetupScript(ctx, l, userSql); err != nil {
+			return fmt.Errorf("exec userSql: %w", err)
 		}
 	}
 

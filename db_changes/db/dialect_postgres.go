@@ -303,6 +303,10 @@ func (d PostgresDialect) saveInsert(schema string, table string, primaryKey map[
 	)
 }
 
+func (d PostgresDialect) saveUpsert(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
+	return d.saveRow("U", schema, escapedTableName, primaryKey, blockNum)
+}
+
 func (d PostgresDialect) saveUpdate(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
 	return d.saveRow("U", schema, escapedTableName, primaryKey, blockNum)
 }
@@ -324,7 +328,7 @@ func (d PostgresDialect) saveRow(op, schema, escapedTableName string, primaryKey
 
 func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string, error) {
 	var columns, values []string
-	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpdate {
+	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate {
 		var err error
 		columns, values, err = d.prepareColValues(o.table, o.data)
 		if err != nil {
@@ -332,7 +336,7 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		}
 	}
 
-	if o.opType == OperationTypeUpdate || o.opType == OperationTypeDelete {
+	if o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate || o.opType == OperationTypeDelete {
 		// A table without a primary key set yield a `primaryKey` map with a single entry where the key is an empty string
 		if _, found := o.primaryKey[""]; found {
 			return "", fmt.Errorf("trying to perform %s operation but table %q don't have a primary key set, this is not accepted", o.opType, o.table.name)
@@ -348,6 +352,25 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		)
 		if o.reversibleBlockNum != nil {
 			return d.saveInsert(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
+		}
+		return insertQuery, nil
+
+	case OperationTypeUpsert:
+		updates := make([]string, len(columns))
+		for i := range columns {
+			updates[i] = fmt.Sprintf("%s=EXCLUDED.%s", columns[i], columns[i])
+		}
+
+		insertQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s;",
+			o.table.identifier,
+			strings.Join(columns, ","),
+			strings.Join(values, ","),
+			strings.Join(maps.Keys(o.primaryKey), ","),
+			strings.Join(updates, ", "),
+		)
+
+		if o.reversibleBlockNum != nil {
+			return d.saveUpdate(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
 		}
 		return insertQuery, nil
 

@@ -82,15 +82,15 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load psql table: %w", err)
 	}
 
-	schema := sinkConfig.Schema
+	userSQLSchema := sinkConfig.Schema
 	if systemTableOnly {
-		schema = ""
+		userSQLSchema = ""
 	}
 
-	err = dbLoader.Setup(ctx, schema, sflags.MustGetBool(cmd, "postgraphile"))
+	err = dbLoader.Setup(ctx, dsn.Schema(), userSQLSchema, sflags.MustGetBool(cmd, "postgraphile"))
 	if err != nil {
 		if isDuplicateTableError(err) && ignoreDuplicateTableErrors {
-			zlog.Info("received duplicate table error, script dit not executed succesfully completed")
+			zlog.Info("received duplicate table error, script did not execute successfully")
 		} else {
 			return fmt.Errorf("setup: %w", err)
 		}

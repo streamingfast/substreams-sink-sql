@@ -124,6 +124,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 
 	blockFlushNeeded := s.batchBlockModulo(isLive) > 0 && data.Clock.Number-*s.lastAppliedBlockNum >= s.batchBlockModulo(isLive)
 	rowFlushNeeded := s.loader.FlushNeeded()
+	fmt.Println("Flush check", s.batchBlockModulo(isLive), "Clock", data.Clock.Number, "Last applied", *s.lastAppliedBlockNum, "Live?", *isLive, "Block flush needed", blockFlushNeeded, "Row flush needed", rowFlushNeeded)
 	if blockFlushNeeded || rowFlushNeeded {
 		s.logger.Debug("flushing to database",
 			zap.Stringer("block", cursor.Block()),
@@ -199,17 +200,22 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 		}
 
 		switch change.Operation {
-		case pbdatabase.TableChange_CREATE:
+		case pbdatabase.TableChange_OPERATION_CREATE:
 			err := s.loader.Insert(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
-		case pbdatabase.TableChange_UPDATE:
+		case pbdatabase.TableChange_OPERATION_UPSERT:
+			err := s.loader.Upsert(change.Table, primaryKeys, changes, reversibleBlockNum)
+			if err != nil {
+				return fmt.Errorf("database upsert: %w", err)
+			}
+		case pbdatabase.TableChange_OPERATION_UPDATE:
 			err := s.loader.Update(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
-		case pbdatabase.TableChange_DELETE:
+		case pbdatabase.TableChange_OPERATION_DELETE:
 			err := s.loader.Delete(change.Table, primaryKeys, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)

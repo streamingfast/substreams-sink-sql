@@ -94,9 +94,6 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
 	}
 
-	if s.blockBatchSize == 1 {
-
-	}
 	holder := &Holder{
 		output: output,
 		data:   data,

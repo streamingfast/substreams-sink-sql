@@ -249,7 +249,7 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 		}
 
 		switch change.Operation {
-		case pbdatabase.TableChange_CREATE:
+		case pbdatabase.TableChange_OPERATION_CREATE:
 			// Add fields
 			for _, field := range change.Fields {
 				fields[field.Name] = field.NewValue
@@ -261,9 +261,11 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 				tableBundler.HeaderWritten = true
 			}
 			tableBundler.Writer().Write(data)
-		case pbdatabase.TableChange_UPDATE:
+		case pbdatabase.TableChange_OPERATION_UPSERT:
+			return fmt.Errorf("This substreams cannot be written to CSV because it performs 'UPSERT' operations on the %q store. Generate-CSV only supports inserts (CREATE)", change.Table)
+		case pbdatabase.TableChange_OPERATION_UPDATE:
 			return fmt.Errorf("This substreams cannot be written to CSV because it performs 'UPDATE' operations on the %q store. Generate-CSV only supports inserts (CREATE)", change.Table)
-		case pbdatabase.TableChange_DELETE:
+		case pbdatabase.TableChange_OPERATION_DELETE:
 			return fmt.Errorf("This substreams cannot be written to CSV because it performs 'DELETE' operations on the %q store. Generate-CSV only supports inserts (CREATE)", change.Table)
 		}
 	}

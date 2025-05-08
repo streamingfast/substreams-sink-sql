@@ -19,6 +19,7 @@ type OperationType string
 
 const (
 	OperationTypeInsert OperationType = "INSERT"
+	OperationTypeUpsert OperationType = "UPSERT"
 	OperationTypeUpdate OperationType = "UPDATE"
 	OperationTypeDelete OperationType = "DELETE"
 )
@@ -39,6 +40,16 @@ func (l *Loader) newInsertOperation(table *TableInfo, primaryKey map[string]stri
 	return &Operation{
 		table:              table,
 		opType:             OperationTypeInsert,
+		primaryKey:         primaryKey,
+		data:               data,
+		reversibleBlockNum: reversibleBlockNum,
+	}
+}
+
+func (l *Loader) newUpsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) *Operation {
+	return &Operation{
+		table:              table,
+		opType:             OperationTypeUpsert,
 		primaryKey:         primaryKey,
 		data:               data,
 		reversibleBlockNum: reversibleBlockNum,
