@@ -124,7 +124,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 
 	blockFlushNeeded := s.batchBlockModulo(isLive) > 0 && data.Clock.Number-*s.lastAppliedBlockNum >= s.batchBlockModulo(isLive)
 	rowFlushNeeded := s.loader.FlushNeeded()
-	fmt.Println("Flush check", s.batchBlockModulo(isLive), "Clock", data.Clock.Number, "Last applied", *s.lastAppliedBlockNum, "Live?", *isLive, "Block flush needed", blockFlushNeeded, "Row flush needed", rowFlushNeeded)
+
 	if blockFlushNeeded || rowFlushNeeded {
 		s.logger.Debug("flushing to database",
 			zap.Stringer("block", cursor.Block()),

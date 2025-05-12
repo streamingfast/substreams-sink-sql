@@ -1,7 +1,6 @@
 package stats
 
 import (
-	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -94,7 +93,7 @@ func NewStats(logger *zap.Logger) *Stats {
 
 func (s *Stats) Log() {
 	if s.BlockCount == 0 {
-		fmt.Println("no blocks processed yet")
+		s.logger.Info("no blocks processed yet")
 		return
 	}
 
@@ -106,6 +105,5 @@ func (s *Stats) Log() {
 	s.BlockInsertDuration.Log(s.logger)
 	s.EntitiesInsertDuration.Log(s.logger)
 	s.FlushDuration.Log(s.logger)
-
 	s.logger.Info("-----------------------------------")
 }
