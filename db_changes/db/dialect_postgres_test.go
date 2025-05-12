@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -91,6 +92,118 @@ func TestJSONToPrimaryKey(t *testing.T) {
 		})
 	}
 
+}
+
+func TestGetPrimaryKeyFakeEmptyValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		primaryKey map[string]string
+		expected   string
+	}{
+		{
+			name: "single key",
+			primaryKey: map[string]string{
+				"id": "value-not-used",
+			},
+			expected: `'' "id"`,
+		},
+		{
+			name: "multiple keys",
+			primaryKey: map[string]string{
+				"id":    "value-not-used",
+				"block": "value-not-used",
+				"idx":   "value-not-used",
+			},
+			expected: `'' "block",'' "id",'' "idx"`,
+		},
+		{
+			name: "keys with special characters",
+			primaryKey: map[string]string{
+				"user_id":   "value-not-used",
+				"order-num": "value-not-used",
+			},
+			expected: `'' "order-num",'' "user_id"`,
+		},
+		{
+			name:       "empty map",
+			primaryKey: map[string]string{},
+			expected:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getPrimaryKeyFakeEmptyValues(tt.primaryKey)
+			assert.Equal(t, tt.expected, result)
+		
+			// For multiple keys, verify the order is predictable (alphabetical)
+			if len(tt.primaryKey) > 1 {
+				parts := strings.Split(result, ",")
+				for i := 1; i < len(parts); i++ {
+					assert.True(t, strings.Compare(parts[i-1], parts[i]) <= 0, 
+						"Expected sorted keys, but got %s before %s", parts[i-1], parts[i])
+				}
+			}
+		})
+	}
+}
+
+func TestGetPrimaryKeyFakeEmptyValuesAssertion(t *testing.T) {
+	tests := []struct {
+		name             string
+		primaryKey       map[string]string
+		escapedTableName string
+		expected         string
+	}{
+		{
+			name: "single key",
+			primaryKey: map[string]string{
+				"id": "value-not-used",
+			},
+			escapedTableName: `"users"`,
+			expected:         `"users"."id" IS NULL`,
+		},
+		{
+			name: "multiple keys",
+			primaryKey: map[string]string{
+				"id":    "value-not-used",
+				"block": "value-not-used",
+				"idx":   "value-not-used",
+			},
+			escapedTableName: `"transactions"`,
+			expected:         `"transactions"."block" IS NULL AND "transactions"."id" IS NULL AND "transactions"."idx" IS NULL`,
+		},
+		{
+			name: "schema qualified table",
+			primaryKey: map[string]string{
+				"user_id": "value-not-used",
+			},
+			escapedTableName: `"public"."users"`,
+			expected:         `"public"."users"."user_id" IS NULL`,
+		},
+		{
+			name:             "empty map",
+			primaryKey:       map[string]string{},
+			escapedTableName: `"table"`,
+			expected:         "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getPrimaryKeyFakeEmptyValuesAssertion(tt.primaryKey, tt.escapedTableName)
+			assert.Equal(t, tt.expected, result)
+		
+			// For multiple keys, verify the order is predictable (alphabetical)
+			if len(tt.primaryKey) > 1 {
+				parts := strings.Split(result, "AND ")
+				for i := 1; i < len(parts); i++ {
+					assert.True(t, strings.Compare(parts[i-1], parts[i]) <= 0, 
+						"Expected sorted parts, but got %s before %s", parts[i-1], parts[i])
+				}
+			}
+		})
+	}
 }
 
 func TestRevertOp(t *testing.T) {

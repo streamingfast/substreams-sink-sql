@@ -314,10 +314,10 @@ func (d PostgresDialect) saveUpsert(schema string, escapedTableName string, prim
 		INSERT INTO %s (op,table_name,pk,prev_value,block_num)
 		SELECT CASE WHEN %s THEN 'I' ELSE 'U' END AS op, %s, %s, row_to_json(%s),%d  from t left join %s.%s on %s;`,
 
-		getPrimaryKeyFakeEmptyValues(primaryKey), // ex: `'' id, '' number`
+		getPrimaryKeyFakeEmptyValues(primaryKey),
 		d.historyTable(schema),
 
-		getPrimaryKeyFakeEmptyValuesAssertion(primaryKey), // ex: %.% is NULL
+		getPrimaryKeyFakeEmptyValuesAssertion(primaryKey, escapedTableName),
 
 		escapeStringValue(schemaAndTable), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTableName, blockNum,
 		EscapeIdentifier(schema), escapedTableName,
@@ -462,42 +462,35 @@ func (d *PostgresDialect) prepareColValues(table *TableInfo, colValues map[strin
 }
 
 func getPrimaryKeyFakeEmptyValues(primaryKey map[string]string) string {
-	return "'' id"
-	//// Avoid any allocation if there is a single primary key
-	//if len(primaryKey) == 1 {
-	//	for key, value := range primaryKey {
-	//		return EscapeIdentifier(key) + " = " + escapeStringValue(value)
-	//	}
-	//}
+	if len(primaryKey) == 1 {
+		for key := range primaryKey {
+			return "'' " + EscapeIdentifier(key)
+		}
+	}
 
-	//reg := make([]string, 0, len(primaryKey))
-	//for key, value := range primaryKey {
-	//	reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
-	//}
-	//sort.Strings(reg)
+	reg := make([]string, 0, len(primaryKey))
+	for key := range primaryKey {
+		reg = append(reg, "'' "+EscapeIdentifier(key))
+	}
+	sort.Strings(reg)
 
-	//return strings.Join(reg[:], " AND ")
+	return strings.Join(reg, ",")
 }
 
-func getPrimaryKeyFakeEmptyValuesAssertion(primaryKey map[string]string) string {
-	return "xfer.id is null"
-	// // Avoid any allocation if there is a single primary key
-	//
-	//	if len(primaryKey) == 1 {
-	//		for key, value := range primaryKey {
-	//			return EscapeIdentifier(key) + " = " + escapeStringValue(value)
-	//		}
-	//	}
-	//
-	// reg := make([]string, 0, len(primaryKey))
-	//
-	//	for key, value := range primaryKey {
-	//		reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
-	//	}
-	//
-	// sort.Strings(reg)
-	//
-	// return strings.Join(reg[:], " AND ")
+func getPrimaryKeyFakeEmptyValuesAssertion(primaryKey map[string]string, escapedTableName string) string {
+	if len(primaryKey) == 1 {
+		for key := range primaryKey {
+			return escapedTableName + "." + EscapeIdentifier(key) + " IS NULL"
+		}
+	}
+
+	reg := make([]string, 0, len(primaryKey))
+	for key := range primaryKey {
+		reg = append(reg, escapedTableName+"."+EscapeIdentifier(key)+" IS NULL")
+	}
+	sort.Strings(reg)
+
+	return strings.Join(reg, "AND ")
 }
 
 func getPrimaryKeyWhereClause(primaryKey map[string]string, escapedTableName string) string {
