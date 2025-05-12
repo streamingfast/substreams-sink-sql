@@ -2,7 +2,7 @@ version: "3"
 
 services:
   postgres:
-    container_name: postgres-tmpl
+    container_name: postgres-ssp2
     image: postgres:17
     ports:
       - "5432:5432"
@@ -22,8 +22,8 @@ services:
       timeout: 10s
       retries: 15
   pgweb:
-    container_name: pgweb-tmpl
-    image: sosedoff/pgweb:0.16.2
+    container_name: pgweb-ssp2
+    image: sosedoff/pgweb:0.16.1
     restart: on-failure
     ports:
       - "8081:8081"
@@ -34,3 +34,15 @@ services:
       - PGWEB_DATABASE_URL=postgres://dev-node:insecure-change-me-in-prod@postgres:5432/dev-node?sslmode=disable
     depends_on:
       - postgres
+  database:
+    container_name: clickhouse-ssp2
+    image: clickhouse/clickhouse-server:23.9
+    user: "101:101"
+    hostname: clickhouse
+    volumes:
+      - ${PWD}/devel/clickhouse-server/config.xml:/etc/clickhouse-server/config.d/config.xml
+      - ${PWD}/devel/clickhouse-server/users.xml:/etc/clickhouse-server/users.d/users.xml
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+      - "9005:9005"
