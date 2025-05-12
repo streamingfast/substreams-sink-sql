@@ -133,7 +133,7 @@ func (d PostgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_
 	case "I":
 		query := fmt.Sprintf(`DELETE FROM %s WHERE %s;`,
 			escaped_table_name,
-			getPrimaryKeyWhereClause(pkmap),
+			getPrimaryKeyWhereClause(pkmap, ""),
 		)
 		if _, err := tx.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("executing revert query %q: %w", query, err)
@@ -160,7 +160,7 @@ func (d PostgresDialect) revertOp(tx Tx, ctx context.Context, op, escaped_table_
 			columns,
 			escaped_table_name,
 			escapeStringValue(prev_value),
-			getPrimaryKeyWhereClause(pkmap),
+			getPrimaryKeyWhereClause(pkmap, ""),
 		)
 		if _, err := tx.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("executing revert query %q: %w", query, err)
@@ -303,8 +303,27 @@ func (d PostgresDialect) saveInsert(schema string, table string, primaryKey map[
 	)
 }
 
+/*
+with t as (select 'default' id)
+select CASE WHEN block_meta.id is null THEN 'I' ELSE 'U' END AS op, '"public"."block_meta"', 'allo', row_to_json(block_meta),10  from t left join block_meta on block_meta.id='default';
+*/
 func (d PostgresDialect) saveUpsert(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
-	return d.saveRow("U", schema, escapedTableName, primaryKey, blockNum)
+	schemaAndTable := fmt.Sprintf("%s.%s", EscapeIdentifier(schema), escapedTableName)
+
+	return fmt.Sprintf(`WITH t as (select %s)
+		INSERT INTO %s (op,table_name,pk,prev_value,block_num)
+		SELECT CASE WHEN %s THEN 'I' ELSE 'U' END AS op, %s, %s, row_to_json(%s),%d  from t left join %s.%s on %s;`,
+
+		getPrimaryKeyFakeEmptyValues(primaryKey), // ex: `'' id, '' number`
+		d.historyTable(schema),
+
+		getPrimaryKeyFakeEmptyValuesAssertion(primaryKey), // ex: %.% is NULL
+
+		escapeStringValue(schemaAndTable), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTableName, blockNum,
+		EscapeIdentifier(schema), escapedTableName,
+		getPrimaryKeyWhereClause(primaryKey, escapedTableName),
+	)
+
 }
 
 func (d PostgresDialect) saveUpdate(schema string, escapedTableName string, primaryKey map[string]string, blockNum uint64) string {
@@ -321,7 +340,7 @@ func (d PostgresDialect) saveRow(op, schema, escapedTableName string, primaryKey
 		d.historyTable(schema),
 		escapeStringValue(op), escapeStringValue(schemaAndTable), escapeStringValue(primaryKeyToJSON(primaryKey)), escapedTableName, blockNum,
 		EscapeIdentifier(schema), escapedTableName,
-		getPrimaryKeyWhereClause(primaryKey),
+		getPrimaryKeyWhereClause(primaryKey, ""),
 	)
 
 }
@@ -370,7 +389,7 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		)
 
 		if o.reversibleBlockNum != nil {
-			return d.saveUpdate(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
+			return d.saveUpsert(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
 		}
 		return insertQuery, nil
 
@@ -380,7 +399,7 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 			updates[i] = fmt.Sprintf("%s=%s", columns[i], values[i])
 		}
 
-		primaryKeySelector := getPrimaryKeyWhereClause(o.primaryKey)
+		primaryKeySelector := getPrimaryKeyWhereClause(o.primaryKey, "")
 
 		updateQuery := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 			o.table.identifier,
@@ -394,7 +413,7 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		return updateQuery, nil
 
 	case OperationTypeDelete:
-		primaryKeyWhereClause := getPrimaryKeyWhereClause(o.primaryKey)
+		primaryKeyWhereClause := getPrimaryKeyWhereClause(o.primaryKey, "")
 		deleteQuery := fmt.Sprintf("DELETE FROM %s WHERE %s",
 			o.table.identifier,
 			primaryKeyWhereClause,
@@ -442,17 +461,65 @@ func (d *PostgresDialect) prepareColValues(table *TableInfo, colValues map[strin
 	return
 }
 
-func getPrimaryKeyWhereClause(primaryKey map[string]string) string {
+func getPrimaryKeyFakeEmptyValues(primaryKey map[string]string) string {
+	return "'' id"
+	//// Avoid any allocation if there is a single primary key
+	//if len(primaryKey) == 1 {
+	//	for key, value := range primaryKey {
+	//		return EscapeIdentifier(key) + " = " + escapeStringValue(value)
+	//	}
+	//}
+
+	//reg := make([]string, 0, len(primaryKey))
+	//for key, value := range primaryKey {
+	//	reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
+	//}
+	//sort.Strings(reg)
+
+	//return strings.Join(reg[:], " AND ")
+}
+
+func getPrimaryKeyFakeEmptyValuesAssertion(primaryKey map[string]string) string {
+	return "xfer.id is null"
+	// // Avoid any allocation if there is a single primary key
+	//
+	//	if len(primaryKey) == 1 {
+	//		for key, value := range primaryKey {
+	//			return EscapeIdentifier(key) + " = " + escapeStringValue(value)
+	//		}
+	//	}
+	//
+	// reg := make([]string, 0, len(primaryKey))
+	//
+	//	for key, value := range primaryKey {
+	//		reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
+	//	}
+	//
+	// sort.Strings(reg)
+	//
+	// return strings.Join(reg[:], " AND ")
+}
+
+func getPrimaryKeyWhereClause(primaryKey map[string]string, escapedTableName string) string {
 	// Avoid any allocation if there is a single primary key
 	if len(primaryKey) == 1 {
 		for key, value := range primaryKey {
-			return EscapeIdentifier(key) + " = " + escapeStringValue(value)
+			if escapedTableName == "" {
+				return EscapeIdentifier(key) + " = " + escapeStringValue(value)
+			}
+
+			return escapedTableName + "." + EscapeIdentifier(key) + " = " + escapeStringValue(value)
 		}
 	}
 
 	reg := make([]string, 0, len(primaryKey))
 	for key, value := range primaryKey {
-		reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
+
+		if escapedTableName == "" {
+			reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
+		} else {
+			reg = append(reg, escapedTableName+"."+EscapeIdentifier(key)+" = "+escapeStringValue(value))
+		}
 	}
 	sort.Strings(reg)
 
