@@ -18,7 +18,7 @@ require (
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
 	github.com/streamingfast/substreams v1.15.2
 	github.com/streamingfast/substreams-sink v0.5.3-0.20250506114939-a25d1c865c1f
-	github.com/streamingfast/substreams-sink-database-changes v1.1.3
+	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
@@ -208,5 +208,3 @@ require (
 )
 
 replace github.com/jimsmart/schema => github.com/streamingfast/schema v0.0.0-20240621180609-1de2e05fe3bd
-
-replace github.com/streamingfast/substreams-sink-database-changes => /Users/maoueh/work/sf/substreams-sink-database-changes

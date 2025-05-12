@@ -603,6 +603,8 @@ github.com/streamingfast/substreams v1.15.2 h1:6olSI9PMqvX771CEaZB60zwoINcKuaZh+
 github.com/streamingfast/substreams v1.15.2/go.mod h1:tukQ8ncibm8wzh4dCiC5sXBFAjy3U/+jHnXTfMqDAC4=
 github.com/streamingfast/substreams-sink v0.5.3-0.20250506114939-a25d1c865c1f h1:gAnj/fx+JfsgiqYTcNZHcvUmgKdgu1BPC15yLicOYUk=
 github.com/streamingfast/substreams-sink v0.5.3-0.20250506114939-a25d1c865c1f/go.mod h1:zw+OTQ2XJPhhbU+oJI99+BFeJ1ElhYv+4teWNkWEyMA=
+github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72 h1:yjEm3ypUUxCVFiaAwHr477ClRAJXHLXX2VHzk6HsxHk=
+github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72/go.mod h1:f51ljuUsQEYuyuDdo5BB/4AfB87QDAegy5e8p5qBxis=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.2.0/go.mod h1:qt09Ya8vawLte6SNmTgCsAVtYtaKzEcn8ATUoHMkEqE=
