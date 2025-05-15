@@ -49,7 +49,7 @@ func (s *Schema) ChangeName(name string) error {
 func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 	s.logger.Info("initializing schema", zap.String("name", s.Name), zap.String("root_message_descriptor", rootMessageDescriptor.GetName()))
 	err := s.walkMessageDescriptor(rootMessageDescriptor, 0, func(md *desc.MessageDescriptor, ordinal int) error {
-		s.logger.Debug("walkMessageDescriptor callback", zap.String("message_descriptor_name", md.GetName()), zap.Int("ordinal", ordinal))
+		s.logger.Debug("creating table message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Int("ordinal", ordinal))
 		tableInfo := proto.TableInfo(md)
 		if tableInfo == nil {
 			if s.withProtoOption {
@@ -65,6 +65,7 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 			return nil
 		}
 		table, err := NewTable(md, tableInfo, ordinal)
+		s.logger.Debug("created table message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Int("ordinal", ordinal), zap.String("table_name", table.Name))
 		if err != nil {
 			return fmt.Errorf("creating table message descriptor: %w", err)
 		}

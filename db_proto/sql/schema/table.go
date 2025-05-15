@@ -46,6 +46,7 @@ func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, or
 		Ordinal: ordinal,
 	}
 	table.Name = tableInfo.Name
+	fmt.Println("new table name", table.Name)
 
 	if tableInfo.ChildOf != nil {
 		co, err := NewChildOf(*tableInfo.ChildOf)

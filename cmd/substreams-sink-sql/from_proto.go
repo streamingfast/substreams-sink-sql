@@ -14,7 +14,7 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
-	clickhouse "github.com/streamingfast/substreams-sink-sql/db_proto/sql/click_house"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"github.com/streamingfast/substreams-sink-sql/services"
@@ -186,7 +186,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 
 	connectionString := dsn.ConnString()
 	//todo: fix me
-	connectionString = "http://localhost:8123?secure=false"
+	//connectionString = "http://localhost:8123?secure=false"
 
 	fmt.Println("connection string", connectionString)
 	sqlDB, err := sql.Open(dsn.Driver(), connectionString)
@@ -194,28 +194,28 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("open db connection: %w", err)
 	}
 
-	//dialect, err := postgres.NewDialectPostgres(schema.Name, schema.TableRegistry, zlog)
-	dialect, err := clickhouse.NewDialectClickHouse(schema.Name, schema.TableRegistry, zlog)
+	dialect, err := postgres.NewDialectPostgres(schema.Name, schema.TableRegistry, zlog)
+	//dialect, err := clickhouse.NewDialectClickHouse(schema.Name, schema.TableRegistry, zlog)
 	if err != nil {
 		return fmt.Errorf("creating dialect: %w", err)
 	}
 
 	var database protosql.Database
-	implDatabase, err := clickhouse.NewDatabase(
-		schemaName,
-		dialect,
-		sqlDB,
-		outputModuleName,
-		rootMessageDescriptor,
-		sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
-		sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
-		true,
-		zlog,
-	)
-	//implDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, useProtoOption, zlog)
-	//if err != nil {
-	//	return fmt.Errorf("creating database: %w", err)
-	//}
+	//implDatabase, err := clickhouse.NewDatabase(
+	//	schemaName,
+	//	dialect,
+	//	sqlDB,
+	//	outputModuleName,
+	//	rootMessageDescriptor,
+	//	sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
+	//	sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
+	//	true,
+	//	zlog,
+	//)
+	implDatabase, err := postgres.NewDatabase(schemaName, dialect, sqlDB, outputModuleName, rootMessageDescriptor, useProtoOption, zlog)
+	if err != nil {
+		return fmt.Errorf("creating database: %w", err)
+	}
 	database = implDatabase
 
 	sinkInfo, err := database.FetchSinkInfo(schema.Name)
@@ -291,20 +291,20 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	inserter, err := clickhouse.NewAccumulatorInserter(implDatabase, zlog)
+	//inserter, err := clickhouse.NewAccumulatorInserter(implDatabase, zlog)
 
-	//var inserter protosql.Inserter
-	//if useConstraints {
-	//	inserter, err = postgres.NewRowInserter(implDatabase, zlog)
-	//	if err != nil {
-	//		return fmt.Errorf("creating row inserter: %w", err)
-	//	}
-	//} else {
-	//	inserter, err = postgres.NewAccumulatorInserter(implDatabase, zlog)
-	//	if err != nil {
-	//		return fmt.Errorf("creating accumulator inserter: %w", err)
-	//	}
-	//}
+	var inserter protosql.Inserter
+	if useConstraints {
+		inserter, err = postgres.NewRowInserter(implDatabase, zlog)
+		if err != nil {
+			return fmt.Errorf("creating row inserter: %w", err)
+		}
+	} else {
+		inserter, err = postgres.NewAccumulatorInserter(implDatabase, zlog)
+		if err != nil {
+			return fmt.Errorf("creating accumulator inserter: %w", err)
+		}
+	}
 
 	database.SetInserter(inserter)
 
