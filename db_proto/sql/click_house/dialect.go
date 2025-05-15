@@ -171,7 +171,32 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	sb = strings.Builder{}
 	sb.WriteString(temp)
 
-	sb.WriteString(fmt.Sprintf(") ENGINE = MergeTree() ORDER BY (%s);", primaryKeyFieldName))
+	orderByFields := make([]string, 0)
+	if primaryKeyFieldName != "" {
+		orderByFields = append(orderByFields, primaryKeyFieldName)
+	}
+
+	//this is tricky. handling one to one relation
+	if primaryKeyFieldName == "" && table.ChildOf != nil {
+		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
+		if !parentFound {
+			return fmt.Errorf("parent table %q not found", table.ChildOf.ParentTable)
+		}
+
+		for _, parentField := range parentTable.Columns {
+			if parentField.Name == table.ChildOf.ParentTableField && !parentField.IsRepeated {
+				orderByFields = append(orderByFields, parentField.Name)
+				break
+			}
+		}
+	}
+
+	if len(orderByFields) == 0 {
+		return fmt.Errorf("missing order by fields")
+	}
+
+	orderBy := strings.Join(orderByFields, ",")
+	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree() ORDER BY (%s);", orderBy))
 
 	//sb.WriteString(");\n")
 

@@ -18,7 +18,7 @@ func Run(service *pbsql.Service, logger *zap.Logger) error {
 		panic("Rest front end not supported yet")
 	}
 
-	if service.DbtConfig != nil {
+	if service.DbtConfig != nil && service.DbtConfig.Enabled {
 		go func() {
 			for {
 				err := runDBT(service.DbtConfig, logger)

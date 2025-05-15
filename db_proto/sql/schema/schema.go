@@ -56,9 +56,8 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 				return nil
 			}
 			tableInfo = &schema.Table{
-				Name:                       md.GetName(),
-				ChildOf:                    nil,
-				ManyToOneRelationFieldName: "",
+				Name:    md.GetName(),
+				ChildOf: nil,
 			}
 		}
 

@@ -153,7 +153,6 @@ func (d *Database) StoreCursor(cursor *sink.Cursor) error {
 }
 
 func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
-
 	tables := d.Dialect.GetTables()
 
 	// Sort tables in descending order based on their Ordinal field
@@ -167,6 +166,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 	}
 
 	for _, table := range tables {
+		d.logger.Info("undoing blocks", zap.String("table", table.Name), zap.Uint64("last_valid_block_num", lastValidBlockNum))
 
 		query := fmt.Sprintf(`DELETE FROM %s WHERE "block_number" > $1`, d.Dialect.FullTableName(table))
 		if table.Name == "blocks" {
