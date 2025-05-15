@@ -54,6 +54,68 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
    substreams-sink-sql run $DSN docs/tutorial/substreams.yaml
    ```
 
+### Different Options to Run the Sink
+
+There are different ways in which you can run the SQL sink, depending on your use case and the level complexity that you need:
+
+#### Using `from-proto` Without Annotations
+
+The simplest way is to let the sink infer your database schema by using the `substreams-sink-sql from-proto` command.
+
+Consider the following Protobuf output of Substreams:
+
+```protobuf
+message Pool {
+   string token0 = 1;
+   string token1 = 2;
+   uint64 created_at = 3;
+}
+```
+
+The SQL sink will **automatically** create a table called `pools` with the corresponding columns, `token0`, `token1` and `created_at`. For every new `Pool` message outputted from the Substreams, a new row will be inserted into the table.
+
+You can run the sink with the following syntax:
+
+```
+substreams-sink-sql from-proto <DSN> <SUBSTREAMS_PACKAGE>
+```
+
+#### Using `from-proto` With Annotations
+
+If you have a more complex data model, with several tables and relations among them, you can annotate the Protobuf of your Substreams to define the database constraints.
+
+Consider the following Protobuf with annotations:
+
+```protobuf
+...
+
+import "sf/substreams/sink/sql/schema/v1/schema.proto";
+
+message Token {
+   option (sf.substreams.sink.sql.schema.v1.table) = {
+    name: "tokens",
+    child_of: "vaults on vault_id"
+  };
+
+   string address = 1 [(sf.substreams.sink.sql.schema.v1.field) = {  primary_key: true}];
+   string name = 2;
+   uint64 created_at = 3;
+}
+
+message Vault {
+   option (sf.substreams.sink.sql.schema.v1.table) = { name: "vaults" };
+
+   uint64 vault_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = {  primary_key: true}];
+   repeated Token tokens = 2;
+   uint64 created_at = 3;
+}
+```
+
+#### Using `DatabaseChanges`
+
+
+
+
 ### Sink Config
 
 Observe the "Sink Config" section of the [Substreams manifest in the tutorial](docs/tutorial/substreams.yaml#L39-L49):
