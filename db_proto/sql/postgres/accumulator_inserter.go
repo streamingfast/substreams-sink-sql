@@ -35,11 +35,11 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*Accumulato
 			query: query,
 		}
 	}
-	accumulators["blocks"] = &accumulator{
-		query: fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ", tableName(database.schemaName, "blocks")),
+	accumulators["_blocks_"] = &accumulator{
+		query: fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ", tableName(database.schemaName, "_blocks_")),
 	}
 
-	cursorQuery := fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))
+	cursorQuery := fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "_cursor_"))
 	cs, err := database.DB.Prepare(cursorQuery)
 	if err != nil {
 		return nil, fmt.Errorf("preparing statement %q: %w", cursorQuery, err)
@@ -87,7 +87,7 @@ func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (s
 
 func (i *AccumulatorInserter) Insert(table string, values []any, txWrapper func(stmt *sql.Stmt) *sql.Stmt) error {
 	var v []string
-	if table == "cursor" {
+	if table == "_cursor_" {
 		stmt := txWrapper(i.cursorStmt)
 		_, err := stmt.Exec(values...)
 		if err != nil {

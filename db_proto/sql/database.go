@@ -194,7 +194,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 			for _, c := range v {
 				fm, ok := c.(*dynamic.Message)
 				if !ok {
-					panic("expected *dynamic.Message")
+					panic("expected *dynamic.Message wile walking message descriptor " + md.GetFullyQualifiedName() + " field " + fd.GetName() + " value " + fmt.Sprintf("%v", c))
 				}
 				childs = append(childs, fm) //n
 			}
@@ -203,6 +203,11 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				continue //un-use oneOf field
 			}
 			childs = append(childs, fm) //need to be handled after current message inserted
+			//sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil)
+			//if err != nil {
+			//	return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
+			//}
+			//totalSqlDuration += sqlDuration
 		} else {
 			fieldValues = append(fieldValues, fv)
 		}

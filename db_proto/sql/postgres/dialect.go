@@ -17,16 +17,16 @@ import (
 const postgresStaticSql = `
 	CREATE SCHEMA IF NOT EXISTS "%s";
 
-	CREATE TABLE IF NOT EXISTS "%s".sink_info (
+	CREATE TABLE IF NOT EXISTS "%s"._sink_info_ (
 		schema_hash TEXT PRIMARY KEY
 	);
 
-	CREATE TABLE IF NOT EXISTS "%s".cursor (
+	CREATE TABLE IF NOT EXISTS "%s"._cursor_ (
 		name TEXT PRIMARY KEY,
 		cursor TEXT NOT NULL
 	);
 
-	CREATE TABLE IF NOT EXISTS "%s".blocks (
+	CREATE TABLE IF NOT EXISTS "%s"._blocks_ (
 		number integer,
 		hash TEXT NOT NULL,
 		timestamp TIMESTAMP NOT NULL
@@ -60,7 +60,7 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 }
 
 func (d *DialectPostgres) init() error {
-	d.AddPrimaryKeySql("blocks", fmt.Sprintf("alter table %s.blocks add constraint block_pk primary key (number);", d.schemaName))
+	d.AddPrimaryKeySql("_blocks_", fmt.Sprintf("alter table %s._blocks_ add constraint block_pk primary key (number);", d.schemaName))
 	return nil
 }
 
@@ -181,7 +181,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	sb.WriteString(");\n")
 
-	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.blocks(number) ON DELETE CASCADE", tableName, d.schemaName))
+	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s._blocks_(number) ON DELETE CASCADE", tableName, d.schemaName))
 	d.AddCreateTableSql(table.Name, sb.String())
 
 	return nil

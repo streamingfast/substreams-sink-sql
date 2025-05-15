@@ -31,8 +31,8 @@ func NewDatabase(schemaName string, dialect *DialectPostgres, db *pqsql.DB, modu
 }
 
 func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time) error {
-	d.logger.Debug("inserting block", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
-	err := d.BaseDatabase.Inserter.Insert("blocks", []any{blockNum, hash, timestamp}, d.WrapInsertStatement)
+	d.logger.Debug("inserting _blocks_", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
+	err := d.BaseDatabase.Inserter.Insert("_blocks_", []any{blockNum, hash, timestamp}, d.WrapInsertStatement)
 	if err != nil {
 		return fmt.Errorf("inserting block %d: %w", blockNum, err)
 	}
@@ -41,7 +41,7 @@ func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time
 }
 
 func (d *Database) FetchSinkInfo(schemaName string) (*sql.SinkInfo, error) {
-	query := fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '%s' AND table_name = 'sink_info')", schemaName)
+	query := fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '_sink_info_')", schemaName)
 
 	var exist bool
 	err := d.BaseDatabase.DB.QueryRow(query).Scan(&exist)
@@ -54,7 +54,7 @@ func (d *Database) FetchSinkInfo(schemaName string) (*sql.SinkInfo, error) {
 
 	out := &sql.SinkInfo{}
 
-	err = d.BaseDatabase.DB.QueryRow(fmt.Sprintf("SELECT schema_hash FROM %s.sink_info", d.schemaName)).Scan(&out.SchemaHash)
+	err = d.BaseDatabase.DB.QueryRow(fmt.Sprintf("SELECT schema_hash FROM %s._sink_info_", d.schemaName)).Scan(&out.SchemaHash)
 	if err != nil {
 		return nil, fmt.Errorf("fetching sync info: %w", err)
 	}
@@ -63,7 +63,7 @@ func (d *Database) FetchSinkInfo(schemaName string) (*sql.SinkInfo, error) {
 }
 
 func (d *Database) StoreSinkInfo(schemaName string, schemaHash string) error {
-	_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("INSERT INTO %s.sink_info (schema_hash) VALUES ($1)", schemaName), schemaHash)
+	_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("INSERT INTO %s._sink_info_ (schema_hash) VALUES ($1)", schemaName), schemaHash)
 	if err != nil {
 		return fmt.Errorf("storing schema hash: %w", err)
 	}
@@ -71,7 +71,7 @@ func (d *Database) StoreSinkInfo(schemaName string, schemaHash string) error {
 }
 
 func (d *Database) UpdateSinkInfoHash(schemaName string, newHash string) error {
-	_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("UPDATE %s.sink_info SET schema_hash = $1", schemaName), newHash)
+	_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("UPDATE %s._sink_info_ SET schema_hash = $1", schemaName), newHash)
 	if err != nil {
 		return fmt.Errorf("updating schema hash: %w", err)
 	}
@@ -79,7 +79,7 @@ func (d *Database) UpdateSinkInfoHash(schemaName string, newHash string) error {
 }
 
 func (d *Database) FetchCursor() (*sink.Cursor, error) {
-	query := fmt.Sprintf("SELECT cursor FROM %s WHERE name = $1", tableName(d.schemaName, "cursor"))
+	query := fmt.Sprintf("SELECT cursor FROM %s WHERE name = $1", tableName(d.schemaName, "_cursor_"))
 
 	rows, err := d.BaseDatabase.DB.Query(query, "cursor")
 	if err != nil {
@@ -97,7 +97,7 @@ func (d *Database) FetchCursor() (*sink.Cursor, error) {
 }
 
 func (d *Database) StoreCursor(cursor *sink.Cursor) error {
-	err := d.BaseDatabase.Inserter.Insert("cursor", []any{"cursor", cursor.String()}, d.WrapInsertStatement)
+	err := d.BaseDatabase.Inserter.Insert("_cursor_", []any{"cursor", cursor.String()}, d.WrapInsertStatement)
 	if err != nil {
 		return fmt.Errorf("inserting cursor: %w", err)
 	}
@@ -124,7 +124,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) (err error) {
 	}()
 
 	d.logger.Info("undoing blocks", zap.Uint64("last_valid_block_num", lastValidBlockNum))
-	query := fmt.Sprintf(`DELETE FROM %s.blocks WHERE "number" > $1`, d.schemaName)
+	query := fmt.Sprintf(`DELETE FROM %s._blocks_ WHERE "number" > $1`, d.schemaName)
 	result, err := tx.Exec(query, lastValidBlockNum)
 	if err != nil {
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)

@@ -4,9 +4,7 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
 
 ### Quickstart
 
-1. Install `substreams-sink-sql` by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-sql/releases). Extract `substreams-sink-sql` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable.
-
-   > **Note** Or install from source directly `go install github.com/streamingfast/substreams-sink-sql/cmd/substreams-sink-sql@latest`.
+1. Install `substreams-sink-sql` from Brew with `brew install streamingfast/tap/substreams-sink-sql` or by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-sql/releases) (extract `substreams-sink-sql` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable).
 
 1. Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project:
 

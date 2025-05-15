@@ -18,7 +18,7 @@ const staticSqlCreatDatabase = `
 	CREATE DATABASE IF NOT EXISTS %s;
 `
 const staticSqlCreateBlock = `
-	CREATE TABLE IF NOT EXISTS %s.blocks  (
+	CREATE TABLE IF NOT EXISTS %s._blocks_  (
 		number    integer,
 		hash      text,
 		timestamp timestamp

@@ -38,8 +38,8 @@ var fromProtoCmd = Command(fromProtoE,
 		//flags.Bool("no-transactions", false, "Do not use transactions when inserting data. This is useful to speed up the initial import of a large dataset.")
 		//flags.Bool("parallel", false, "Run the sinker in parallel mode. This is useful to speed up the initial import of a large dataset. This is will process blocks of a batch in parallel")
 		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
-		flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
-		flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
+		//flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
+		//flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
 	}),
 )
 

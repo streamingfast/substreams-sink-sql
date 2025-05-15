@@ -60,7 +60,6 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 				ChildOf: nil,
 			}
 		}
-
 		if _, found := s.TableRegistry[tableInfo.Name]; found {
 			return nil
 		}

@@ -1,4 +1,9 @@
 // @generated
+// @@protoc_insertion_point(attribute:schema)
+pub mod schema {
+    include!("schema.rs");
+    // @@protoc_insertion_point(schema)
+}
 pub mod sf {
     pub mod solana {
         pub mod r#type {

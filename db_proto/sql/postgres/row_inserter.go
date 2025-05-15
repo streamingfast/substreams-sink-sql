@@ -40,19 +40,19 @@ func NewRowInserter(database *Database, logger *zap.Logger) (*RowInserter, error
 		insertStatements[table.Name] = stmt
 	}
 
-	insertQueries["blocks"] = fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(database.schemaName, "blocks"))
-	bs, err := database.DB.Prepare(insertQueries["blocks"])
+	insertQueries["_blocks_"] = fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(database.schemaName, "_blocks_"))
+	bs, err := database.DB.Prepare(insertQueries["_blocks_"])
 	if err != nil {
-		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["blocks"], err)
+		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["_blocks_"], err)
 	}
-	insertStatements["blocks"] = bs
+	insertStatements["_blocks_"] = bs
 
-	insertQueries["cursor"] = fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))
-	cs, err := database.DB.Prepare(insertQueries["cursor"])
+	insertQueries["_cursor_"] = fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "_cursor_"))
+	cs, err := database.DB.Prepare(insertQueries["_cursor_"])
 	if err != nil {
-		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["cursor"], err)
+		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["_cursor_"], err)
 	}
-	insertStatements["cursor"] = cs
+	insertStatements["_cursor_"] = cs
 
 	return &RowInserter{
 		insertStatements: insertStatements,

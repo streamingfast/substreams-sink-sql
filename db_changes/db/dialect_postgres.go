@@ -242,7 +242,7 @@ func (d PostgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sche
 
 func (d PostgresDialect) GetUpdateCursorQuery(table, moduleHash string, cursor *sink.Cursor, block_num uint64, block_id string) string {
 	return query(`
-		UPDATE %s set cursor = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';
+		UPDATE %s set _cursor_ = '%s', block_num = %d, block_id = '%s' WHERE id = '%s';
 	`, table, cursor, block_num, block_id, moduleHash)
 }
 
