@@ -9,9 +9,10 @@ imports:
 protobuf:
   files:
     - test/relations/relations.proto
-    - schema/schema.proto
+  descriptorSets:
+    - module: buf.build/streamingfast/substreams-sink-sql
   importPaths:
-    - ../../../../proto
+    - ./proto
   excludePaths:
     - sf/substreams/rpc
     - sf/substreams/v1
