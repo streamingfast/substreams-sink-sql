@@ -126,7 +126,7 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 		if err != nil {
 			fmt.Println(acc.query)
 			fmt.Println(insert)
-			return fmt.Errorf("executing insert %s: %w", insert, err)
+			return fmt.Errorf("pg accumalator inserter: executing insert %s: %w", insert, err)
 		}
 		acc.rowValues = acc.rowValues[:0]
 	}

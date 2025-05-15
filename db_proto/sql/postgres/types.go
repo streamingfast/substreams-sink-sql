@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
@@ -77,7 +78,7 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 func ValueToString(value any) (s string) {
 	switch v := value.(type) {
 	case string:
-		s = "'" + v + "'"
+		s = "'" + strings.ReplaceAll(strings.ReplaceAll(v, "'", "''"), "\\", "\\\\") + "'"
 	case int64:
 		s = strconv.FormatInt(v, 10)
 	case int32:

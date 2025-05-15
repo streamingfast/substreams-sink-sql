@@ -130,7 +130,7 @@ func (i *RowInserter) Insert(table string, values []any, txWrapper func(stmt *sq
 	_, err := stmt.Exec(values...)
 	if err != nil {
 		insert := i.insertQueries[table]
-		return fmt.Errorf("querying insert %q: %w", insert, err)
+		return fmt.Errorf("pg accumalator inserter: querying insert %q: %w", insert, err)
 	}
 
 	return nil

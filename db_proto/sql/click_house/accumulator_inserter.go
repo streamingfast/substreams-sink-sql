@@ -124,7 +124,7 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 
 		_, err := tx.Exec(insert)
 		if err != nil {
-			return fmt.Errorf("executing insert %s: %w", insert, err)
+			return fmt.Errorf("clickhouse accumalator inserter: executing insert %s: %w", insert, err)
 		}
 		acc.rowValues = acc.rowValues[:0]
 	}
