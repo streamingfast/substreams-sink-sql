@@ -133,8 +133,8 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 
 		for _, stmt := range stmts {
 			if createDatabase, ok := stmt.(*clickhouse.CreateDatabase); ok {
-				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE DATABASE'", zap.String("cluster", CLICKHOUSE_CLUSTER), zap.String("database", createDatabase.Name.String()))
-				createDatabase.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: CLICKHOUSE_CLUSTER}}
+				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE DATABASE'", zap.String("cluster", d.cluster), zap.String("database", createDatabase.Name.String()))
+				createDatabase.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: d.cluster}}
 			}
 			if createTable, ok := stmt.(*clickhouse.CreateTable); ok {
 				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE TABLE'", zap.String("cluster", d.cluster), zap.String("table", createTable.Name.String()))
@@ -148,8 +148,8 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 				}
 			}
 			if createMaterializedView, ok := stmt.(*clickhouse.CreateMaterializedView); ok {
-				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE MATERIALIZED VIEW'", zap.String("cluster", CLICKHOUSE_CLUSTER), zap.String("materialized_view", createMaterializedView.Name.String()))
-				createMaterializedView.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: CLICKHOUSE_CLUSTER}}
+				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE MATERIALIZED VIEW'", zap.String("cluster", d.cluster), zap.String("materialized_view", createMaterializedView.Name.String()))
+				createMaterializedView.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: d.cluster}}
 
 				if createMaterializedView.Engine != nil && !strings.HasPrefix(createMaterializedView.Engine.Name, "Replicated") &&
 					strings.HasSuffix(createMaterializedView.Engine.Name, "MergeTree") {
@@ -159,12 +159,12 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 				}
 			}
 			if createView, ok := stmt.(*clickhouse.CreateView); ok {
-				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE VIEW'", zap.String("cluster", CLICKHOUSE_CLUSTER), zap.String("view", createView.Name.String()))
-				createView.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: CLICKHOUSE_CLUSTER}}
+				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE VIEW'", zap.String("cluster", d.cluster), zap.String("view", createView.Name.String()))
+				createView.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: d.cluster}}
 			}
 			if createFunction, ok := stmt.(*clickhouse.CreateFunction); ok {
-				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE FUNCTION'", zap.String("cluster", CLICKHOUSE_CLUSTER), zap.String("function", createFunction.FunctionName.String()))
-				createFunction.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: CLICKHOUSE_CLUSTER}}
+				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE FUNCTION'", zap.String("cluster", d.cluster), zap.String("function", createFunction.FunctionName.String()))
+				createFunction.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: d.cluster}}
 			}
 
 			if _, err := l.ExecContext(ctx, stmt.String()); err != nil {
