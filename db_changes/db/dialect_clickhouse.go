@@ -133,7 +133,7 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 
 		for _, stmt := range stmts {
 			if createDatabase, ok := stmt.(*clickhouse.CreateDatabase); ok {
-				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE DATABASE'", zap.String("cluster", d.cluster), zap.String("database", createDatabase.Name.String()))
+				l.logger.Debug("appending 'ON CLUSTER' clause to 'CREATE DATABASE'", zap.String("cluster", d.cluster), zap.Stringer("database", createDatabase.Name))
 				createDatabase.OnCluster = &clickhouse.ClusterClause{Expr: &clickhouse.StringLiteral{Literal: d.cluster}}
 			}
 			if createTable, ok := stmt.(*clickhouse.CreateTable); ok {
