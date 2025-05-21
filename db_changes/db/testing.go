@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"maps"
+
 	"github.com/streamingfast/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -48,36 +50,31 @@ func NewTestLoader(
 }
 
 func TestSinglePrimaryKeyTables(schema string) map[string]*TableInfo {
-	return map[string]*TableInfo{
+	return TestTables(schema, map[string]*TableInfo{
 		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*ColumnInfo{
 			"id":   NewColumnInfo("id", "text", ""),
 			"from": NewColumnInfo("from", "text", ""),
 			"to":   NewColumnInfo("to", "text", ""),
 		}),
-		testCursorTableName: mustNewTableInfo(schema, testCursorTableName, []string{"id"}, map[string]*ColumnInfo{
-			"block_num": NewColumnInfo("block_num", "bigint", ""),
-			"block_id":  NewColumnInfo("block_id", "text", ""),
-			"cursor":    NewColumnInfo("cursor", "text", ""),
-			"id":        NewColumnInfo("id", "text", ""),
-		}),
-	}
+	})
 }
 
-func TestCompositePrimaryKeyTables(schema string) map[string]*TableInfo {
-	return map[string]*TableInfo{
-		"xfer": mustNewTableInfo(schema, "xfer", []string{"id", "number"}, map[string]*ColumnInfo{
-			"id":     NewColumnInfo("id", "text", ""),
-			"number": NewColumnInfo("number", "bigint", ""),
-			"from":   NewColumnInfo("from", "text", ""),
-			"to":     NewColumnInfo("to", "text", ""),
-		}),
-		testCursorTableName: mustNewTableInfo(schema, testCursorTableName, []string{"id"}, map[string]*ColumnInfo{
-			"block_num": NewColumnInfo("block_num", "bigint", ""),
-			"block_id":  NewColumnInfo("block_id", "text", ""),
-			"cursor":    NewColumnInfo("cursor", "text", ""),
-			"id":        NewColumnInfo("id", "text", ""),
-		}),
-	}
+func TestTables(schema string, customTable map[string]*TableInfo) map[string]*TableInfo {
+	out := map[string]*TableInfo{}
+
+	addCursorsTable(schema, out)
+	maps.Copy(out, customTable)
+
+	return out
+}
+
+func addCursorsTable(schema string, into map[string]*TableInfo) {
+	into[testCursorTableName] = mustNewTableInfo(schema, testCursorTableName, []string{"id"}, map[string]*ColumnInfo{
+		"block_num": NewColumnInfo("block_num", "bigint", ""),
+		"block_id":  NewColumnInfo("block_id", "text", ""),
+		"cursor":    NewColumnInfo("cursor", "text", ""),
+		"id":        NewColumnInfo("id", "text", ""),
+	})
 }
 
 func GenerateCreateTableSQL(tables map[string]*TableInfo) string {

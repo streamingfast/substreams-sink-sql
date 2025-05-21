@@ -371,8 +371,8 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 				testTables,
 				dbConnectionString,
 				postgresContainer,
-				test.events,
 				readXferSinglePKRows,
+				test.events,
 				test.expectedQueryResponses,
 				test.expectedFinalCursor,
 			)
@@ -380,8 +380,41 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	}
 }
 
+type XferCompositePKRow struct {
+	ID     string `db:"id"`
+	Number string `db:"number"`
+	From   string `db:"from"`
+	To     string `db:"to"`
+}
+
+func readXferCompsitePKRows(t *testing.T, db *sql.DB) (rows []*XferCompositePKRow) {
+	t.Helper()
+
+	rawRows, err := db.QueryContext(context.Background(), `SELECT id, number, "from", "to" FROM "testschema"."xfer"`)
+	require.NoError(t, err)
+	defer rawRows.Close()
+
+	for rawRows.Next() {
+		var row XferCompositePKRow
+		require.NoError(t, rawRows.Scan(&row.ID, &row.Number, &row.From, &row.To))
+
+		rows = append(rows, &row)
+	}
+	require.NoError(t, rawRows.Err())
+
+	return rows
+}
+
 func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
-	testTables := db2.TestCompositePrimaryKeyTables("testschema")
+	testTables := db2.TestTables("testschema", map[string]*db2.TableInfo{
+		"xfer": mustNewTableInfo("testschema", "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
+			"id":     db2.NewColumnInfo("id", "text", ""),
+			"number": db2.NewColumnInfo("number", "bigint", ""),
+			"from":   db2.NewColumnInfo("from", "text", ""),
+			"to":     db2.NewColumnInfo("to", "text", ""),
+		}),
+	})
+
 	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables)
 
 	pk := compositePK
@@ -512,8 +545,8 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 				testTables,
 				dbConnectionString,
 				postgresContainer,
-				test.events,
 				readXferCompsitePKRows,
+				test.events,
 				test.expectedQueryResponses,
 				test.expectedFinalCursor,
 			)
@@ -521,13 +554,64 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 	}
 }
 
+type XferBytesRow struct {
+	ID    []byte `db:"id"`
+	Value []byte `db:"value"`
+}
+
+func readXferBytesRow(t *testing.T, db *sql.DB) (rows []*XferBytesRow) {
+	t.Helper()
+
+	rawRows, err := db.QueryContext(context.Background(), `SELECT id, value FROM "testschema"."xfer"`)
+	require.NoError(t, err)
+	defer rawRows.Close()
+
+	for rawRows.Next() {
+		var row XferBytesRow
+		require.NoError(t, rawRows.Scan(&row.ID, &row.Value))
+		rows = append(rows, &row)
+	}
+	require.NoError(t, rawRows.Err())
+
+	return rows
+}
+
+func TestSinker_Integration_Bytes(t *testing.T) {
+	schema := "testschema"
+	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
+		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
+			"id":    db2.NewColumnInfo("id", "bytea", ""),
+			"value": db2.NewColumnInfo("value", "bytea", []byte{}),
+		}),
+	})
+
+	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables)
+
+	runSinkerTest(
+		t,
+		testTables,
+		dbConnectionString,
+		postgresContainer,
+		readXferBytesRow,
+		[]event{
+			newEvent(10, 10,
+				insertRowSinglePK("xfer", `\x01`, "value", `\x04ab`),
+			),
+		},
+		[]*XferBytesRow{
+			{ID: []byte{0x01}, Value: []byte{0x04, 0xab}},
+		},
+		"Block #10 (10) - LIB #10 (10)",
+	)
+}
+
 func runSinkerTest[R any](
 	t *testing.T,
 	tables map[string]*db2.TableInfo,
 	dbDSN string,
 	postgresContainer *postgres.PostgresContainer,
-	events []event,
 	readRows func(t *testing.T, db *sql.DB) []R,
+	events []event,
 	expectedQueryResponses []R,
 	expectedFinalCursor string,
 ) {
@@ -573,14 +657,7 @@ func runSinkerTest[R any](
 		require.NoError(t, err)
 	}
 
-	rows, err := l.QueryContext(ctx, `SELECT id, "from", "to" FROM "testschema"."xfer"`)
-	require.NoError(t, err)
-	t.Cleanup(func() { rows.Close() })
-
-	xferRows := readRows(t, l.DB)
-
-	require.NoError(t, rows.Err())
-	require.Equal(t, expectedQueryResponses, xferRows)
+	require.Equal(t, expectedQueryResponses, readRows(t, l.DB))
 
 	finalCursor, mismatchDetected, err := l.GetCursor(ctx, sinker.OutputModuleHash())
 	require.NoError(t, err)
@@ -630,31 +707,6 @@ func readXferSinglePKRows(t *testing.T, db *sql.DB) (rows []*XferSinglePKRow) {
 	for rawRows.Next() {
 		var row XferSinglePKRow
 		require.NoError(t, rawRows.Scan(&row.ID, &row.From, &row.To))
-
-		rows = append(rows, &row)
-	}
-	require.NoError(t, rawRows.Err())
-
-	return rows
-}
-
-type XferCompositePKRow struct {
-	ID     string `db:"id"`
-	Number string `db:"number"`
-	From   string `db:"from"`
-	To     string `db:"to"`
-}
-
-func readXferCompsitePKRows(t *testing.T, db *sql.DB) (rows []*XferCompositePKRow) {
-	t.Helper()
-
-	rawRows, err := db.QueryContext(context.Background(), `SELECT id, number, "from", "to" FROM "testschema"."xfer"`)
-	require.NoError(t, err)
-	defer rawRows.Close()
-
-	for rawRows.Next() {
-		var row XferCompositePKRow
-		require.NoError(t, rawRows.Scan(&row.ID, &row.Number, &row.From, &row.To))
 
 		rows = append(rows, &row)
 	}
