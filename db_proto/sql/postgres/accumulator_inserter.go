@@ -58,6 +58,7 @@ func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (s
 
 	var fieldNames []string
 	fieldNames = append(fieldNames, "block_number")
+	fieldNames = append(fieldNames, "block_timestamp")
 
 	if pk := table.PrimaryKey; pk != nil {
 		fieldNames = append(fieldNames, pk.Name)
@@ -123,7 +124,11 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 
 		_, err := tx.Exec(insert)
 		if err != nil {
-			return fmt.Errorf("executing insert %s: %w", insert, err)
+			shortInsert := insert
+			if len(insert) > 256 {
+				shortInsert = insert[:256] + "..."
+			}
+			return fmt.Errorf("executing insert %s: %w", shortInsert, err)
 		}
 		acc.rowValues = acc.rowValues[:0]
 	}

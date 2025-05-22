@@ -151,10 +151,22 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 			}
 		}
 
-		flushDuration, err := s.db.Flush()
-		if err != nil {
-			return fmt.Errorf("flushing: %w", err)
+		var flushDuration time.Duration
+		var flushErr error
+		for i := 0; i < 3; i++ {
+			flushDuration, flushErr = s.db.Flush()
+			if flushErr == nil {
+				break
+			}
+			s.logger.Warn("flushing failed, retrying", zap.Error(flushErr))
+			if i < 2 {
+				time.Sleep(time.Second * time.Duration(i+1)) // Exponential backoff
+			}
 		}
+		if flushErr != nil {
+			return fmt.Errorf("flushing: %w", flushErr)
+		}
+
 		flushDurationPerBlock := flushDuration / time.Duration(len(holding))
 		s.stats.FlushDuration.Add(flushDurationPerBlock)
 
@@ -203,7 +215,7 @@ func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64,
 	}
 	stats.BlockInsertDuration.Add(time.Since(startInsertBlock))
 
-	sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, blockNum, nil)
+	sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, blockNum, blockTimestamp, nil)
 	if err != nil {
 		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 	}

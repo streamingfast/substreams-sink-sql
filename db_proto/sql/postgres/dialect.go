@@ -79,6 +79,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 	}
 
 	sb.WriteString(" block_number INTEGER NOT NULL,")
+	sb.WriteString(" block_timestamp TIMESTAMP NOT NULL,")
 
 	if table.ChildOf != nil {
 		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]

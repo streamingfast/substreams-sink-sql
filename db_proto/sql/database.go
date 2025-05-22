@@ -22,7 +22,7 @@ type Database interface {
 
 	CreateDatabase(useConstraints bool, schemaName string) error
 	SetInserter(inserter Inserter)
-	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent) (time.Duration, error)
+	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent) (time.Duration, error)
 	InsertBlock(blockNum uint64, hash string, timestamp time.Time) error
 
 	HandleBlocksUndo(lastValidBlockNumber uint64) error
@@ -71,7 +71,6 @@ func NewBaseDatabase(sqlDialect Dialect, db *sql.DB, moduleOutputType string, ro
 }
 
 func (d *BaseDatabase) CreateDatabase(useConstraints bool, schemaName string) error {
-
 	err := d.Dialect.CreateDatabase(d.Tx)
 	if err != nil {
 		return fmt.Errorf("creating database: %w", err)
@@ -143,13 +142,14 @@ type Parent struct {
 	id    interface{}
 }
 
-func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, parent *Parent) (time.Duration, error) {
+func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent) (time.Duration, error) {
 	if dm == nil {
 		return 0, fmt.Errorf("received a nil message")
 	}
 
 	var fieldValues []any
 	fieldValues = append(fieldValues, blockNum)
+	fieldValues = append(fieldValues, blockTimestamp)
 
 	md := dm.GetMessageDescriptor()
 	tableInfo := proto.TableInfo(md)
@@ -172,9 +172,10 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				}
 				fieldValues = append(fieldValues, pkValue)
 			}
-		} else {
-			return 0, fmt.Errorf("table %q not found", tableInfo.Name)
 		}
+		//else {
+		//	return 0, fmt.Errorf("table %q not found", tableInfo.Name)
+		//}
 	}
 
 	totalSqlDuration := time.Duration(0)
@@ -218,26 +219,28 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	if tableInfo != nil {
 		insertStartAt := time.Now()
 		table := d.Dialect.GetTable(tableInfo.Name)
-		err := d.Inserter.Insert(table.Name, fieldValues, d.WrapInsertStatement)
-		if err != nil {
-			fmt.Printf("fieldValues: %v\n", fieldValues)
-			return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
-		}
-		if len(childs) > 0 && d.useProtoOptions {
-			if table.PrimaryKey == nil {
-				return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
+		if table != nil {
+			err := d.Inserter.Insert(table.Name, fieldValues, d.WrapInsertStatement)
+			if err != nil {
+				fmt.Printf("fieldValues: %v\n", fieldValues)
+				return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 			}
-			id := fieldValues[table.PrimaryKey.Index+1]
-			p = &Parent{
-				field: strings.ToLower(md.GetName()),
-				id:    id,
+			if len(childs) > 0 && d.useProtoOptions {
+				if table.PrimaryKey == nil {
+					return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
+				}
+				id := fieldValues[table.PrimaryKey.Index+1]
+				p = &Parent{
+					field: strings.ToLower(md.GetName()),
+					id:    id,
+				}
 			}
+			totalSqlDuration += time.Since(insertStartAt)
 		}
-		totalSqlDuration += time.Since(insertStartAt)
 	}
 
 	for _, fm := range childs {
-		sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, p)
+		sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, blockTimestamp, p)
 		if err != nil {
 			return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 		}

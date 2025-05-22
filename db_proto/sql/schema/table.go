@@ -46,7 +46,12 @@ func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, or
 		Ordinal: ordinal,
 	}
 	table.Name = tableInfo.Name
-	fmt.Println("new table name", table.Name)
+
+	typeName := descriptor.GetName()
+	isTimestamp := typeName == ".google.protobuf.Timestamp" || typeName == "Timestamp"
+	if isTimestamp {
+		return nil, nil
+	}
 
 	if tableInfo.ChildOf != nil {
 		co, err := NewChildOf(*tableInfo.ChildOf)
@@ -59,6 +64,10 @@ func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, or
 	err := table.processColumns(descriptor)
 	if err != nil {
 		return nil, fmt.Errorf("error processing fields for table %q: %w", descriptor.GetName(), err)
+	}
+
+	if len(table.Columns) == 0 {
+		return nil, nil
 	}
 
 	return table, nil
@@ -76,7 +85,9 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 		}
 
 		if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE {
-			if fieldDescriptor.AsFieldDescriptorProto().GetTypeName() != ".google.protobuf.Timestamp" {
+			typeName := fieldDescriptor.GetMessageType().GetName()
+			isTimestamp := typeName == ".google.protobuf.Timestamp" || typeName == "Timestamp"
+			if !isTimestamp {
 				continue
 			}
 		}

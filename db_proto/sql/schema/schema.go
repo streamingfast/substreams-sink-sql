@@ -64,11 +64,13 @@ func (s *Schema) init(rootMessageDescriptor *desc.MessageDescriptor) error {
 			return nil
 		}
 		table, err := NewTable(md, tableInfo, ordinal)
-		s.logger.Debug("created table message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Int("ordinal", ordinal), zap.String("table_name", table.Name))
 		if err != nil {
 			return fmt.Errorf("creating table message descriptor: %w", err)
 		}
-		s.TableRegistry[tableInfo.Name] = table
+		if table != nil {
+			s.logger.Debug("created table message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Int("ordinal", ordinal), zap.String("table_name", table.Name))
+			s.TableRegistry[tableInfo.Name] = table
+		}
 		return nil
 	})
 

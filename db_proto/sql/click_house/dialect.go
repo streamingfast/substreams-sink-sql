@@ -74,6 +74,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	}
 
 	sb.WriteString(" block_number Int64 NOT NULL,")
+	sb.WriteString(" block_timestamp timestamp NOT NULL,")
 
 	if table.ChildOf != nil {
 		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
