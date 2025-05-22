@@ -197,7 +197,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	}
 
 	orderBy := strings.Join(orderByFields, ",")
-	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree() ORDER BY (%s);", orderBy))
+	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree() PARTITION BY (toYYYYMM(block_timestamp)) ORDER BY (%s);", orderBy))
 
 	//sb.WriteString(");\n")
 
