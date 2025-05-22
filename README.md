@@ -4,17 +4,17 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
 
 ### Quickstart
 
+In the following example, you will use the Pump.Fun Substreams to dump the decoded instructions and events to the database.
+
 1. Install `substreams-sink-sql` from Brew with `brew install streamingfast/tap/substreams-sink-sql` or by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-sql/releases) (extract `substreams-sink-sql` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable).
 
-1. Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project:
+1. Clone the [Pump.Fun GitHub Substreams repository](https://github.com/streamingfast/substreams-solana-pump-fun), and build the project
 
    ```bash
-   cd docs/tutorial
-   cargo build --target wasm32-unknown-unknown --release
-   cd ../..
-   ```
+   git clone https://github.com/streamingfast/substreams-solana-pump-fun
 
-   This creates the following WASM file: `target/wasm32-unknown-unknown/release/substreams_postgresql_sink_tutorial.wasm`
+   substreams build
+   ```
 
 1. Start Docker Compose in the background:
 
@@ -48,41 +48,24 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
 
    Now that the code is compiled and the database is set up, let launch the `sink` process.
 
-   > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
+   > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://docs.substreams.dev/reference-material/substreams-cli/authentication) to obtain one.
 
-   ```shell
-   substreams-sink-sql run $DSN docs/tutorial/substreams.yaml
+   ```bash
+   substreams-sink-sql from-proto $DSN ./substreams.yaml --no-proto-option
    ```
 
 ### Different Options to Run the Sink
 
 There are different ways in which you can run the SQL sink, depending on your use case and the level complexity that you need:
 
-#### Using `from-proto` Without Annotations
+#### Relational Mappings
 
-The simplest way is to let the sink infer your database schema by using the `substreams-sink-sql from-proto` command.
+**NOTE:** See a complete tutorial on Relational Mapping, check out [Substreams documentation]().
 
-Consider the following Protobuf output of Substreams:
-
-```protobuf
-message Pool {
-   string token0 = 1;
-   string token1 = 2;
-   uint64 created_at = 3;
-}
-```
-
-The SQL sink will **automatically** create a table called `pools` with the corresponding columns, `token0`, `token1` and `created_at`. For every new `Pool` message outputted from the Substreams, a new row will be inserted into the table.
-
-You can run the sink with the following syntax:
-
-```
-substreams-sink-sql from-proto <DSN> <SUBSTREAMS_PACKAGE>
-```
-
-#### Using `from-proto` With Annotations
-
-If you have a more complex data model, with several tables and relations among them, you can annotate the Protobuf of your Substreams to define the database constraints.
+If you need SQL relationships (primary keys and foreign keys), you can annotate your Protobuf to define the following:
+- Table names
+- Primary keys
+- Foreign keys (i.e., relationships among your entities)
 
 Consider the following Protobuf with annotations:
 
@@ -111,10 +94,17 @@ message Vault {
 }
 ```
 
-#### Using `DatabaseChanges`
+Once you have your Protobuf annotated, you can run the sink with:
 
+```bash
+substreams-sink-sql from-proto <DSN> <SUBSTREAMS_PACKAGE>
+```
 
+#### Using `db_out`
 
+**NOTE:** See a complete tutorial on `db_out`, check out the [Substreams documentation]().
+
+If you need more control over the insertion of the data, you can create a module called `db_out`, which maps the output of the Susbtreams to [[sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7)] format.
 
 ### Sink Config
 
@@ -128,7 +118,9 @@ sink:
       schema: "./schema.sql"
 ```
 
-This is used by `substreams-sink-sql` to gather all required information about how to run and configure the sink, namely the output `module`, what service is desired, `sf.substreams.sink.sql.v1.Service` here and the config that in case of Substreams:SQL contains the schema file to populate the database on `substreams-sink-sql setup` step.
+This is used by `substreams-sink-sql` to gather all required information about how to run and configure the sink, namely the output `module`, what service is desired, `sf.substreams.sink.sql.v1.Service` here. 
+
+When using `db_out`, it is mandatory to provide a `schema.sql` file, which will be used during the `substreams-sink-sql setup` step.
 
 ### Network
 
@@ -184,7 +176,9 @@ Only `psql` and `clickhouse` are supported today, adding support for a new _dial
 
 ### Output Module
 
-To be accepted by `substreams-sink-sql`, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
+If you use the `from-proto` command with annotations, the output of your Substreams will be directly mapped to database tables.
+
+If you want to manually create the mappings, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-database-change/blob/develop/proto/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
 
 - [substreams-eth-block-meta](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) (some helpers found in [db_out.rs](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6))
 
