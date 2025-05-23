@@ -166,13 +166,17 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	d.logger.Info("undoing blocks", zap.String("table", "_block_"), zap.Uint64("last_valid_block_num", lastValidBlockNum))
+	deleteBlocks := fmt.Sprintf(`DELETE FROM %s._blocks_ WHERE "number" > $1`, d.schemaName)
+	_, err = d.BaseDatabase.Tx.Exec(deleteBlocks, lastValidBlockNum)
+	if err != nil {
+		d.RollbackTransaction()
+		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
+	}
+
 	for _, table := range tables {
 		d.logger.Info("undoing blocks", zap.String("table", table.Name), zap.Uint64("last_valid_block_num", lastValidBlockNum))
-
 		query := fmt.Sprintf(`DELETE FROM %s WHERE "block_number" > $1`, d.Dialect.FullTableName(table))
-		if table.Name == "_blocks_" {
-			query = fmt.Sprintf(`DELETE FROM %s WHERE "number" > $1`, d.Dialect.FullTableName(table))
-		}
 
 		_, err = d.BaseDatabase.Tx.Exec(query, lastValidBlockNum)
 		if err != nil {

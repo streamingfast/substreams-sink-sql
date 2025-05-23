@@ -25,6 +25,7 @@ const staticSqlCreateBlock = `
 	)
 	ENGINE = ReplacingMergeTree()
 	PRIMARY KEY (number)
+	ORDER BY (number);
 `
 
 type DialectClickHouse struct {
@@ -65,6 +66,10 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	tableName := d.FullTableName(table)
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
+
+	sb.WriteString(" block_number Int64 NOT NULL,")
+	sb.WriteString(" block_timestamp timestamp NOT NULL,")
+
 	var primaryKeyFieldName string
 	if table.PrimaryKey != nil {
 		pk := table.PrimaryKey
@@ -72,9 +77,6 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		//d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
 		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor)))
 	}
-
-	sb.WriteString(" block_number Int64 NOT NULL,")
-	sb.WriteString(" block_timestamp timestamp NOT NULL,")
 
 	if table.ChildOf != nil {
 		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
@@ -196,8 +198,13 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		return fmt.Errorf("missing order by fields")
 	}
 
+	primaryKey := ""
+	if primaryKeyFieldName != "" {
+		primaryKey = fmt.Sprintf("PRIMARY KEY (%s)", primaryKeyFieldName)
+	}
+
 	orderBy := strings.Join(orderByFields, ",")
-	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree() PARTITION BY (toYYYYMM(block_timestamp)) ORDER BY (%s);", orderBy))
+	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree() PARTITION BY (toYYYYMM(block_timestamp)) %s ORDER BY (%s);", primaryKey, orderBy))
 
 	//sb.WriteString(");\n")
 

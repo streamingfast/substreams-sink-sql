@@ -229,7 +229,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				if table.PrimaryKey == nil {
 					return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
 				}
-				id := fieldValues[table.PrimaryKey.Index+1]
+				id := fieldValues[table.PrimaryKey.Index+2]
 				p = &Parent{
 					field: strings.ToLower(md.GetName()),
 					id:    id,

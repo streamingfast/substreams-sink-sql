@@ -70,6 +70,10 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 	tableName := d.FullTableName(table)
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
+
+	sb.WriteString(" block_number INTEGER NOT NULL,")
+	sb.WriteString(" block_timestamp TIMESTAMP NOT NULL,")
+
 	var primaryKeyFieldName string
 	if table.PrimaryKey != nil {
 		pk := table.PrimaryKey
@@ -77,9 +81,6 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
 		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor)))
 	}
-
-	sb.WriteString(" block_number INTEGER NOT NULL,")
-	sb.WriteString(" block_timestamp TIMESTAMP NOT NULL,")
 
 	if table.ChildOf != nil {
 		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
