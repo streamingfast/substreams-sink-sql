@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
@@ -120,6 +121,7 @@ func truncateQuery(query string) string {
 func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 	var accumulators []accumulator
 
+	start := time.Now()
 	for _, acc := range i.accumulators {
 		accumulators = append(accumulators, *acc)
 	}
@@ -128,6 +130,7 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 		return accumulators[i].ordinal < accumulators[j].ordinal
 	})
 
+	queryDuration := time.Duration(0)
 	for _, acc := range accumulators {
 		i.logger.Debug("flushing table", zap.String("table", acc.tableName), zap.Int("ordinal", acc.ordinal), zap.Int("row_count", len(acc.rowValues)))
 		if len(acc.rowValues) == 0 {
@@ -143,16 +146,20 @@ func (i *AccumulatorInserter) Flush(tx *sql.Tx) error {
 		}
 		insert = strings.Trim(b.String(), ",")
 
+		qStart := time.Now()
 		_, err := tx.Exec(insert)
 		if err != nil {
 			return fmt.Errorf("clickhouse accumalator inserter: executing insert %s: %w", truncateQuery(insert), err)
 		}
+		queryDuration += time.Since(qStart)
 	}
 
 	//reset
 	for _, acc := range i.accumulators {
 		acc.rowValues = acc.rowValues[:0]
 	}
+
+	i.logger.Info("flushing done", zap.Duration("duration", time.Since(start)), zap.Duration("query_duration", queryDuration))
 
 	return nil
 }
