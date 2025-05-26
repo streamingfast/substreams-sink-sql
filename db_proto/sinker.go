@@ -26,6 +26,7 @@ type Sinker struct {
 	logger                *zap.Logger
 	rootMessageDescriptor *desc.MessageDescriptor
 	useConstraints        bool
+	flushLock             sync.Mutex
 }
 
 func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, useConstraints bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
@@ -151,20 +152,9 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 			}
 		}
 
-		var flushDuration time.Duration
-		var flushErr error
-		for i := 0; i < 3; i++ {
-			flushDuration, flushErr = s.db.Flush()
-			if flushErr == nil {
-				break
-			}
-			s.logger.Warn("flushing failed, retrying", zap.Error(flushErr))
-			if i < 2 {
-				time.Sleep(time.Second * time.Duration(i+1)) // Exponential backoff
-			}
-		}
-		if flushErr != nil {
-			return fmt.Errorf("flushing: %w", flushErr)
+		flushDuration, err := s.db.Flush()
+		if err != nil {
+			return fmt.Errorf("flushing: %w", err)
 		}
 
 		flushDurationPerBlock := flushDuration / time.Duration(len(holding))
