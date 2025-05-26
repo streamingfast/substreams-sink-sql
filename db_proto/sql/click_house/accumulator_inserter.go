@@ -42,7 +42,7 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*Accumulato
 	}
 	accumulators["_blocks_"] = &accumulator{
 		ordinal: -1,
-		query:   fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ", tableName(database.schemaName, "_blocks_")),
+		query:   fmt.Sprintf("INSERT INTO %s (number, hash, timestamp, version, deleted) VALUES ", tableName(database.schemaName, "_blocks_")),
 	}
 
 	//cursorQuery := fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "cursor"))
@@ -65,6 +65,8 @@ func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (s
 	var fieldNames []string
 	fieldNames = append(fieldNames, "block_number")
 	fieldNames = append(fieldNames, "block_timestamp")
+	fieldNames = append(fieldNames, "version")
+	fieldNames = append(fieldNames, "deleted")
 
 	if pk := table.PrimaryKey; pk != nil {
 		fieldNames = append(fieldNames, pk.Name)

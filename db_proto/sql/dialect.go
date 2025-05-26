@@ -15,6 +15,8 @@ type Dialect interface {
 	ApplyConstraints(tx *sql.Tx) error
 	GetTable(table string) *schema.Table
 	GetTables() []*schema.Table
+	UseVersionField() bool
+	UseDeletedField() bool
 }
 
 type BaseDialect struct {

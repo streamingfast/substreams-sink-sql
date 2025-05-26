@@ -49,7 +49,7 @@ func NewDatabase(
 
 func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time) error {
 	d.logger.Debug("inserting _block_", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
-	err := d.BaseDatabase.Inserter.Insert("_blocks_", []any{blockNum, hash, timestamp}, d.WrapInsertStatement)
+	err := d.BaseDatabase.Inserter.Insert("_blocks_", []any{blockNum, hash, timestamp, time.Now().UnixNano(), false}, d.WrapInsertStatement)
 	if err != nil {
 		return fmt.Errorf("inserting block %d: %w", blockNum, err)
 	}
@@ -166,23 +166,74 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
+	version := time.Now().UnixNano()
+
 	d.logger.Info("undoing blocks", zap.String("table", "_block_"), zap.Uint64("last_valid_block_num", lastValidBlockNum))
-	deleteBlocks := fmt.Sprintf(`DELETE FROM %s._blocks_ WHERE "number" > $1`, d.schemaName)
-	_, err = d.BaseDatabase.Tx.Exec(deleteBlocks, lastValidBlockNum)
+	start := time.Now()
+	insertDeleteBlocks := fmt.Sprintf(`
+		INSERT INTO %s._blocks_
+		SELECT number, hash, timestamp, %d, true 
+		FROM %s._blocks_ WHERE number > %d
+		`, d.schemaName, version, d.schemaName, lastValidBlockNum)
+	result, err := d.BaseDatabase.Tx.Exec(insertDeleteBlocks, lastValidBlockNum)
 	if err != nil {
 		d.RollbackTransaction()
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 	}
+	rowEffected, err := result.RowsAffected()
+	if err != nil {
+		d.RollbackTransaction()
+		return fmt.Errorf("fetching rows affected: %w", err)
+	}
+	d.logger.Info("undo completed", zap.String("table", "_block_"), zap.Int64("row_affected", rowEffected), zap.Duration("duration", time.Since(start)))
 
 	for _, table := range tables {
 		d.logger.Info("undoing blocks", zap.String("table", table.Name), zap.Uint64("last_valid_block_num", lastValidBlockNum))
-		query := fmt.Sprintf(`DELETE FROM %s WHERE "block_number" > $1`, d.Dialect.FullTableName(table))
+		start := time.Now()
+		tableFullName := d.Dialect.FullTableName(table)
+		fields := ""
 
-		_, err = d.BaseDatabase.Tx.Exec(query, lastValidBlockNum)
+		dialect := d.Dialect.(*DialectClickHouse)
+		if table.ChildOf != nil {
+			parentTable, parentFound := dialect.TableRegistry[table.ChildOf.ParentTable]
+			if !parentFound {
+				return fmt.Errorf("parent table %q not found", table.ChildOf.ParentTable)
+			}
+			fieldFound := false
+			for _, parentField := range parentTable.Columns {
+
+				if parentField.Name == table.ChildOf.ParentTableField {
+					fields += fmt.Sprintf(", %s", parentField.Name)
+					fieldFound = true
+					break
+				}
+			}
+			if !fieldFound {
+				return fmt.Errorf("field %q not found in table %q", table.ChildOf.ParentTableField, table.ChildOf.ParentTable)
+			}
+		}
+
+		for _, column := range table.Columns {
+			fields += fmt.Sprintf(", %s", column.Name)
+		}
+		query := fmt.Sprintf(`
+			INSERT INTO %s
+			SELECT block_number, block_timestamp, %d, true %s 
+			FROM %s WHERE block_number > %d
+			`, tableFullName, version, fields, tableFullName, lastValidBlockNum)
+
+		result, err = d.BaseDatabase.Tx.Exec(query, lastValidBlockNum)
 		if err != nil {
 			d.RollbackTransaction()
 			return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 		}
+
+		rowEffected, err = result.RowsAffected()
+		if err != nil {
+			d.RollbackTransaction()
+			return fmt.Errorf("fetching rows affected: %w", err)
+		}
+		d.logger.Info("undo completed", zap.String("table", table.Name), zap.Int64("row_affected", rowEffected), zap.Duration("duration", time.Since(start)))
 	}
 	err = d.CommitTransaction()
 	if err != nil {

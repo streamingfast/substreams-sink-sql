@@ -59,6 +59,13 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 	return d, nil
 }
 
+func (d *DialectPostgres) UseVersionField() bool {
+	return false
+}
+func (d *DialectPostgres) UseDeletedField() bool {
+	return false
+}
+
 func (d *DialectPostgres) init() error {
 	d.AddPrimaryKeySql("_blocks_", fmt.Sprintf("alter table %s._blocks_ add constraint block_pk primary key (number);", d.schemaName))
 	return nil

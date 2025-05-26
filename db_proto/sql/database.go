@@ -151,6 +151,17 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	fieldValues = append(fieldValues, blockNum)
 	fieldValues = append(fieldValues, blockTimestamp)
 
+	primaryKeyOffset := 2
+	if d.Dialect.UseVersionField() {
+		fieldValues = append(fieldValues, time.Now().UnixNano())
+		primaryKeyOffset += 1
+	}
+
+	if d.Dialect.UseDeletedField() {
+		fieldValues = append(fieldValues, false)
+		primaryKeyOffset += 1
+	}
+
 	md := dm.GetMessageDescriptor()
 	tableInfo := proto.TableInfo(md)
 
@@ -229,7 +240,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 				if table.PrimaryKey == nil {
 					return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
 				}
-				id := fieldValues[table.PrimaryKey.Index+2]
+				id := fieldValues[table.PrimaryKey.Index+primaryKeyOffset]
 				p = &Parent{
 					field: strings.ToLower(md.GetName()),
 					id:    id,

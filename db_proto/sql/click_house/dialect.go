@@ -21,9 +21,13 @@ const staticSqlCreateBlock = `
 	CREATE TABLE IF NOT EXISTS %s._blocks_  (
 		number    integer,
 		hash      text,
-		timestamp timestamp
+		timestamp timestamp,
+		version Int64,
+		deleted bool
+	                                        
 	)
-	ENGINE = ReplacingMergeTree()
+	ENGINE = ReplacingMergeTree(version)
+	PARTITION BY (toYYYYMM(timestamp))		
 	PRIMARY KEY (number)
 	ORDER BY (number);
 `
@@ -54,6 +58,14 @@ func NewDialectClickHouse(schemaName string, tableRegistry map[string]*schema.Ta
 	return d, nil
 }
 
+func (d *DialectClickHouse) UseVersionField() bool {
+	return true
+}
+
+func (d *DialectClickHouse) UseDeletedField() bool {
+	return true
+}
+
 func (d *DialectClickHouse) init() error {
 	//d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
 
@@ -69,6 +81,8 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 	sb.WriteString(" block_number Int64 NOT NULL,")
 	sb.WriteString(" block_timestamp timestamp NOT NULL,")
+	sb.WriteString(" version Int64 NOT NULL,")
+	sb.WriteString(" deleted bool NOT NULL,")
 
 	var primaryKeyFieldName string
 	if table.PrimaryKey != nil {
@@ -204,7 +218,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	}
 
 	orderBy := strings.Join(orderByFields, ",")
-	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree() PARTITION BY (toYYYYMM(block_timestamp)) %s ORDER BY (%s);", primaryKey, orderBy))
+	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree(version) PARTITION BY (toYYYYMM(block_timestamp)) %s ORDER BY (%s);", primaryKey, orderBy))
 
 	//sb.WriteString(");\n")
 
