@@ -2,6 +2,7 @@ package clickhouse
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"os"
@@ -72,14 +73,21 @@ func (d *Database) Open() error {
 }
 
 func newClient(dsn *db.DSN) (*ch.Client, error) {
-	client, err := ch.Dial(context.Background(), ch.Options{
+	chOption := ch.Options{
 		Address:     fmt.Sprintf("%s:%d", dsn.Host, dsn.Port),
 		Database:    dsn.Database,
 		User:        dsn.Username,
 		Password:    dsn.Password,
 		Compression: ch.CompressionLZ4,
 		DialTimeout: 30 * time.Second,
-	})
+	}
+
+	for _, option := range dsn.Options {
+		if option == "secure=true" {
+			chOption.TLS = &tls.Config{}
+		}
+	}
+	client, err := ch.Dial(context.Background(), chOption)
 
 	if err != nil {
 		return nil, fmt.Errorf("dialing clickhouse: %w", err)
