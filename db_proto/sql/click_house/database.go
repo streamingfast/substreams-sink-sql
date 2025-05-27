@@ -85,10 +85,12 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 	for _, option := range dsn.Options {
 		parts := strings.Split(option, "=")
 		if parts[0] == "secure" {
+			fmt.Println("Grrrrr: using secure")
 			chOption.TLS = &tls.Config{}
 			continue
 		}
 		if parts[0] == "username" {
+			fmt.Println("Grrrrr: using username")
 			chOption.User = parts[1]
 			continue
 		}
@@ -97,6 +99,7 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 			continue
 		}
 		if parts[0] == "compress" && parts[1] == "true" {
+			fmt.Println("Grrrrr: using compression")
 			chOption.Compression = ch.CompressionLZ4
 			continue
 		}

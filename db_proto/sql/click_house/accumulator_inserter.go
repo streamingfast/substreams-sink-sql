@@ -170,6 +170,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 const maxErrorQueryLength = 256
 
 func (i *AccumulatorInserter) flush(database *Database) error {
+	i.logger.Info("flushing started", zap.Int("accumulators", len(i.accumulators)))
 	var accumulators []accumulator
 
 	start := time.Now()
