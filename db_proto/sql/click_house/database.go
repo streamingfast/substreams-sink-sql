@@ -79,7 +79,6 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 		Database:    dsn.Database,
 		User:        dsn.Username,
 		Password:    dsn.Password,
-		Compression: ch.CompressionLZ4,
 		DialTimeout: 30 * time.Second,
 	}
 
@@ -95,6 +94,11 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 		}
 		if parts[0] == "password" {
 			chOption.Password = parts[1]
+			continue
+		}
+		if parts[0] == "compress" {
+			chOption.Compression = ch.CompressionLZ4
+			continue
 		}
 	}
 
