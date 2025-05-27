@@ -96,7 +96,7 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 			chOption.Password = parts[1]
 			continue
 		}
-		if parts[0] == "compress" {
+		if parts[0] == "compress" && parts[1] == "true" {
 			chOption.Compression = ch.CompressionLZ4
 			continue
 		}
