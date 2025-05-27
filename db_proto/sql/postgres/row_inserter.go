@@ -20,45 +20,51 @@ type RowInserter struct {
 	logger           *zap.Logger
 }
 
-func NewRowInserter(database *Database, logger *zap.Logger) (*RowInserter, error) {
+func NewRowInserter(logger *zap.Logger) (*RowInserter, error) {
 	logger = logger.Named("postgres inserter")
-	tables := database.Dialect.GetTables()
+
+	return &RowInserter{
+		logger: logger,
+	}, nil
+}
+
+func (i *RowInserter) init(database *Database) error {
+	tables := database.dialect.GetTables()
 	insertStatements := map[string]*sql.Stmt{}
 	insertQueries := map[string]string{}
 
 	for _, table := range tables {
-		query, err := createInsertFromDescriptor(table, database.Dialect)
+		query, err := createInsertFromDescriptor(table, database.dialect)
 		if err != nil {
-			return nil, fmt.Errorf("creating insert from descriptor for table %q: %w", table.Name, err)
+			return fmt.Errorf("creating insert from descriptor for table %q: %w", table.Name, err)
 		}
 		insertQueries[table.Name] = query
 
-		stmt, err := database.DB.Prepare(query)
+		stmt, err := database.db.Prepare(query)
 		if err != nil {
-			return nil, fmt.Errorf("preparing statement %q: %w", query, err)
+			return fmt.Errorf("preparing statement %q: %w", query, err)
 		}
 		insertStatements[table.Name] = stmt
 	}
 
-	insertQueries["_blocks_"] = fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(database.schemaName, "_blocks_"))
-	bs, err := database.DB.Prepare(insertQueries["_blocks_"])
+	insertQueries["_blocks_"] = fmt.Sprintf("INSERT INTO %s (number, hash, timestamp) VALUES ($1, $2, $3) RETURNING number", tableName(database.schema.Name, "_blocks_"))
+	bs, err := database.db.Prepare(insertQueries["_blocks_"])
 	if err != nil {
-		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["_blocks_"], err)
+		return fmt.Errorf("preparing statement %q: %w", insertQueries["_blocks_"], err)
 	}
 	insertStatements["_blocks_"] = bs
 
-	insertQueries["_cursor_"] = fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schemaName, "_cursor_"))
-	cs, err := database.DB.Prepare(insertQueries["_cursor_"])
+	insertQueries["_cursor_"] = fmt.Sprintf("INSERT INTO %s (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = $2", tableName(database.schema.Name, "_cursor_"))
+	cs, err := database.db.Prepare(insertQueries["_cursor_"])
 	if err != nil {
-		return nil, fmt.Errorf("preparing statement %q: %w", insertQueries["_cursor_"], err)
+		return fmt.Errorf("preparing statement %q: %w", insertQueries["_cursor_"], err)
 	}
 	insertStatements["_cursor_"] = cs
 
-	return &RowInserter{
-		insertStatements: insertStatements,
-		insertQueries:    insertQueries,
-		logger:           logger,
-	}, nil
+	i.insertQueries = insertQueries
+	i.insertStatements = insertStatements
+
+	return nil
 }
 
 func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (string, error) {
@@ -76,6 +82,8 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 
 	fieldCount++
 	fieldNames = append(fieldNames, "block_number")
+	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
+	fieldCount++
 	fieldNames = append(fieldNames, "block_timestamp")
 	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 
@@ -112,10 +120,10 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 
 }
 
-func (i *RowInserter) Insert(table string, values []any, txWrapper func(stmt *sql.Stmt) *sql.Stmt) error {
+func (i *RowInserter) insert(table string, values []any, database *Database) error {
 	i.logger.Debug("inserting row", zap.String("table", table), zap.Any("values", values))
 	stmt := i.insertStatements[table]
-	stmt = txWrapper(stmt)
+	stmt = database.wrapInsertStatement(stmt)
 
 	for i, value := range values {
 		switch v := value.(type) {
@@ -137,6 +145,6 @@ func (i *RowInserter) Insert(table string, values []any, txWrapper func(stmt *sq
 	return nil
 }
 
-func (i *RowInserter) Flush(tx *sql.Tx) error {
+func (i *RowInserter) flush(database *Database) error {
 	return nil
 }

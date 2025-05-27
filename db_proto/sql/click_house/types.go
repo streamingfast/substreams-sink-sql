@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/ch-go/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -74,6 +75,40 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 		return TypeVarchar
 	default:
 		panic(fmt.Sprintf("unsupported type: %s", t))
+	}
+}
+
+func ColInputForColumn(fd *desc.FieldDescriptor) proto.ColInput {
+	switch fd.GetType() {
+	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
+		switch fd.GetMessageType().GetFullyQualifiedName() {
+		case "google.protobuf.Timestamp":
+			return &proto.ColDateTime{}
+		default:
+			panic(fmt.Sprintf("Message type not supported: %s", fd.GetMessageType().GetFullyQualifiedName()))
+		}
+	case descriptor.FieldDescriptorProto_TYPE_ENUM:
+		return &proto.ColInt32{}
+	case descriptor.FieldDescriptorProto_TYPE_BOOL:
+		return &proto.ColBool{}
+	case descriptor.FieldDescriptorProto_TYPE_INT32, descriptor.FieldDescriptorProto_TYPE_SINT32, descriptor.FieldDescriptorProto_TYPE_SFIXED32:
+		return &proto.ColInt32{}
+	case descriptor.FieldDescriptorProto_TYPE_INT64, descriptor.FieldDescriptorProto_TYPE_SINT64, descriptor.FieldDescriptorProto_TYPE_SFIXED64:
+		return &proto.ColInt64{}
+	case descriptor.FieldDescriptorProto_TYPE_UINT64, descriptor.FieldDescriptorProto_TYPE_FIXED64:
+		return &proto.ColUInt64{}
+	case descriptor.FieldDescriptorProto_TYPE_UINT32, descriptor.FieldDescriptorProto_TYPE_FIXED32:
+		return &proto.ColUInt32{}
+	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
+		return &proto.ColFloat64{}
+	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
+		return &proto.ColFloat64{}
+	case descriptor.FieldDescriptorProto_TYPE_STRING:
+		return &proto.ColStr{}
+	case descriptor.FieldDescriptorProto_TYPE_BYTES:
+		return &proto.ColBytes{}
+	default:
+		panic(fmt.Sprintf("unsupported type: %s", fd.GetType()))
 	}
 }
 

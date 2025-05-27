@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/jhump/protoreflect/desc"
@@ -187,39 +186,20 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	connectionString := dsn.ConnString()
-
-	zlog.Info("connecting to db", zap.String("dsn", connectionString))
-	sqlDB, err := sql.Open(dsn.Driver(), connectionString)
-	if err != nil {
-		return fmt.Errorf("open db connection: %w", err)
-	}
-
-	var dialect protosql.Dialect
 	var database protosql.Database
 
 	switch dsn.Driver() {
 	case "postgres":
-		d, err := postgres.NewDialectPostgres(schema.Name, schema.TableRegistry, zlog)
-		if err != nil {
-			return fmt.Errorf("creating postgres dialect: %w", err)
-		}
-		dialect = d
-		database, err = postgres.NewDatabase(schemaName, d, sqlDB, outputModuleName, rootMessageDescriptor, useProtoOption, zlog)
+		database, err = postgres.NewDatabase(schema, dsn, outputModuleName, rootMessageDescriptor, useProtoOption, useConstraints, zlog)
 		if err != nil {
 			return fmt.Errorf("creating postgres database: %w", err)
 		}
 
 	case "clickhouse":
-		d, err := clickhouse.NewDialectClickHouse(schema.Name, schema.TableRegistry, zlog)
-		if err != nil {
-			return fmt.Errorf("creating clickhouse dialect: %w", err)
-		}
-		dialect = d
 		database, err = clickhouse.NewDatabase(
-			schemaName,
-			d,
-			sqlDB,
+			cmd.Context(),
+			schema,
+			dsn,
 			outputModuleName,
 			rootMessageDescriptor,
 			sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
@@ -245,13 +225,13 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("begin transaction: %w", err)
 		}
-		err = database.CreateDatabase(useConstraints, schemaName)
+		err = database.CreateDatabase(useConstraints)
 		if err != nil {
 			database.RollbackTransaction()
 			return fmt.Errorf("creating database: %w", err)
 		}
 
-		err = database.StoreSinkInfo(schemaName, dialect.SchemaHash())
+		err = database.StoreSinkInfo(schemaName, database.GetDialect().SchemaHash())
 		if err != nil {
 			database.RollbackTransaction()
 			return fmt.Errorf("storing sink info: %w", err)
@@ -260,10 +240,10 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		err = database.CommitTransaction()
 
 	} else {
-		migrationNeeded := sinkInfo.SchemaHash != dialect.SchemaHash()
+		migrationNeeded := sinkInfo.SchemaHash != database.GetDialect().SchemaHash()
 		if migrationNeeded {
 
-			tempSchemaName := schema.Name + "_" + dialect.SchemaHash()
+			tempSchemaName := schema.Name + "_" + database.GetDialect().SchemaHash()
 			tempSinkInfo, err := database.FetchSinkInfo(tempSchemaName)
 			if err != nil {
 				return fmt.Errorf("fetching temp schema sink info: %w", err)
@@ -308,27 +288,10 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	var inserter protosql.Inserter
-	switch dsn.Driver() {
-	case "postgres":
-		if useConstraints {
-			inserter, err = postgres.NewRowInserter(database.(*postgres.Database), zlog)
-			if err != nil {
-				return fmt.Errorf("creating row inserter: %w", err)
-			}
-		} else {
-			inserter, err = postgres.NewAccumulatorInserter(database.(*postgres.Database), zlog)
-			if err != nil {
-				return fmt.Errorf("creating accumulator inserter: %w", err)
-			}
-		}
-	case "clickhouse":
-		inserter, err = clickhouse.NewAccumulatorInserter(database.(*clickhouse.Database), zlog)
-	default:
-		panic(fmt.Sprintf("unsupported driver: %s", dsn.Driver()))
+	err = database.Open()
+	if err != nil {
+		return fmt.Errorf("opening database: %w", err)
 	}
-
-	database.SetInserter(inserter)
 
 	stats := stats2.NewStats(zlog)
 	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, useConstraints, blockBatchSize, parallel, stats, zlog)

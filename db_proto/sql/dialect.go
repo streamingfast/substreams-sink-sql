@@ -1,8 +1,6 @@
 package sql
 
 import (
-	"database/sql"
-
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
@@ -11,8 +9,6 @@ import (
 type Dialect interface {
 	SchemaHash() string
 	FullTableName(table *schema.Table) string
-	CreateDatabase(tx *sql.Tx) error
-	ApplyConstraints(tx *sql.Tx) error
 	GetTable(table string) *schema.Table
 	GetTables() []*schema.Table
 	UseVersionField() bool

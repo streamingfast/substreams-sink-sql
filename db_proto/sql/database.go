@@ -1,7 +1,6 @@
 package sql
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -20,8 +19,7 @@ type Database interface {
 	UpdateSinkInfoHash(schemaName string, newHash string) error
 	StoreSinkInfo(schemaName string, schemaHash string) error
 
-	CreateDatabase(useConstraints bool, schemaName string) error
-	SetInserter(inserter Inserter)
+	CreateDatabase(useConstraints bool) error
 	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent) (time.Duration, error)
 	InsertBlock(blockNum uint64, hash string, timestamp time.Time) error
 
@@ -37,31 +35,24 @@ type Database interface {
 
 	DatabaseHash(schemaName string) (uint64, error)
 
+	GetDialect() Dialect
+
 	Clone() Database
+	Open() error
 }
 
 type BaseDatabase struct {
-	DB                    *sql.DB
 	logger                *zap.Logger
 	mapOutputType         string
 	insertStatements      map[string]*sql.Stmt
 	RootMessageDescriptor *desc.MessageDescriptor
-	Tx                    *sql.Tx
-	Dialect               Dialect
-	Inserter              Inserter
 	useProtoOptions       bool
 }
 
-func NewBaseDatabase(sqlDialect Dialect, db *sql.DB, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, logger *zap.Logger) (database *BaseDatabase, err error) {
+func NewBaseDatabase(moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, logger *zap.Logger) (database *BaseDatabase, err error) {
 	logger = logger.Named("database")
 
-	if reachable, err := isDatabaseReachable(db); !reachable {
-		return nil, fmt.Errorf("database not reachable: %w", err)
-	}
-
 	return &BaseDatabase{
-		Dialect:               sqlDialect,
-		DB:                    db,
 		logger:                logger,
 		mapOutputType:         moduleOutputType,
 		RootMessageDescriptor: rootMessageDescriptor,
@@ -70,26 +61,8 @@ func NewBaseDatabase(sqlDialect Dialect, db *sql.DB, moduleOutputType string, ro
 	}, nil
 }
 
-func (d *BaseDatabase) CreateDatabase(useConstraints bool, schemaName string) error {
-	err := d.Dialect.CreateDatabase(d.Tx)
-	if err != nil {
-		return fmt.Errorf("creating database: %w", err)
-	}
-
-	if useConstraints {
-		err = d.Dialect.ApplyConstraints(d.Tx)
-		if err != nil {
-			return fmt.Errorf("applying constraints: %w", err)
-		}
-	}
-
-	return nil
-}
-
 func (d *BaseDatabase) BaseClone() *BaseDatabase {
 	return &BaseDatabase{
-		Dialect:               d.Dialect,
-		DB:                    d.DB,
 		logger:                d.logger,
 		mapOutputType:         d.mapOutputType,
 		RootMessageDescriptor: d.RootMessageDescriptor,
@@ -97,52 +70,12 @@ func (d *BaseDatabase) BaseClone() *BaseDatabase {
 	}
 }
 
-func (d *BaseDatabase) BeginTransaction() (err error) {
-	d.Tx, err = d.DB.Begin()
-	if err != nil {
-		return fmt.Errorf("beginning transaction: %w", err)
-	}
-	return nil
-}
-
-func (d *BaseDatabase) CommitTransaction() (err error) {
-	err = d.Tx.Commit()
-	if err != nil {
-		return fmt.Errorf("committing transaction: %w", err)
-	}
-	d.Tx = nil
-	return nil
-}
-
-func (d *BaseDatabase) RollbackTransaction() {
-	err := d.Tx.Rollback()
-	if err != nil {
-		panic("RollbackTransaction failed: " + err.Error())
-	}
-}
-
-func (d *BaseDatabase) Flush() (time.Duration, error) {
-	startFlush := time.Now()
-	err := d.Inserter.Flush(d.Tx)
-	if err != nil {
-		return 0, fmt.Errorf("flushing: %w", err)
-	}
-	return time.Since(startFlush), nil
-}
-
-func (d *BaseDatabase) WrapInsertStatement(stmt *sql.Stmt) *sql.Stmt {
-	if d.Tx != nil {
-		stmt = d.Tx.Stmt(stmt)
-	}
-	return stmt
-}
-
 type Parent struct {
 	field string
 	id    interface{}
 }
 
-func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent) (time.Duration, error) {
+func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent, dialect Dialect, inserter Inserter) (time.Duration, error) {
 	if dm == nil {
 		return 0, fmt.Errorf("received a nil message")
 	}
@@ -152,12 +85,12 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	fieldValues = append(fieldValues, blockTimestamp)
 
 	primaryKeyOffset := 2
-	if d.Dialect.UseVersionField() {
+	if dialect.UseVersionField() {
 		fieldValues = append(fieldValues, time.Now().UnixNano())
 		primaryKeyOffset += 1
 	}
 
-	if d.Dialect.UseDeletedField() {
+	if dialect.UseDeletedField() {
 		fieldValues = append(fieldValues, false)
 		primaryKeyOffset += 1
 	}
@@ -174,7 +107,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	d.logger.Debug("Walking message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Any("table_info", tableInfo))
 	primaryKey := ""
 	if tableInfo != nil {
-		if table := d.Dialect.GetTable(tableInfo.Name); table != nil {
+		if table := dialect.GetTable(tableInfo.Name); table != nil {
 			if table.PrimaryKey != nil {
 				primaryKey = table.PrimaryKey.Name
 				pkValue := dm.GetFieldByName(primaryKey)
@@ -229,9 +162,9 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 
 	if tableInfo != nil {
 		insertStartAt := time.Now()
-		table := d.Dialect.GetTable(tableInfo.Name)
+		table := dialect.GetTable(tableInfo.Name)
 		if table != nil {
-			err := d.Inserter.Insert(table.Name, fieldValues, d.WrapInsertStatement)
+			err := inserter.Insert(table.Name, fieldValues)
 			if err != nil {
 				fmt.Printf("fieldValues: %v\n", fieldValues)
 				return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
@@ -251,7 +184,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	}
 
 	for _, fm := range childs {
-		sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, blockTimestamp, p)
+		sqlDuration, err := d.WalkMessageDescriptorAndInsertWithDialect(fm, blockNum, blockTimestamp, p, dialect, inserter)
 		if err != nil {
 			return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
 		}
@@ -261,20 +194,6 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsert(dm *dynamic.Message, block
 	return totalSqlDuration, nil
 }
 
-func (d *BaseDatabase) SetInserter(inserter Inserter) {
-	d.Inserter = inserter
-}
-
 type SinkInfo struct {
 	SchemaHash string `json:"schema_hash"`
-}
-
-func isDatabaseReachable(db *sql.DB) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	err := db.PingContext(ctx)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }

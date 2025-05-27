@@ -1,13 +1,11 @@
 package clickhouse
 
 import (
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
-	"time"
 
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
@@ -37,10 +35,10 @@ type DialectClickHouse struct {
 	schemaName string
 }
 
-func NewDialectClickHouse(schemaName string, tableRegistry map[string]*schema.Table, logger *zap.Logger) (*DialectClickHouse, error) {
+func NewDialectClickHouse(schema *schema.Schema, logger *zap.Logger) (*DialectClickHouse, error) {
 	d := &DialectClickHouse{
-		BaseDialect: sql2.NewBaseDialect(tableRegistry, logger),
-		schemaName:  schemaName,
+		BaseDialect: sql2.NewBaseDialect(schema.TableRegistry, logger),
+		schemaName:  schema.Name,
 	}
 
 	err := d.init()
@@ -48,7 +46,7 @@ func NewDialectClickHouse(schemaName string, tableRegistry map[string]*schema.Ta
 		return nil, fmt.Errorf("initializing dialect: %w", err)
 	}
 
-	for _, table := range tableRegistry {
+	for _, table := range schema.TableRegistry {
 		err := d.createTable(table)
 		if err != nil {
 			return nil, fmt.Errorf("handling table %q: %w", table.Name, err)
@@ -229,53 +227,53 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 }
 
-func (d *DialectClickHouse) CreateDatabase(tx *sql.Tx) error {
-	_, err := tx.Exec(fmt.Sprintf(staticSqlCreatDatabase, d.schemaName))
-	if err != nil {
-		return fmt.Errorf("executing static staticSqlCreatDatabase: %w\n%s", err, staticSqlCreatDatabase)
-	}
+//func (d *DialectClickHouse) CreateDatabase() error {
+//	_, err := tx.Exec(fmt.Sprintf(staticSqlCreatDatabase, d.schemaName))
+//	if err != nil {
+//		return fmt.Errorf("executing static staticSqlCreatDatabase: %w\n%s", err, staticSqlCreatDatabase)
+//	}
+//
+//	_, err = tx.Exec(fmt.Sprintf(staticSqlCreateBlock, d.schemaName))
+//	if err != nil {
+//		return fmt.Errorf("executing static staticSqlCreateBlock: %w\n%s", err, staticSqlCreateBlock)
+//	}
+//
+//	for _, statement := range d.CreateTableSql {
+//		d.Logger.Info("executing create statement", zap.String("sql", statement))
+//		_, err := tx.Exec(statement)
+//		if err != nil {
+//			return fmt.Errorf("executing create statement: %w %s", err, statement)
+//		}
+//	}
+//	return nil
+//}
 
-	_, err = tx.Exec(fmt.Sprintf(staticSqlCreateBlock, d.schemaName))
-	if err != nil {
-		return fmt.Errorf("executing static staticSqlCreateBlock: %w\n%s", err, staticSqlCreateBlock)
-	}
-
-	for _, statement := range d.CreateTableSql {
-		d.Logger.Info("executing create statement", zap.String("sql", statement))
-		_, err := tx.Exec(statement)
-		if err != nil {
-			return fmt.Errorf("executing create statement: %w %s", err, statement)
-		}
-	}
-	return nil
-}
-
-func (d *DialectClickHouse) ApplyConstraints(tx *sql.Tx) error {
-	startAt := time.Now()
-	for _, constraint := range d.PrimaryKeySql {
-		d.Logger.Info("executing pk statement", zap.String("sql", constraint.Sql))
-		_, err := tx.Exec(constraint.Sql)
-		if err != nil {
-			return fmt.Errorf("executing pk statement: %w %s", err, constraint.Sql)
-		}
-	}
-	for _, constraint := range d.UniqueConstraintSql {
-		d.Logger.Info("executing unique statement", zap.String("sql", constraint.Sql))
-		_, err := tx.Exec(constraint.Sql)
-		if err != nil {
-			return fmt.Errorf("executing unique statement: %w %s", err, constraint.Sql)
-		}
-	}
-	for _, constraint := range d.ForeignKeySql {
-		d.Logger.Info("executing fk constraint statement", zap.String("sql", constraint.Sql))
-		_, err := tx.Exec(constraint.Sql)
-		if err != nil {
-			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.Sql)
-		}
-	}
-	d.Logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
-	return nil
-}
+//func (d *DialectClickHouse) ApplyConstraints(tx *sql.Tx) error {
+//	startAt := time.Now()
+//	for _, constraint := range d.PrimaryKeySql {
+//		d.Logger.Info("executing pk statement", zap.String("sql", constraint.Sql))
+//		_, err := tx.Exec(constraint.Sql)
+//		if err != nil {
+//			return fmt.Errorf("executing pk statement: %w %s", err, constraint.Sql)
+//		}
+//	}
+//	for _, constraint := range d.UniqueConstraintSql {
+//		d.Logger.Info("executing unique statement", zap.String("sql", constraint.Sql))
+//		_, err := tx.Exec(constraint.Sql)
+//		if err != nil {
+//			return fmt.Errorf("executing unique statement: %w %s", err, constraint.Sql)
+//		}
+//	}
+//	for _, constraint := range d.ForeignKeySql {
+//		d.Logger.Info("executing fk constraint statement", zap.String("sql", constraint.Sql))
+//		_, err := tx.Exec(constraint.Sql)
+//		if err != nil {
+//			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.Sql)
+//		}
+//	}
+//	d.Logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
+//	return nil
+//}
 
 func (d *DialectClickHouse) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
@@ -324,16 +322,6 @@ func (d *DialectClickHouse) SchemaHash() string {
 	for _, constraint := range uniques {
 		buf = append(buf, []byte(constraint)...)
 	}
-
-	//todo: hum... is this useful?
-	//var accumulators []string
-	//for _, sql := range d.InsertSql {
-	//	accumulators = append(accumulators, sql)
-	//}
-	//sort.Strings(accumulators)
-	//for _, sql := range accumulators {
-	//	buf = append(buf, []byte(sql)...)
-	//}
 
 	_, err := h.Write(buf)
 	if err != nil {

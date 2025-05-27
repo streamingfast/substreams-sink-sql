@@ -15,13 +15,13 @@ type DSN struct {
 	driver   string
 	original string
 
-	host     string
-	port     int64
-	username string
-	password string
-	database string
+	Host     string
+	Port     int64
+	Username string
+	Password string
+	Database string
 	schema   string
-	options  []string
+	Options  []string
 }
 
 var driverMap = map[string]string{
@@ -74,11 +74,11 @@ func ParseDSN(dsn string) (*DSN, error) {
 	d := &DSN{
 		original: dsn,
 		driver:   driver,
-		host:     host,
-		port:     port,
-		username: username,
-		password: password,
-		database: database,
+		Host:     host,
+		Port:     port,
+		Username: username,
+		Password: password,
+		Database: database,
 		schema:   "public",
 	}
 
@@ -95,7 +95,7 @@ func ParseDSN(dsn string) (*DSN, error) {
 
 		options[i] = fmt.Sprintf("%s=%s", key, strings.Join(query[key], ","))
 	}
-	d.options = options
+	d.Options = options
 	return d, nil
 }
 
@@ -105,9 +105,9 @@ func (c *DSN) Driver() string {
 
 func (c *DSN) ConnString() string {
 	if c.driver == "clickhouse" {
-		for _, option := range c.options {
-			if c.host == "localhost" {
-				c.host = "127.0.0.1"
+		for _, option := range c.Options {
+			if c.Host == "localhost" {
+				c.Host = "127.0.0.1"
 				scheme := "http"
 				if option == "secure=true" {
 					scheme = "https"
@@ -117,12 +117,12 @@ func (c *DSN) ConnString() string {
 		}
 		return c.original
 	}
-	out := fmt.Sprintf("host=%s port=%d dbname=%s %s", c.host, c.port, c.database, strings.Join(c.options, " "))
-	if c.username != "" {
-		out = out + " user=" + c.username
+	out := fmt.Sprintf("host=%s port=%d dbname=%s %s", c.Host, c.Port, c.Database, strings.Join(c.Options, " "))
+	if c.Username != "" {
+		out = out + " user=" + c.Username
 	}
-	if c.password != "" {
-		out = out + " password=" + c.password
+	if c.Password != "" {
+		out = out + " password=" + c.Password
 	}
 	return out
 }

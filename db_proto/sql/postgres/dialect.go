@@ -1,13 +1,11 @@
 package postgres
 
 import (
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
-	"time"
 
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
@@ -36,12 +34,15 @@ const postgresStaticSql = `
 type DialectPostgres struct {
 	*sql2.BaseDialect
 	schemaName string
+	//database   *Database
 }
 
-func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Table, logger *zap.Logger) (*DialectPostgres, error) {
+func NewDialectPostgres(schema *schema.Schema, logger *zap.Logger) (*DialectPostgres, error) {
+	logger = logger.Named("postgres dialect")
+
 	d := &DialectPostgres{
-		BaseDialect: sql2.NewBaseDialect(tableRegistry, logger),
-		schemaName:  schemaName,
+		BaseDialect: sql2.NewBaseDialect(schema.TableRegistry, logger),
+		schemaName:  schema.Name,
 	}
 
 	err := d.init()
@@ -49,7 +50,7 @@ func NewDialectPostgres(schemaName string, tableRegistry map[string]*schema.Tabl
 		return nil, fmt.Errorf("initializing dialect: %w", err)
 	}
 
-	for _, table := range tableRegistry {
+	for _, table := range schema.TableRegistry {
 		err := d.createTable(table)
 		if err != nil {
 			return nil, fmt.Errorf("handling table %q: %w", table.Name, err)
@@ -195,51 +196,6 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	return nil
 
-}
-
-func (d *DialectPostgres) CreateDatabase(tx *sql.Tx) error {
-	staticSql := fmt.Sprintf(postgresStaticSql, d.schemaName, d.schemaName, d.schemaName, d.schemaName)
-	_, err := tx.Exec(staticSql)
-	if err != nil {
-		return fmt.Errorf("executing static staticSql: %w\n%s", err, staticSql)
-	}
-
-	for _, statement := range d.CreateTableSql {
-		d.Logger.Info("executing create statement", zap.String("sql", statement))
-		_, err := tx.Exec(statement)
-		if err != nil {
-			return fmt.Errorf("executing create statement: %w %s", err, statement)
-		}
-	}
-	return nil
-}
-
-// todo: move to postgres database ...
-func (d *DialectPostgres) ApplyConstraints(tx *sql.Tx) error {
-	startAt := time.Now()
-	for _, constraint := range d.PrimaryKeySql {
-		d.Logger.Info("executing pk statement", zap.String("sql", constraint.Sql))
-		_, err := tx.Exec(constraint.Sql)
-		if err != nil {
-			return fmt.Errorf("executing pk statement: %w %s", err, constraint.Sql)
-		}
-	}
-	for _, constraint := range d.UniqueConstraintSql {
-		d.Logger.Info("executing unique statement", zap.String("sql", constraint.Sql))
-		_, err := tx.Exec(constraint.Sql)
-		if err != nil {
-			return fmt.Errorf("executing unique statement: %w %s", err, constraint.Sql)
-		}
-	}
-	for _, constraint := range d.ForeignKeySql {
-		d.Logger.Info("executing fk constraint statement", zap.String("sql", constraint.Sql))
-		_, err := tx.Exec(constraint.Sql)
-		if err != nil {
-			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.Sql)
-		}
-	}
-	d.Logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
-	return nil
 }
 
 func (d *DialectPostgres) FullTableName(table *schema.Table) string {

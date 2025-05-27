@@ -1,7 +1,7 @@
 package clickhouse
 
 import (
-	pqsql "database/sql"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,24 +9,33 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ClickHouse/ch-go"
 	"github.com/jhump/protoreflect/desc"
+	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
 )
 
 type Database struct {
 	*sql.BaseDatabase
-	schemaName     string
+	schema         *schema.Schema
 	sinkInfoFolder string
 	cursorFilePath string
 	logger         *zap.Logger
+	dialect        *DialectClickHouse
+	cachedClient   *ch.Client
+	dsn            *db.DSN
+	ctx            context.Context
+	inserter       *AccumulatorInserter
 }
 
 func NewDatabase(
-	schemaName string,
-	dialect *DialectClickHouse,
-	db *pqsql.DB,
+	ctx context.Context,
+	schema *schema.Schema,
+	dsn *db.DSN,
 	moduleOutputType string,
 	rootMessageDescriptor *desc.MessageDescriptor,
 	sinkInfoFolder string,
@@ -34,22 +43,146 @@ func NewDatabase(
 	useProtoOptions bool,
 	logger *zap.Logger,
 ) (*Database, error) {
-	baseDB, err := sql.NewBaseDatabase(dialect, db, moduleOutputType, rootMessageDescriptor, useProtoOptions, logger)
+	baseDB, err := sql.NewBaseDatabase(moduleOutputType, rootMessageDescriptor, useProtoOptions, logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating base database: %w", err)
 	}
-	return &Database{
+	dialect, err := NewDialectClickHouse(schema, logger)
+	database := &Database{
+		ctx:            ctx,
+		dsn:            dsn,
 		BaseDatabase:   baseDB,
-		schemaName:     schemaName,
+		dialect:        dialect,
+		schema:         schema,
 		sinkInfoFolder: sinkInfoFolder,
 		cursorFilePath: cursorFilePath,
 		logger:         logger,
-	}, nil
+	}
+	inserter, err := NewAccumulatorInserter(database, logger)
+	if err != nil {
+		return nil, fmt.Errorf("creating accumulator inserter: %w", err)
+	}
+	database.inserter = inserter
+
+	return database, nil
+}
+
+func (d *Database) Open() error {
+	return nil
+}
+
+func newClient(dsn *db.DSN) (*ch.Client, error) {
+	client, err := ch.Dial(context.Background(), ch.Options{
+		Address:     fmt.Sprintf("%s:%d", dsn.Host, dsn.Port),
+		Database:    dsn.Database,
+		User:        dsn.Username,
+		Password:    dsn.Password,
+		Compression: ch.CompressionLZ4,
+		DialTimeout: 30 * time.Second,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("dialing clickhouse: %w", err)
+	}
+	return client, nil
+}
+
+func (d *Database) client() (*ch.Client, error) {
+	if d.cachedClient == nil || d.cachedClient.IsClosed() {
+		client, err := newClient(d.dsn)
+		if err != nil {
+			return nil, fmt.Errorf("creating clickhouse client: %w", err)
+		}
+		d.cachedClient = client
+
+	}
+
+	return d.cachedClient, nil
+}
+
+func (d *Database) CreateDatabase(useConstraints bool) error {
+	client, err := d.client()
+	if err != nil {
+		return fmt.Errorf("creating clickhouse client: %w", err)
+	}
+
+	d.logger.Info("creating database", zap.String("schema_name", d.schema.Name))
+
+	err = client.Ping(d.ctx)
+	if err != nil {
+		return fmt.Errorf("pinging clickhouse: %w", err)
+	}
+
+	client, err = d.client()
+	if err != nil {
+		return fmt.Errorf("getting clickhouse client: %w", err)
+	}
+
+	if err := client.Do(d.ctx, ch.Query{
+		Body: fmt.Sprintf(staticSqlCreatDatabase, d.schema.Name),
+	}); err != nil {
+		return fmt.Errorf("executing create database sql: %w", err)
+	}
+
+	d.logger.Info("database created", zap.String("schema_name", d.schema.Name))
+
+	if err := client.Do(d.ctx, ch.Query{
+		Body: fmt.Sprintf(staticSqlCreateBlock, d.schema.Name),
+	}); err != nil {
+		return fmt.Errorf("executing create block sql: %w", err)
+	}
+
+	d.logger.Info("block table created", zap.String("schema_name", d.schema.Name))
+
+	for _, statement := range d.dialect.CreateTableSql {
+		if err := client.Do(d.ctx, ch.Query{
+			Body: statement,
+		}); err != nil {
+			return fmt.Errorf("executing create table sql: %w", err)
+		}
+		d.logger.Info("table created", zap.String("table_name", statement), zap.String("schema_name", d.schema.Name))
+	}
+
+	return nil
+}
+
+func (d *Database) Insert(table string, values []any) error {
+	return d.inserter.insert(table, values)
+}
+
+func (d *Database) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *sql.Parent) (time.Duration, error) {
+	return d.BaseDatabase.WalkMessageDescriptorAndInsertWithDialect(dm, blockNum, blockTimestamp, parent, d.dialect, d)
+}
+
+func (d *Database) BeginTransaction() error {
+	return nil
+}
+
+func (d *Database) CommitTransaction() error {
+	return nil
+}
+
+func (d *Database) RollbackTransaction() {
+}
+
+func (d *Database) Flush() (time.Duration, error) {
+	d.logger.Debug("flushing")
+
+	startFlush := time.Now()
+	err := d.inserter.flush(d)
+	if err != nil {
+		return 0, fmt.Errorf("flushing: %w", err)
+	}
+	return time.Since(startFlush), nil
+}
+
+func (d *Database) GetDialect() sql.Dialect {
+	return d.dialect
 }
 
 func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time) error {
 	d.logger.Debug("inserting _block_", zap.Uint64("block_num", blockNum), zap.String("block_hash", hash))
-	err := d.BaseDatabase.Inserter.Insert("_blocks_", []any{blockNum, hash, timestamp, time.Now().UnixNano(), false}, d.WrapInsertStatement)
+	err := d.inserter.insert("_blocks_", []any{blockNum, hash, timestamp, time.Now().UnixNano(), false})
 	if err != nil {
 		return fmt.Errorf("inserting block %d: %w", blockNum, err)
 	}
@@ -98,11 +231,12 @@ func (d *Database) StoreSinkInfo(schemaName string, schemaHash string) error {
 }
 
 func (d *Database) UpdateSinkInfoHash(schemaName string, newHash string) error {
-	_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("UPDATE %s._sink_info_ SET schema_hash = $1", schemaName), newHash)
-	if err != nil {
-		return fmt.Errorf("updating schema hash: %w", err)
-	}
-	return nil
+	panic("implement me")
+	//_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("UPDATE %s._sink_info_ SET schema_hash = $1", schemaName), newHash)
+	//if err != nil {
+	//	return fmt.Errorf("updating schema hash: %w", err)
+	//}
+	//return nil
 }
 
 func (d *Database) FetchCursor() (*sink.Cursor, error) {
@@ -153,15 +287,19 @@ func (d *Database) StoreCursor(cursor *sink.Cursor) error {
 }
 
 func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
-
-	tables := d.Dialect.GetTables()
+	tables := d.dialect.GetTables()
 
 	// Sort tables in descending order based on their Ordinal field
 	sort.Slice(tables, func(i, j int) bool {
 		return tables[i].Ordinal > tables[j].Ordinal
 	})
 
-	err := d.BeginTransaction()
+	client, err := d.client()
+	if err != nil {
+		return fmt.Errorf("creating clickhouse client: %w", err)
+	}
+
+	err = d.BeginTransaction()
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -172,30 +310,26 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 	start := time.Now()
 	insertDeleteBlocks := fmt.Sprintf(`
 		INSERT INTO %s._blocks_
-		SELECT number, hash, timestamp, %d, true 
+		SELECT number, hash, timestamp, %d, true
 		FROM %s._blocks_ WHERE number > %d
-		`, d.schemaName, version, d.schemaName, lastValidBlockNum)
-	result, err := d.BaseDatabase.Tx.Exec(insertDeleteBlocks, lastValidBlockNum)
+		`, d.schema.Name, version, d.schema.Name, lastValidBlockNum)
+
+	err = client.Do(d.ctx, ch.Query{
+		Body: insertDeleteBlocks,
+	})
 	if err != nil {
-		d.RollbackTransaction()
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 	}
-	rowEffected, err := result.RowsAffected()
-	if err != nil {
-		d.RollbackTransaction()
-		return fmt.Errorf("fetching rows affected: %w", err)
-	}
-	d.logger.Info("undo completed", zap.String("table", "_block_"), zap.Int64("row_affected", rowEffected), zap.Duration("duration", time.Since(start)))
+	d.logger.Info("undo completed", zap.String("table", "_block_"), zap.Duration("duration", time.Since(start)))
 
 	for _, table := range tables {
 		d.logger.Info("undoing blocks", zap.String("table", table.Name), zap.Uint64("last_valid_block_num", lastValidBlockNum))
 		start := time.Now()
-		tableFullName := d.Dialect.FullTableName(table)
+		tableFullName := d.dialect.FullTableName(table)
 		fields := ""
 
-		dialect := d.Dialect.(*DialectClickHouse)
 		if table.ChildOf != nil {
-			parentTable, parentFound := dialect.TableRegistry[table.ChildOf.ParentTable]
+			parentTable, parentFound := d.dialect.TableRegistry[table.ChildOf.ParentTable]
 			if !parentFound {
 				return fmt.Errorf("parent table %q not found", table.ChildOf.ParentTable)
 			}
@@ -218,22 +352,18 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		}
 		query := fmt.Sprintf(`
 			INSERT INTO %s
-			SELECT block_number, block_timestamp, %d, true %s 
+			SELECT block_number, block_timestamp, %d, true %s
 			FROM %s WHERE block_number > %d
 			`, tableFullName, version, fields, tableFullName, lastValidBlockNum)
 
-		result, err = d.BaseDatabase.Tx.Exec(query, lastValidBlockNum)
+		err := client.Do(d.ctx, ch.Query{
+			Body: query,
+		})
 		if err != nil {
-			d.RollbackTransaction()
 			return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 		}
 
-		rowEffected, err = result.RowsAffected()
-		if err != nil {
-			d.RollbackTransaction()
-			return fmt.Errorf("fetching rows affected: %w", err)
-		}
-		d.logger.Info("undo completed", zap.String("table", table.Name), zap.Int64("row_affected", rowEffected), zap.Duration("duration", time.Since(start)))
+		d.logger.Info("undo completed", zap.String("table", table.Name), zap.Duration("duration", time.Since(start)))
 	}
 	err = d.CommitTransaction()
 	if err != nil {
