@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/ch-go"
@@ -83,10 +84,20 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 	}
 
 	for _, option := range dsn.Options {
-		if option == "secure=true" {
+		parts := strings.Split(option, "=")
+		if parts[0] == "secure" {
 			chOption.TLS = &tls.Config{}
+			continue
+		}
+		if parts[0] == "username" {
+			chOption.User = parts[1]
+			continue
+		}
+		if parts[0] == "password" {
+			chOption.Password = parts[1]
 		}
 	}
+
 	client, err := ch.Dial(context.Background(), chOption)
 
 	if err != nil {
