@@ -189,11 +189,15 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 
 	queryDuration := time.Duration(0)
 
+	rowCount := 0
 	for _, acc := range accumulators {
 		qStart := time.Now()
 
 		input := proto.Input{}
 		for n, i := range acc.input {
+			if n == "block_number" {
+				rowCount += i.Rows()
+			}
 			input = append(input, proto.InputColumn{
 				Name: n,
 				Data: i,
@@ -217,7 +221,7 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 	}
 	i.accumulators = accs
 
-	i.logger.Info("flushing done", zap.Duration("duration", time.Since(start)), zap.Duration("query_duration", queryDuration))
+	i.logger.Info("flushing done", zap.Duration("duration", time.Since(start)), zap.Int("rows", rowCount))
 
 	return nil
 }
