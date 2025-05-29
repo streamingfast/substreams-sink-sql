@@ -573,6 +573,61 @@ func TestSinker_Integration_Bytes(t *testing.T) {
 	)
 }
 
+func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
+	schema := "testschema"
+	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
+		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
+			"id":   db2.NewColumnInfo("id", "text", ""),
+			"from": db2.NewColumnInfo("from", "text", ""),
+		}),
+
+		"users": mustNewTableInfo(schema, "users", []string{"id"}, map[string]*db2.ColumnInfo{
+			"id": db2.NewColumnInfo("id", "text", ""),
+		}),
+	})
+
+	sqlSchema := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s.users (
+			id TEXT PRIMARY KEY
+		);
+		CREATE TABLE IF NOT EXISTS %s.xfer (
+			id TEXT PRIMARY KEY,
+			"from" TEXT,
+			CONSTRAINT fk_users
+				FOREIGN KEY("from")
+				REFERENCES %s.users(id)
+		);
+	`, schema, schema, schema)
+
+	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, &sqlSchema)
+
+	type XferRow struct {
+		ID   string `db:"id"`
+		From string `db:"from"`
+	}
+
+	type UserRow struct {
+		ID string `db:"id"`
+	}
+
+	runSinkerTest(
+		t,
+		testTables,
+		dbConnectionString,
+		postgresContainer,
+		[]event{
+			newEvent(10, 10,
+				insertRowSinglePK("users", "user1"),
+				insertRowSinglePK("xfer", "xfer1", "from", "user1"),
+			),
+		},
+		[]*XferRow{
+			{ID: "xfer1", From: "user1"},
+		},
+		"Block #10 (10) - LIB #10 (10)",
+	)
+}
+
 func runSinkerTest[R any](
 	t *testing.T,
 	tables map[string]*db2.TableInfo,
