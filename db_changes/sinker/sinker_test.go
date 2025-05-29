@@ -2,12 +2,12 @@ package sinker
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/logging"
@@ -243,7 +243,13 @@ func TestSinker_SQLStatements(t *testing.T) {
 
 func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	testTables := db2.TestSinglePrimaryKeyTables("testschema")
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables)
+	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, nil)
+
+	type XferSinglePKRow struct {
+		ID   string `db:"id"`
+		From string `db:"from"`
+		To   string `db:"to"`
+	}
 
 	tests := []struct {
 		name                   string
@@ -371,38 +377,12 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 				testTables,
 				dbConnectionString,
 				postgresContainer,
-				readXferSinglePKRows,
 				test.events,
 				test.expectedQueryResponses,
 				test.expectedFinalCursor,
 			)
 		})
 	}
-}
-
-type XferCompositePKRow struct {
-	ID     string `db:"id"`
-	Number string `db:"number"`
-	From   string `db:"from"`
-	To     string `db:"to"`
-}
-
-func readXferCompsitePKRows(t *testing.T, db *sql.DB) (rows []*XferCompositePKRow) {
-	t.Helper()
-
-	rawRows, err := db.QueryContext(context.Background(), `SELECT id, number, "from", "to" FROM "testschema"."xfer"`)
-	require.NoError(t, err)
-	defer rawRows.Close()
-
-	for rawRows.Next() {
-		var row XferCompositePKRow
-		require.NoError(t, rawRows.Scan(&row.ID, &row.Number, &row.From, &row.To))
-
-		rows = append(rows, &row)
-	}
-	require.NoError(t, rawRows.Err())
-
-	return rows
 }
 
 func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
@@ -415,9 +395,16 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 		}),
 	})
 
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables)
+	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, nil)
 
 	pk := compositePK
+
+	type XferCompositePKRow struct {
+		ID     string `db:"id"`
+		Number string `db:"number"`
+		From   string `db:"from"`
+		To     string `db:"to"`
+	}
 
 	tests := []struct {
 		name                   string
@@ -545,7 +532,6 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 				testTables,
 				dbConnectionString,
 				postgresContainer,
-				readXferCompsitePKRows,
 				test.events,
 				test.expectedQueryResponses,
 				test.expectedFinalCursor,
@@ -554,45 +540,27 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 	}
 }
 
-type XferBytesRow struct {
-	ID    []byte `db:"id"`
-	Value []byte `db:"value"`
-}
-
-func readXferBytesRow(t *testing.T, db *sql.DB) (rows []*XferBytesRow) {
-	t.Helper()
-
-	rawRows, err := db.QueryContext(context.Background(), `SELECT id, value FROM "testschema"."xfer"`)
-	require.NoError(t, err)
-	defer rawRows.Close()
-
-	for rawRows.Next() {
-		var row XferBytesRow
-		require.NoError(t, rawRows.Scan(&row.ID, &row.Value))
-		rows = append(rows, &row)
-	}
-	require.NoError(t, rawRows.Err())
-
-	return rows
-}
-
 func TestSinker_Integration_Bytes(t *testing.T) {
 	schema := "testschema"
 	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
 		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
-			"id":    db2.NewColumnInfo("id", "bytea", ""),
+			"id":    db2.NewColumnInfo("id", "bytea", []byte{}),
 			"value": db2.NewColumnInfo("value", "bytea", []byte{}),
 		}),
 	})
 
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables)
+	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, nil)
+
+	type XferBytesRow struct {
+		ID    []byte `db:"id"`
+		Value []byte `db:"value"`
+	}
 
 	runSinkerTest(
 		t,
 		testTables,
 		dbConnectionString,
 		postgresContainer,
-		readXferBytesRow,
 		[]event{
 			newEvent(10, 10,
 				insertRowSinglePK("xfer", `\x01`, "value", `\x04ab`),
@@ -610,7 +578,6 @@ func runSinkerTest[R any](
 	tables map[string]*db2.TableInfo,
 	dbDSN string,
 	postgresContainer *postgres.PostgresContainer,
-	readRows func(t *testing.T, db *sql.DB) []R,
 	events []event,
 	expectedQueryResponses []R,
 	expectedFinalCursor string,
@@ -657,7 +624,15 @@ func runSinkerTest[R any](
 		require.NoError(t, err)
 	}
 
-	require.Equal(t, expectedQueryResponses, readRows(t, l.DB))
+	dbx := sqlx.NewDb(l.DB, "postgres")
+
+	var rows []R
+	readQuery := fmt.Sprintf(`SELECT * FROM "%s"."xfer"`, l.GetDSN().Schema())
+
+	err = dbx.SelectContext(context.Background(), &rows, readQuery)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedQueryResponses, rows)
 
 	finalCursor, mismatchDetected, err := l.GetCursor(ctx, sinker.OutputModuleHash())
 	require.NoError(t, err)
@@ -691,31 +666,10 @@ func newUndoEvent(blockNum, libNum uint64) event {
 	}
 }
 
-type XferSinglePKRow struct {
-	ID   string `db:"id"`
-	From string `db:"from"`
-	To   string `db:"to"`
-}
-
-func readXferSinglePKRows(t *testing.T, db *sql.DB) (rows []*XferSinglePKRow) {
-	t.Helper()
-
-	rawRows, err := db.QueryContext(context.Background(), `SELECT id, "from", "to" FROM "testschema"."xfer"`)
-	require.NoError(t, err)
-	defer rawRows.Close()
-
-	for rawRows.Next() {
-		var row XferSinglePKRow
-		require.NoError(t, rawRows.Scan(&row.ID, &row.From, &row.To))
-
-		rows = append(rows, &row)
-	}
-	require.NoError(t, rawRows.Err())
-
-	return rows
-}
-
-func setupPostgresContainer(t *testing.T, testTables map[string]*db2.TableInfo) (dbConnectionString string, container *postgres.PostgresContainer) {
+// setupPostgresContainer spins up a Postgres Docker container and initialize the database with the corresponding
+// testTables. If the testTablesSQL is `nil`, it will generate the SQL from the testTables directly, otherwise
+// it will use the provided SQL to set up the tables.
+func setupPostgresContainer(t *testing.T, testTables map[string]*db2.TableInfo, testTablesSQL *string) (dbConnectionString string, container *postgres.PostgresContainer) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -755,7 +709,11 @@ func setupPostgresContainer(t *testing.T, testTables map[string]*db2.TableInfo) 
 		tracer,
 	)
 
-	err = l.Setup(context.Background(), "testschema", db2.GenerateCreateTableSQL(testTables), false)
+	if testTablesSQL == nil {
+		testTablesSQL = ptr(db2.GenerateCreateTableSQL(testTables))
+	}
+
+	err = l.Setup(context.Background(), "testschema", *testTablesSQL, false)
 	require.NoError(t, err)
 
 	require.NoError(t, l.Close())
@@ -937,4 +895,8 @@ func simpleCursor(num, finalNum uint64) string {
 		LIB:       lib,
 		HeadBlock: blk,
 	}).ToOpaque()
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

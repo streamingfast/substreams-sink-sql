@@ -336,6 +336,11 @@ func (l *Loader) GetIdentifier() string {
 	return fmt.Sprintf("%s/%s", l.dsn.schema, l.dsn.schema)
 }
 
+// GetIdentifier returns <database>/<schema> suitable for user presentation
+func (l *Loader) GetDSN() *DSN {
+	return l.dsn
+}
+
 type obfuscatedString string
 
 func (s obfuscatedString) String() string {
