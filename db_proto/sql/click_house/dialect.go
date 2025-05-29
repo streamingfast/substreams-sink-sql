@@ -65,8 +65,6 @@ func (d *DialectClickHouse) UseDeletedField() bool {
 }
 
 func (d *DialectClickHouse) init() error {
-	//d.AddPrimaryKeySql("block", fmt.Sprintf("alter table %s.block add constraint block_pk primary key (number);", d.schemaName))
-
 	return nil
 }
 
@@ -86,7 +84,6 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	if table.PrimaryKey != nil {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
-		//d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
 		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor)))
 	}
 
@@ -99,19 +96,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		for _, parentField := range parentTable.Columns {
 
 			if parentField.Name == table.ChildOf.ParentTableField {
-
 				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor)))
-
-				//foreignKey := &sql2.ForeignKey{
-				//	Name:         "fk_" + table.ChildOf.ParentTable,
-				//	Table:        tableName,
-				//	Field:        table.ChildOf.ParentTableField,
-				//	ForeignTable: d.FullTableName(parentTable),
-				//	ForeignField: parentField.Name,
-				//}
-				//
-				//d.AddForeignKeySql(table.Name, foreignKey.String())
-
 				fieldFound = true
 				break
 			}
@@ -127,52 +112,12 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		}
 
 		fieldName := f.Name
-		//if f.IsUnique {
-		//	d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, fieldName, fieldName))
-		//}
 
 		switch {
 		case f.IsRepeated:
 			continue
 		case f.IsMessage:
-			//childTable, found := d.TableRegistry[f.Message]
-			//if !found {
-			//	continue
-			//}
-			//foreignKey := &sql2.ForeignKey{
-			//	Name:         "fk_" + childTable.Name,
-			//	Table:        tableName,
-			//	Field:        f.Name,
-			//	ForeignTable: d.FullTableName(childTable),
-			//	ForeignField: childTable.PrimaryKey.Name,
-			//}
-			//d.AddForeignKeySql(table.Name, foreignKey.String())
-
 		case f.ForeignKey != nil:
-			//foreignTable, found := d.TableRegistry[f.ForeignKey.Table]
-			//if !found {
-			//	return fmt.Errorf("foreign table %q not found", f.ForeignKey.Table)
-			//}
-			//
-			//var foreignField *schema.Column
-			//for _, field := range foreignTable.Columns {
-			//	if field.Name == f.ForeignKey.TableField {
-			//		foreignField = field
-			//		break
-			//	}
-			//}
-			//if foreignField == nil {
-			//	return fmt.Errorf("foreign field %q not found in table %q", f.ForeignKey.TableField, f.ForeignKey.Table)
-			//}
-			//
-			//foreignKey := &sql2.ForeignKey{
-			//	Name:         "fk_" + f.Name,
-			//	Table:        tableName,
-			//	Field:        f.Name,
-			//	ForeignTable: d.FullTableName(foreignTable),
-			//	ForeignField: foreignField.Name,
-			//}
-			//d.AddForeignKeySql(table.Name, foreignKey.String())
 		}
 		//fmt.Printf("Table %s, field %s\n", table.Name, fieldName)
 		fieldType := MapFieldType(f.FieldDescriptor)
@@ -218,62 +163,11 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	orderBy := strings.Join(orderByFields, ",")
 	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree(version) PARTITION BY (toYYYYMM(block_timestamp)) %s ORDER BY (%s);", primaryKey, orderBy))
 
-	//sb.WriteString(");\n")
-
-	//d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s.block(number) ON DELETE CASCADE", tableName, d.schemaName))
 	d.AddCreateTableSql(table.Name, sb.String())
 
 	return nil
 
 }
-
-//func (d *DialectClickHouse) CreateDatabase() error {
-//	_, err := tx.Exec(fmt.Sprintf(staticSqlCreatDatabase, d.schemaName))
-//	if err != nil {
-//		return fmt.Errorf("executing static staticSqlCreatDatabase: %w\n%s", err, staticSqlCreatDatabase)
-//	}
-//
-//	_, err = tx.Exec(fmt.Sprintf(staticSqlCreateBlock, d.schemaName))
-//	if err != nil {
-//		return fmt.Errorf("executing static staticSqlCreateBlock: %w\n%s", err, staticSqlCreateBlock)
-//	}
-//
-//	for _, statement := range d.CreateTableSql {
-//		d.Logger.Info("executing create statement", zap.String("sql", statement))
-//		_, err := tx.Exec(statement)
-//		if err != nil {
-//			return fmt.Errorf("executing create statement: %w %s", err, statement)
-//		}
-//	}
-//	return nil
-//}
-
-//func (d *DialectClickHouse) ApplyConstraints(tx *sql.Tx) error {
-//	startAt := time.Now()
-//	for _, constraint := range d.PrimaryKeySql {
-//		d.Logger.Info("executing pk statement", zap.String("sql", constraint.Sql))
-//		_, err := tx.Exec(constraint.Sql)
-//		if err != nil {
-//			return fmt.Errorf("executing pk statement: %w %s", err, constraint.Sql)
-//		}
-//	}
-//	for _, constraint := range d.UniqueConstraintSql {
-//		d.Logger.Info("executing unique statement", zap.String("sql", constraint.Sql))
-//		_, err := tx.Exec(constraint.Sql)
-//		if err != nil {
-//			return fmt.Errorf("executing unique statement: %w %s", err, constraint.Sql)
-//		}
-//	}
-//	for _, constraint := range d.ForeignKeySql {
-//		d.Logger.Info("executing fk constraint statement", zap.String("sql", constraint.Sql))
-//		_, err := tx.Exec(constraint.Sql)
-//		if err != nil {
-//			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.Sql)
-//		}
-//	}
-//	d.Logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
-//	return nil
-//}
 
 func (d *DialectClickHouse) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
@@ -288,7 +182,6 @@ func (d *DialectClickHouse) SchemaHash() string {
 	var sqls []string
 	for _, sql := range d.CreateTableSql {
 		sqls = append(sqls, sql)
-		//buf = append(buf, []byte(sql)...)
 	}
 
 	sort.Strings(sqls)

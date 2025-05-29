@@ -117,9 +117,6 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 				fieldValues = append(fieldValues, pkValue)
 			}
 		}
-		//else {
-		//	return 0, fmt.Errorf("table %q not found", tableInfo.Name)
-		//}
 	}
 
 	totalSqlDuration := time.Duration(0)
@@ -141,18 +138,13 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 				if !ok {
 					panic("expected *dynamic.Message wile walking message descriptor " + md.GetFullyQualifiedName() + " field " + fd.GetName() + " value " + fmt.Sprintf("%v", c))
 				}
-				childs = append(childs, fm) //n
+				childs = append(childs, fm)
 			}
 		} else if fm, ok := fv.(*dynamic.Message); ok {
 			if fm == nil {
 				continue //un-use oneOf field
 			}
 			childs = append(childs, fm) //need to be handled after current message inserted
-			//sqlDuration, err := d.WalkMessageDescriptorAndInsert(fm, blockNum, nil)
-			//if err != nil {
-			//	return 0, fmt.Errorf("walking nested message descriptor %q: %w", fd.GetName(), err)
-			//}
-			//totalSqlDuration += sqlDuration
 		} else {
 			fieldValues = append(fieldValues, fv)
 		}

@@ -85,12 +85,10 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 	for _, option := range dsn.Options {
 		parts := strings.Split(option, "=")
 		if parts[0] == "secure" {
-			fmt.Println("Grrrrr: using secure")
 			chOption.TLS = &tls.Config{}
 			continue
 		}
 		if parts[0] == "username" {
-			fmt.Println("Grrrrr: using username")
 			chOption.User = parts[1]
 			continue
 		}
@@ -99,7 +97,6 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 			continue
 		}
 		if parts[0] == "compress" && parts[1] == "true" {
-			fmt.Println("Grrrrr: using compression")
 			chOption.Compression = ch.CompressionLZ4
 			continue
 		}
@@ -258,11 +255,6 @@ func (d *Database) StoreSinkInfo(schemaName string, schemaHash string) error {
 
 func (d *Database) UpdateSinkInfoHash(schemaName string, newHash string) error {
 	panic("implement me")
-	//_, err := d.BaseDatabase.Tx.Exec(fmt.Sprintf("UPDATE %s._sink_info_ SET schema_hash = $1", schemaName), newHash)
-	//if err != nil {
-	//	return fmt.Errorf("updating schema hash: %w", err)
-	//}
-	//return nil
 }
 
 func (d *Database) FetchCursor() (*sink.Cursor, error) {

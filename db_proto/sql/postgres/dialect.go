@@ -202,7 +202,6 @@ func (d *DialectPostgres) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
 }
 
-// todo: move to postgress database
 func (d *DialectPostgres) SchemaHash() string {
 	h := fnv.New64a()
 
@@ -246,16 +245,6 @@ func (d *DialectPostgres) SchemaHash() string {
 	for _, constraint := range uniques {
 		buf = append(buf, []byte(constraint)...)
 	}
-
-	//todo: hum... is this useful?
-	//var accumulators []string
-	//for _, sql := range d.InsertSql {
-	//	accumulators = append(accumulators, sql)
-	//}
-	//sort.Strings(accumulators)
-	//for _, sql := range accumulators {
-	//	buf = append(buf, []byte(sql)...)
-	//}
 
 	_, err := h.Write(buf)
 	if err != nil {

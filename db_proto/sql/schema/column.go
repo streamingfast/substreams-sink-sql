@@ -17,9 +17,8 @@ type Column struct {
 	IsUnique        bool
 	IsRepeated      bool
 	IsExtension     bool
-	//todo: naming ...
-	IsMessage bool
-	Message   string
+	IsMessage       bool
+	Message         string
 }
 
 func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
