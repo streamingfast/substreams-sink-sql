@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.6.1
 
 * Added support for `--clickhouse-cluster` on all `CREATE` statements.
+* Added support for specifying the output-module on the command-line in 'from-proto' mode, without requiring a "sink config" in the package.
+  ex: `substreams-sink-sql from-proto psql://.. substreams.yaml map_my_data`
 
 ## v4.6.0
 

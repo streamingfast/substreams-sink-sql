@@ -136,7 +136,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 			for _, c := range v {
 				fm, ok := c.(*dynamic.Message)
 				if !ok {
-					panic("expected *dynamic.Message wile walking message descriptor " + md.GetFullyQualifiedName() + " field " + fd.GetName() + " value " + fmt.Sprintf("%v", c))
+					return 0, fmt.Errorf("Repeated fields with native values not supported yet in 'from-proto' mode. message %q, field %q", md.GetFullyQualifiedName(), fd.GetName())
 				}
 				childs = append(childs, fm)
 			}
