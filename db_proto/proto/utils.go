@@ -12,24 +12,20 @@ import (
 )
 
 func FileDescriptorForOutputType(spkg *v1.Package, err error, deps map[string]*desc.FileDescriptor, outputType string) (*desc.FileDescriptor, error) {
-	var fd *desc.FileDescriptor
 	for _, p := range spkg.ProtoFiles {
-		fd, err = desc.CreateFileDescriptor(p, slices.Collect(maps.Values(deps))...)
+		fd, err := desc.CreateFileDescriptor(p, slices.Collect(maps.Values(deps))...)
 		if err != nil {
 			return nil, fmt.Errorf("creating file descriptor: %w", err)
 		}
 
 		for _, md := range fd.GetMessageTypes() {
-			if md.GetName() == outputType {
-				break
+			if md.GetFullyQualifiedName() == outputType {
+				return fd, nil
 			}
 		}
 	}
 
-	if fd == nil {
-		return nil, fmt.Errorf("could not find file descriptor")
-	}
-	return fd, nil
+	return nil, fmt.Errorf("could not find file descriptor")
 }
 
 func ModuleOutputType(spkg *v1.Package, moduleName string) string {

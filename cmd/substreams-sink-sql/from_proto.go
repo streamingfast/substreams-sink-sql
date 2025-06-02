@@ -170,6 +170,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 			break
 		}
 	}
+	if rootMessageDescriptor == nil {
+		return fmt.Errorf("message descriptor not found for output type %q. Your substreams need to bundle its protobuf definitions", outputType)
+	}
 
 	schemaName := dsn.Schema()
 
