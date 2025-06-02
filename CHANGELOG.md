@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Added support for `--clickhouse-cluster` on all `CREATE` statements.
 * Added support for specifying the output-module on the command-line in 'from-proto' mode, without requiring a "sink config" in the package.
   ex: `substreams-sink-sql from-proto psql://.. substreams.yaml map_my_data`
+* Fixed a bug causing a panic when the protobuf file containing the outputType is not the last file
+
+KNOWN ISSUES:
+ * `from-proto` execution mode does not support 'repeated fields for native types' in protobuf definition,
+   ex: `repeated string` or `repeated bytes`
+   Only `repeated MyStruct` is supported for now.
 
 ## v4.6.0
 
