@@ -57,7 +57,14 @@ message Customer {
 }
 
 message Order {
-  option (schema.table) = { name: "orders"};
+  option (schema.table) = {
+    name: "orders"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "order_id", descending: true}, {name: "timestamp", function: toYYYYMM}]
+      partition_fields: [{name: "timestamp", function: toYYYYMM}]
+      replacing_fields: [{name: "order_id"}]
+    }
+  };
 
   string order_id = 1 [(schema.field) = {  primary_key: true}];
   string customer_ref_id = 2 [(schema.field) = { foreign_key: "customers on customer_id"}];

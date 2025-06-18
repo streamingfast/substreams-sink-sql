@@ -67,10 +67,6 @@ func (d ClickhouseDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputMo
 		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
 			entry := entryPair.Value
 
-			if err != nil {
-				return entryCount, fmt.Errorf("failed to get query: %w", err)
-			}
-
 			if l.tracer.Enabled() {
 				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
 			}

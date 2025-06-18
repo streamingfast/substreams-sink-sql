@@ -33,17 +33,19 @@ func NewChildOf(childOf string) (*ChildOf, error) {
 }
 
 type Table struct {
-	Name       string
-	PrimaryKey *PrimaryKey
-	ChildOf    *ChildOf
-	Columns    []*Column
-	Ordinal    int
+	Name        string
+	PrimaryKey  *PrimaryKey
+	ChildOf     *ChildOf
+	Columns     []*Column
+	Ordinal     int
+	pbTableInfo *pbSchmema.Table
 }
 
 func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int) (*Table, error) {
 	table := &Table{
-		Name:    descriptor.GetName(),
-		Ordinal: ordinal,
+		Name:        descriptor.GetName(),
+		Ordinal:     ordinal,
+		pbTableInfo: tableInfo,
 	}
 	table.Name = tableInfo.Name
 
@@ -81,7 +83,9 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 		}
 
 		if fieldDescriptor.IsRepeated() {
-			continue
+			if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE { //This will be handled by table relations
+				continue
+			}
 		}
 
 		if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE {

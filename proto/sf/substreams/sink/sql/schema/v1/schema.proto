@@ -10,15 +10,14 @@ extend google.protobuf.MessageOptions {
 
 extend google.protobuf.FieldOptions {
   Column field = 77702;
-  //todo: ignore
 }
 
 message Table {
   string name = 1;
   optional string child_of = 2;
 
-  //  should be remove
-  string many_to_one_relation_field_name = 81;
+  optional GenericSqlTableOption generic_sql_table_option = 100;
+  optional ClickhouseTableOptions clickhouse_table_options = 200;
 }
 
 message Column {
@@ -27,3 +26,39 @@ message Column {
   bool unique = 3;
   bool primary_key = 4;
 }
+
+message GenericSqlTableOption {
+  repeated string primary_key_fields = 3;
+}
+
+message ClickhouseTableOptions {
+    repeated ClickhouseOrderByField order_by_fields = 1;
+    repeated ClickhousePartitionByField partition_fields = 2;
+    repeated ClickhouseReplacingField replacing_fields = 3;
+}
+
+message ClickhousePartitionByField {
+  string name = 1;
+  Function function = 2;
+}
+
+message ClickhouseOrderByField {
+  string name = 1;
+  bool descending = 2;
+  Function function = 3;
+}
+
+message ClickhouseReplacingField {
+  string name = 1;
+}
+
+enum Function {
+  unset = 0;
+  toYYYYMM = 1;
+  toYYYYDD = 2;
+  toYear = 3;
+  toMonth = 4;
+  toDate = 5;
+  toStartOfMonth = 6;
+}
+
