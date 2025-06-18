@@ -9,6 +9,7 @@ import (
 
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
+	pbSchmema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"go.uber.org/zap"
 )
 
@@ -119,7 +120,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		case f.IsMessage:
 		case f.ForeignKey != nil:
 		}
-		//fmt.Printf("Table %s, field %s\n", table.Name, fieldName)
+
 		fieldType := MapFieldType(f.FieldDescriptor)
 		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
 		sb.WriteString(",")
@@ -131,28 +132,9 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	sb = strings.Builder{}
 	sb.WriteString(temp)
 
-	orderByFields := make([]string, 0)
-	if primaryKeyFieldName != "" {
-		orderByFields = append(orderByFields, primaryKeyFieldName)
-	}
-
-	//this is tricky. handling one to one relation
-	if primaryKeyFieldName == "" && table.ChildOf != nil {
-		parentTable, parentFound := d.TableRegistry[table.ChildOf.ParentTable]
-		if !parentFound {
-			return fmt.Errorf("parent table %q not found", table.ChildOf.ParentTable)
-		}
-
-		for _, parentField := range parentTable.Columns {
-			if parentField.Name == table.ChildOf.ParentTableField && !parentField.IsRepeated {
-				orderByFields = append(orderByFields, parentField.Name)
-				break
-			}
-		}
-	}
-
-	if len(orderByFields) == 0 {
-		return fmt.Errorf("missing order by fields")
+	replacingMergeTree, err := replacingMergeTreeString(table)
+	if err != nil {
+		return fmt.Errorf("getting 'replacing merge tree' string: %w", err)
 	}
 
 	primaryKey := ""
@@ -160,8 +142,17 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		primaryKey = fmt.Sprintf("PRIMARY KEY (%s)", primaryKeyFieldName)
 	}
 
-	orderBy := strings.Join(orderByFields, ",")
-	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree(%s) PARTITION BY (toYYYYMM(%s)) %s ORDER BY (%s);", sql2.DialectFieldVersion, sql2.DialectFieldBlockTimestamp, primaryKey, orderBy))
+	orderBy, err := orderByString(table)
+	if err != nil {
+		return fmt.Errorf("getting 'order by' string: %w", err)
+	}
+
+	partitionBy, err := partitionByString(table)
+	if err != nil {
+		return fmt.Errorf("getting 'partition by' string: %w", err)
+	}
+
+	sb.WriteString(fmt.Sprintf(") ENGINE = %s %s %s %s;", replacingMergeTree, primaryKey, partitionBy, orderBy))
 
 	d.AddCreateTableSql(table.Name, sb.String())
 
@@ -227,4 +218,77 @@ func (d *DialectClickHouse) SchemaHash() string {
 
 func tableName(schemaName string, tableName string) string {
 	return fmt.Sprintf("%s.%s", schemaName, tableName)
+}
+
+func orderByString(table *schema.Table) (string, error) {
+	info := table.PbTableInfo.ClickhouseTableOptions
+	if info == nil {
+		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+	}
+
+	if len(info.OrderByFields) == 0 {
+		return "", fmt.Errorf("clickhouse table options for table %q don't have any order by fields. Require at least 1", table.Name)
+	}
+
+	out := ""
+	for i, field := range info.OrderByFields {
+		w := wrapWithClickhouseFunction(field.Name, field.Function)
+		if field.Descending {
+			w += " desc"
+		}
+		out += w
+		if i < len(info.OrderByFields)-1 {
+			out += ", "
+		}
+	}
+
+	return fmt.Sprintf("ORDER BY (%s)", out), nil
+}
+
+func partitionByString(table *schema.Table) (string, error) {
+	info := table.PbTableInfo.ClickhouseTableOptions
+	if info == nil {
+		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+	}
+
+	out := sql2.DialectFieldBlockTimestamp
+	for _, field := range info.PartitionFields {
+		w := wrapWithClickhouseFunction(field.Name, field.Function)
+		out += ", " + w
+	}
+
+	return fmt.Sprintf("PARTITION BY (%s)", out), nil
+}
+
+func replacingMergeTreeString(table *schema.Table) (string, error) {
+	info := table.PbTableInfo.ClickhouseTableOptions
+	if info == nil {
+		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+	}
+
+	out := sql2.DialectFieldVersion
+	for _, field := range info.ReplacingFields {
+		out += ", " + field.Name
+	}
+
+	return fmt.Sprintf("replacingMergeTree(%s)", out), nil
+}
+
+func wrapWithClickhouseFunction(fieldName string, function pbSchmema.Function) string {
+	format := "%s"
+	switch function {
+	case pbSchmema.Function_unset:
+	case pbSchmema.Function_toMonth:
+		format = "toMonth(%s)"
+	case pbSchmema.Function_toDate:
+		format = "toDate(%s)"
+	case pbSchmema.Function_toStartOfMonth:
+	case pbSchmema.Function_toYear:
+		format = "toYear(%s)"
+	case pbSchmema.Function_toYYYYDD:
+		format = "toYYYYMMDD(%s)"
+	case pbSchmema.Function_toYYYYMM:
+		format = "toYYYYMM(%s)"
+	}
+	return fmt.Sprintf(format, fieldName)
 }

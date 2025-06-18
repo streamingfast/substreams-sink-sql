@@ -38,14 +38,14 @@ type Table struct {
 	ChildOf     *ChildOf
 	Columns     []*Column
 	Ordinal     int
-	pbTableInfo *pbSchmema.Table
+	PbTableInfo *pbSchmema.Table
 }
 
 func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int) (*Table, error) {
 	table := &Table{
 		Name:        descriptor.GetName(),
 		Ordinal:     ordinal,
-		pbTableInfo: tableInfo,
+		PbTableInfo: tableInfo,
 	}
 	table.Name = tableInfo.Name
 
@@ -103,7 +103,7 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 
 		if column.IsPrimaryKey {
 			if t.PrimaryKey != nil {
-				return fmt.Errorf("multiple primary keys are not supported in message")
+				return fmt.Errorf("multiple field mark has primary keys are not supported")
 			}
 
 			t.PrimaryKey = &PrimaryKey{

@@ -25,7 +25,13 @@ message Entity {
 }
 
 message TypesTest {
-  option (sf.substreams.sink.sql.schema.v1.table) = { name: "types_tests" };
+  option (schema.table) = {
+    name: "types_tests"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "id"}]
+    }
+  };
+
 
   uint64 id =1 [(sf.substreams.sink.sql.schema.v1.field) = { primary_key: true }];
   // Field for each protobuf native type
@@ -50,16 +56,27 @@ message TypesTest {
 }
 
 message Customer {
-  option (sf.substreams.sink.sql.schema.v1.table) = { name: "customers" };
+  option (schema.table) = {
+    name: "customers"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "customer_id"}]
+    }
+  };
+
 
   string customer_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = { primary_key: true }];
   string name = 2;
 }
 
 message Order {
-  option (sf.substreams.sink.sql.schema.v1.table) = {
+  option (schema.table) = {
     name: "orders"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "order_id"}, {name: "customer_ref_id"}]
+    }
   };
+
+
   string order_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = {  primary_key: true}];
   string customer_ref_id = 2 [(sf.substreams.sink.sql.schema.v1.field) = { foreign_key: "customers on customer_id"}];
   repeated OrderItem items = 3;
@@ -70,6 +87,9 @@ message OrderExtension {
   option (sf.substreams.sink.sql.schema.v1.table) = {
     name: "order_extensions",
     child_of: "orders on order_id"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "order_id"}]
+    }
   };
   string description = 1;
 }
@@ -78,6 +98,9 @@ message OrderItem {
   option (sf.substreams.sink.sql.schema.v1.table) = {
     name: "order_items",
     child_of: "orders on order_id"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "order_id"}, {name: "item_id"}]
+    }
   };
 
   // can also leverage orders._id using "order on order_id" if order do not have a external unique identifier
@@ -86,7 +109,13 @@ message OrderItem {
 }
 
 message Item {
-  option (sf.substreams.sink.sql.schema.v1.table) = { name: "items" };
+  option (schema.table) = {
+    name: "items"
+    clickhouse_table_options: {
+      order_by_fields: [{name: "item_id"}]
+    }
+  };
+
 
   string item_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = { unique: true }];
 

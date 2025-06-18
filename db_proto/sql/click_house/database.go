@@ -50,6 +50,10 @@ func NewDatabase(
 		return nil, fmt.Errorf("creating base database: %w", err)
 	}
 	dialect, err := NewDialectClickHouse(schema, logger)
+	if err != nil {
+		return nil, fmt.Errorf("creating dialect: %w", err)
+	}
+
 	database := &Database{
 		ctx:            ctx,
 		dsn:            dsn,

@@ -38,6 +38,10 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*Accumulato
 }
 
 func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, error) {
+	if dialect == nil {
+		panic("dialect is nil")
+	}
+
 	accumulators := map[string]*accumulator{}
 
 	accumulators["_blocks_"] = &accumulator{

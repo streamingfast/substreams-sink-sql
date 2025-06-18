@@ -15,8 +15,8 @@ extend google.protobuf.FieldOptions {
 message Table {
   string name = 1;
   optional string child_of = 2;
+//  repeated string primary_key_fields = 3;
 
-  optional GenericSqlTableOption generic_sql_table_option = 100;
   optional ClickhouseTableOptions clickhouse_table_options = 200;
 }
 
@@ -25,10 +25,6 @@ message Column {
   optional string foreign_key = 2;
   bool unique = 3;
   bool primary_key = 4;
-}
-
-message GenericSqlTableOption {
-  repeated string primary_key_fields = 3;
 }
 
 message ClickhouseTableOptions {
