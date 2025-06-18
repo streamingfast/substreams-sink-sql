@@ -68,7 +68,7 @@ func (d *DialectPostgres) UseDeletedField() bool {
 }
 
 func (d *DialectPostgres) init() error {
-	d.AddPrimaryKeySql("_blocks_", fmt.Sprintf("alter table %s._blocks_ add constraint block_pk primary key (number);", d.schemaName))
+	d.AddPrimaryKeySql(sql2.DialectTableBlock, fmt.Sprintf("alter table %s.%s add constraint block_pk primary key (number);", d.schemaName, sql2.DialectTableBlock))
 	return nil
 }
 
@@ -79,8 +79,8 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
 
-	sb.WriteString(" block_number INTEGER NOT NULL,")
-	sb.WriteString(" block_timestamp TIMESTAMP NOT NULL,")
+	sb.WriteString(fmt.Sprintf(" %s INTEGER NOT NULL,", sql2.DialectFieldBlockNumber))
+	sb.WriteString(fmt.Sprintf(" %s TIMESTAMP NOT NULL,", sql2.DialectFieldBlockTimestamp))
 
 	var primaryKeyFieldName string
 	if table.PrimaryKey != nil {
@@ -191,7 +191,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	sb.WriteString(");\n")
 
-	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (block_number) REFERENCES %s._blocks_(number) ON DELETE CASCADE", tableName, d.schemaName))
+	d.AddForeignKeySql(tableName, fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT fk_block FOREIGN KEY (%s) REFERENCES %s.%s(number) ON DELETE CASCADE", tableName, sql2.DialectFieldBlockNumber, d.schemaName, sql2.DialectTableBlock))
 	d.AddCreateTableSql(table.Name, sb.String())
 
 	return nil

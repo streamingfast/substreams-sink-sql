@@ -8,3 +8,6 @@ devel/data*
 build/
 *.spkg
 /substreams-sink-sql
+/cursor.txt
+/replay.log
+/spl_all_schema_hash.txt

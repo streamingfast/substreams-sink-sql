@@ -7,7 +7,7 @@
 package relations
 
 import (
-	_ "github.com/streamingfast/substreams-sink-sql/pb/schema"
+	_ "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	_ "google.golang.org/protobuf/types/descriptorpb"

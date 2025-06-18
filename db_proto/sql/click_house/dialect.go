@@ -22,7 +22,7 @@ const staticSqlCreateBlock = `
 		timestamp timestamp,
 		version Int64,
 		deleted bool
-	                                        
+
 	)
 	ENGINE = ReplacingMergeTree(version)
 	PARTITION BY (toYYYYMM(timestamp))		
@@ -75,10 +75,10 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
 
-	sb.WriteString(" block_number Int64 NOT NULL,")
-	sb.WriteString(" block_timestamp timestamp NOT NULL,")
-	sb.WriteString(" version Int64 NOT NULL,")
-	sb.WriteString(" deleted bool NOT NULL,")
+	sb.WriteString(fmt.Sprintf(" %s Int64 NOT NULL,", sql2.DialectFieldBlockNumber))
+	sb.WriteString(fmt.Sprintf(" %s timestamp NOT NULL,", sql2.DialectFieldBlockTimestamp))
+	sb.WriteString(fmt.Sprintf(" %s Int64 NOT NULL,", sql2.DialectFieldVersion))
+	sb.WriteString(fmt.Sprintf(" %s bool NOT NULL,", sql2.DialectFieldDeleted))
 
 	var primaryKeyFieldName string
 	if table.PrimaryKey != nil {
@@ -161,7 +161,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	}
 
 	orderBy := strings.Join(orderByFields, ",")
-	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree(version) PARTITION BY (toYYYYMM(block_timestamp)) %s ORDER BY (%s);", primaryKey, orderBy))
+	sb.WriteString(fmt.Sprintf(") ENGINE = ReplacingMergeTree(%s) PARTITION BY (toYYYYMM(%s)) %s ORDER BY (%s);", sql2.DialectFieldVersion, sql2.DialectFieldBlockTimestamp, primaryKey, orderBy))
 
 	d.AddCreateTableSql(table.Name, sb.String())
 

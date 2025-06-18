@@ -6,6 +6,14 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+const DialectTableBlock = "_blocks_"
+const DialectTableCursor = "_cursors_"
+
+const DialectFieldBlockNumber = "_block_number_"
+const DialectFieldBlockTimestamp = "_block_timestamp_"
+const DialectFieldVersion = "_version_"
+const DialectFieldDeleted = "_deleted_"
+
 type Dialect interface {
 	SchemaHash() string
 	FullTableName(table *schema.Table) string

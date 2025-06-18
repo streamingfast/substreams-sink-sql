@@ -6,7 +6,7 @@ import (
 
 	proto "github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/desc"
-	"github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
+	schema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
