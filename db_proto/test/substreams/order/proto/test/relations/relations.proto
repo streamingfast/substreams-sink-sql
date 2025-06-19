@@ -33,7 +33,7 @@ message TypesTest {
   };
 
 
-  uint64 id =1 [(sf.substreams.sink.sql.schema.v1.field) = { primary_key: true }];
+  uint64 id =1 [(schema.field) = { primary_key: true }];
   // Field for each protobuf native type
   double double_field = 2;
   float float_field = 3;
@@ -64,7 +64,7 @@ message Customer {
   };
 
 
-  string customer_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = { primary_key: true }];
+  string customer_id = 1 [(schema.field) = { primary_key: true }];
   string name = 2;
 }
 
@@ -77,14 +77,14 @@ message Order {
   };
 
 
-  string order_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = {  primary_key: true}];
-  string customer_ref_id = 2 [(sf.substreams.sink.sql.schema.v1.field) = { foreign_key: "customers on customer_id"}];
+  string order_id = 1 [(schema.field) = {  primary_key: true}];
+  string customer_ref_id = 2 [(schema.field) = { foreign_key: "customers on customer_id"}];
   repeated OrderItem items = 3;
   OrderExtension extension = 4;
 }
 
 message OrderExtension {
-  option (sf.substreams.sink.sql.schema.v1.table) = {
+  option (schema.table) = {
     name: "order_extensions",
     child_of: "orders on order_id"
     clickhouse_table_options: {
@@ -95,7 +95,7 @@ message OrderExtension {
 }
 
 message OrderItem {
-  option (sf.substreams.sink.sql.schema.v1.table) = {
+  option (schema.table) = {
     name: "order_items",
     child_of: "orders on order_id"
     clickhouse_table_options: {
@@ -104,7 +104,7 @@ message OrderItem {
   };
 
   // can also leverage orders._id using "order on order_id" if order do not have a external unique identifier
-  string item_id = 2 [(sf.substreams.sink.sql.schema.v1.field) = { foreign_key: "items on item_id"}];
+  string item_id = 2 [(schema.field) = { foreign_key: "items on item_id"}];
   int64 quantity = 11;
 }
 
@@ -117,7 +117,7 @@ message Item {
   };
 
 
-  string item_id = 1 [(sf.substreams.sink.sql.schema.v1.field) = { unique: true }];
+  string item_id = 1 [(schema.field) = { unique: true }];
 
   string name = 10;
   double price = 11;

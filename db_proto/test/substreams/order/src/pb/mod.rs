@@ -1,4 +1,9 @@
 // @generated
+// @@protoc_insertion_point(attribute:schema)
+pub mod schema {
+    include!("schema.rs");
+    // @@protoc_insertion_point(schema)
+}
 pub mod sf {
     pub mod solana {
         pub mod r#type {
@@ -13,17 +18,6 @@ pub mod sf {
     pub mod substreams {
         include!("sf.substreams.rs");
         // @@protoc_insertion_point(sf.substreams)
-        pub mod sink {
-            pub mod sql {
-                pub mod schema {
-                    // @@protoc_insertion_point(attribute:sf.substreams.sink.sql.schema.v1)
-                    pub mod v1 {
-                        include!("sf.substreams.sink.sql.schema.v1.rs");
-                        // @@protoc_insertion_point(sf.substreams.sink.sql.schema.v1)
-                    }
-                }
-            }
-        }
         pub mod solana {
             // @@protoc_insertion_point(attribute:sf.substreams.solana.v1)
             pub mod v1 {

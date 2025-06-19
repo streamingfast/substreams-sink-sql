@@ -271,7 +271,7 @@ func replacingMergeTreeString(table *schema.Table) (string, error) {
 		out += ", " + field.Name
 	}
 
-	return fmt.Sprintf("replacingMergeTree(%s)", out), nil
+	return fmt.Sprintf("ReplacingMergeTree(%s)", out), nil
 }
 
 func wrapWithClickhouseFunction(fieldName string, function pbSchmema.Function) string {

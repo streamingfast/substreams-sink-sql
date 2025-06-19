@@ -88,7 +88,7 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 
 	for _, option := range dsn.Options {
 		parts := strings.Split(option, "=")
-		if parts[0] == "secure" {
+		if parts[0] == "secure" && parts[1] == "true" {
 			chOption.TLS = &tls.Config{}
 			continue
 		}
@@ -374,9 +374,9 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		}
 		query := fmt.Sprintf(`
 			INSERT INTO %s
-			SELECT block_number, block_timestamp, %d, true %s
-			FROM %s WHERE block_number > %d
-			`, tableFullName, version, fields, tableFullName, lastValidBlockNum)
+			SELECT %s, %s, %d, true %s
+			FROM %s WHERE %s > %d
+			`, tableFullName, sql.DialectFieldBlockNumber, sql.DialectFieldBlockTimestamp, version, fields, tableFullName, sql.DialectFieldBlockNumber, lastValidBlockNum)
 
 		err := client.Do(d.ctx, ch.Query{
 			Body: query,

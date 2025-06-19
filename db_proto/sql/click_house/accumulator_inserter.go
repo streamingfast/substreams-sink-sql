@@ -8,7 +8,9 @@ import (
 
 	"github.com/ClickHouse/ch-go"
 	"github.com/ClickHouse/ch-go/proto"
+	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type accumulator struct {
@@ -68,14 +70,14 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 		input := map[string]proto.ColInput{}
 		columns := map[int]string{}
 
-		input["block_number"] = &proto.ColUInt64{}
-		columns[0] = "block_number"
-		input["block_timestamp"] = &proto.ColDateTime{}
-		columns[1] = "block_timestamp"
-		input["version"] = &proto.ColInt64{}
-		columns[2] = "version"
-		input["deleted"] = &proto.ColBool{}
-		columns[3] = "deleted"
+		input[sql2.DialectFieldBlockNumber] = &proto.ColUInt64{}
+		columns[0] = sql2.DialectFieldBlockNumber
+		input[sql2.DialectFieldBlockTimestamp] = &proto.ColDateTime{}
+		columns[1] = sql2.DialectFieldBlockTimestamp
+		input[sql2.DialectFieldVersion] = &proto.ColInt64{}
+		columns[2] = sql2.DialectFieldVersion
+		input[sql2.DialectFieldDeleted] = &proto.ColBool{}
+		columns[3] = sql2.DialectFieldDeleted
 
 		primaryName := ""
 		if table.PrimaryKey != nil {
@@ -144,7 +146,13 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 
 		switch input := input.(type) {
 		case *proto.ColDateTime:
-			input.Append(value.(time.Time))
+			if t, ok := value.(*timestamppb.Timestamp); ok {
+				input.Append(t.AsTime())
+			} else if t, ok := value.(time.Time); ok {
+				input.Append(t)
+			} else {
+				panic(fmt.Sprintf("unknown time base input type %T for column %s of table %s", input, colName, table))
+			}
 		case *proto.ColInt32:
 			input.Append(value.(int32))
 		case *proto.ColInt64:

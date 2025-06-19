@@ -100,7 +100,7 @@ func ColInputForColumn(fd *desc.FieldDescriptor) proto.ColInput {
 	case descriptor.FieldDescriptorProto_TYPE_UINT32, descriptor.FieldDescriptorProto_TYPE_FIXED32:
 		return &proto.ColUInt32{}
 	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
-		return &proto.ColFloat64{}
+		return &proto.ColFloat32{}
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
 		return &proto.ColFloat64{}
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
