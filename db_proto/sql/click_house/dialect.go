@@ -152,7 +152,13 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		return fmt.Errorf("getting 'partition by' string: %w", err)
 	}
 
-	sb.WriteString(fmt.Sprintf(") ENGINE = %s %s %s %s;", replacingMergeTree, primaryKey, partitionBy, orderBy))
+	// Add indexes if they exist
+	indexes, err := indexString(table)
+	if err != nil {
+		return fmt.Errorf("getting 'index' string: %w", err)
+	}
+
+	sb.WriteString(fmt.Sprintf(") ENGINE = %s %s %s %s %s;", replacingMergeTree, primaryKey, partitionBy, orderBy, indexes))
 
 	d.AddCreateTableSql(table.Name, sb.String())
 
@@ -291,4 +297,31 @@ func wrapWithClickhouseFunction(fieldName string, function pbSchmema.Function) s
 		format = "toYYYYMM(%s)"
 	}
 	return fmt.Sprintf(format, fieldName)
+}
+
+func indexString(table *schema.Table) (string, error) {
+	indexes := ""
+	if table.PbTableInfo != nil && table.PbTableInfo.ClickhouseTableOptions != nil {
+		if len(table.PbTableInfo.ClickhouseTableOptions.IndexFields) > 0 {
+			var indexStrings []string
+			for _, indexField := range table.PbTableInfo.ClickhouseTableOptions.IndexFields {
+				fieldName := indexField.FieldName
+				if indexField.Function != pbSchmema.Function_unset {
+					fieldName = fmt.Sprintf("%s(%s)", indexField.Function.String(), fieldName)
+				}
+
+				indexStr := fmt.Sprintf("INDEX %s %s TYPE %s GRANULARITY %d",
+					indexField.Name,
+					fieldName,
+					indexField.Type.String(),
+					indexField.Granularity)
+				indexStrings = append(indexStrings, indexStr)
+			}
+
+			if len(indexStrings) > 0 {
+				indexes = ", " + strings.Join(indexStrings, ", ")
+			}
+		}
+	}
+	return indexes, nil
 }

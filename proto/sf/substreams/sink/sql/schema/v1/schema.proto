@@ -31,6 +31,7 @@ message ClickhouseTableOptions {
     repeated ClickhouseOrderByField order_by_fields = 1;
     repeated ClickhousePartitionByField partition_fields = 2;
     repeated ClickhouseReplacingField replacing_fields = 3;
+    repeated ClickhouseIndexField index_fields = 4;
 }
 
 message ClickhousePartitionByField {
@@ -48,6 +49,22 @@ message ClickhouseReplacingField {
   string name = 1;
 }
 
+message ClickhouseIndexField {
+  string name = 1;
+  string field_name = 2;
+  IndexType type = 3;
+  uint32 granularity = 4;
+  Function function = 5;
+}
+
+enum IndexType {
+  minmax = 0;
+  set = 1;
+  ngrambf_v1 = 2;
+  tokenbf_v1 = 3;
+  bloom_filter = 4;
+}
+
 enum Function {
   unset = 0;
   toYYYYMM = 1;
@@ -57,4 +74,3 @@ enum Function {
   toDate = 5;
   toStartOfMonth = 6;
 }
-

@@ -73,6 +73,11 @@ message Order {
     name: "orders"
     clickhouse_table_options: {
       order_by_fields: [{name: "order_id"}, {name: "customer_ref_id"}]
+      index_fields: [{
+        field_name: "order_id"
+        name: "order_id_idx"
+        type: bloom_filter
+      }]
     }
   };
 
