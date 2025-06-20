@@ -158,7 +158,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		return fmt.Errorf("getting 'index' string: %w", err)
 	}
 
-	sb.WriteString(fmt.Sprintf(") ENGINE = %s %s %s %s %s;", replacingMergeTree, primaryKey, partitionBy, orderBy, indexes))
+	sb.WriteString(fmt.Sprintf(" %s) ENGINE = %s %s %s %s;", indexes, replacingMergeTree, primaryKey, partitionBy, orderBy))
 
 	d.AddCreateTableSql(table.Name, sb.String())
 

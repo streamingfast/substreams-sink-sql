@@ -165,7 +165,7 @@ func (d *Database) CreateDatabase(useConstraints bool) error {
 		if err := client.Do(d.ctx, ch.Query{
 			Body: statement,
 		}); err != nil {
-			return fmt.Errorf("executing create table sql: %w", err)
+			return fmt.Errorf("executing create table sql: %w %q", err, statement)
 		}
 		d.logger.Info("table created", zap.String("table_name", statement), zap.String("schema_name", d.schema.Name))
 	}
