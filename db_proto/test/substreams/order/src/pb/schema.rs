@@ -31,6 +31,8 @@ pub struct ClickhouseTableOptions {
     pub partition_fields: ::prost::alloc::vec::Vec<ClickhousePartitionByField>,
     #[prost(message, repeated, tag="3")]
     pub replacing_fields: ::prost::alloc::vec::Vec<ClickhouseReplacingField>,
+    #[prost(message, repeated, tag="4")]
+    pub index_fields: ::prost::alloc::vec::Vec<ClickhouseIndexField>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -55,6 +57,55 @@ pub struct ClickhouseOrderByField {
 pub struct ClickhouseReplacingField {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClickhouseIndexField {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub field_name: ::prost::alloc::string::String,
+    #[prost(enumeration="IndexType", tag="3")]
+    pub r#type: i32,
+    #[prost(uint32, tag="4")]
+    pub granularity: u32,
+    #[prost(enumeration="Function", tag="5")]
+    pub function: i32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum IndexType {
+    Minmax = 0,
+    Set = 1,
+    NgrambfV1 = 2,
+    TokenbfV1 = 3,
+    BloomFilter = 4,
+}
+impl IndexType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            IndexType::Minmax => "minmax",
+            IndexType::Set => "set",
+            IndexType::NgrambfV1 => "ngrambf_v1",
+            IndexType::TokenbfV1 => "tokenbf_v1",
+            IndexType::BloomFilter => "bloom_filter",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "minmax" => Some(Self::Minmax),
+            "set" => Some(Self::Set),
+            "ngrambf_v1" => Some(Self::NgrambfV1),
+            "tokenbf_v1" => Some(Self::TokenbfV1),
+            "bloom_filter" => Some(Self::BloomFilter),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
