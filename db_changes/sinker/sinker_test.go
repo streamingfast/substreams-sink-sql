@@ -214,7 +214,7 @@ func TestSinker_SQLStatements(t *testing.T) {
 			)
 			s, err := sink.New(sink.SubstreamsModeDevelopment, false, testPackage, testPackage.Modules.Modules[0], []byte("unused"), testClientConfig, logger, nil)
 			require.NoError(t, err)
-			sinker, _ := New(s, l, logger, nil)
+			sinker, _ := New(s, l, logger, nil, 3, 1*time.Second)
 
 			for _, evt := range test.events {
 				if evt.undoSignal {
@@ -655,7 +655,7 @@ func runSinkerTest[R any](
 
 	s, err := sink.New(sink.SubstreamsModeDevelopment, false, testPackage, testPackage.Modules.Modules[0], []byte("unused"), testClientConfig, logger, nil)
 	require.NoError(t, err)
-	sinker, _ := New(s, l, logger, nil)
+	sinker, _ := New(s, l, logger, nil, 3, 1*time.Second)
 	t.Cleanup(func() { sinker.loader.Close() })
 
 	require.NoError(t, l.InsertCursor(ctx, sinker.OutputModuleHash(), sink.NewBlankCursor()))
