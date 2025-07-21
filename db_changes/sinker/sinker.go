@@ -29,9 +29,12 @@ type SQLSinker struct {
 
 	stats               *Stats
 	lastAppliedBlockNum *uint64
+	
+	flushRetryCount int
+	flushRetryDelay time.Duration
 }
 
-func New(sink *sink.Sinker, loader *db2.Loader, logger *zap.Logger, tracer logging.Tracer) (*SQLSinker, error) {
+func New(sink *sink.Sinker, loader *db2.Loader, logger *zap.Logger, tracer logging.Tracer, flushRetryCount int, flushRetryDelay time.Duration) (*SQLSinker, error) {
 	return &SQLSinker{
 		Shutter: shutter.New(),
 		Sinker:  sink,
@@ -42,6 +45,8 @@ func New(sink *sink.Sinker, loader *db2.Loader, logger *zap.Logger, tracer loggi
 
 		stats:               NewStats(logger),
 		lastAppliedBlockNum: nil,
+		flushRetryCount:     flushRetryCount,
+		flushRetryDelay:     flushRetryDelay,
 	}, nil
 }
 
@@ -92,6 +97,37 @@ func (s *SQLSinker) Run(ctx context.Context) {
 	s.Sinker.Run(ctx, cursor, s)
 }
 
+func (s *SQLSinker) flushWithRetry(ctx context.Context, moduleHash string, cursor *sink.Cursor, finalBlockHeight uint64, retries int) (int, error) {
+	var lastErr error
+	for attempt := 0; attempt <= retries; attempt++ {
+		if attempt > 0 {
+			delay := time.Duration(attempt) * s.flushRetryDelay
+			s.logger.Warn("retrying flush after error", 
+				zap.Int("attempt", attempt), 
+				zap.Int("max_retries", retries),
+				zap.Duration("delay", delay),
+				zap.Error(lastErr))
+			
+			select {
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		rowCount, err := s.loader.Flush(ctx, moduleHash, cursor, finalBlockHeight)
+		if err == nil {
+			if attempt > 0 {
+				s.logger.Info("flush succeeded after retry", zap.Int("attempt", attempt))
+			}
+			return rowCount, nil
+		}
+		lastErr = err
+	}
+	
+	return 0, fmt.Errorf("flush failed after %d retries: %w", retries, lastErr)
+}
+
 func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
@@ -135,7 +171,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		)
 
 		flushStart := time.Now()
-		rowFlushedCount, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor, data.FinalBlockHeight)
+		rowFlushedCount, err := s.flushWithRetry(ctx, s.OutputModuleHash(), cursor, data.FinalBlockHeight, s.flushRetryCount)
 		if err != nil {
 			return fmt.Errorf("failed to flush at block %s: %w", cursor.Block(), err)
 		}
@@ -230,7 +266,7 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 func (s *SQLSinker) HandleBlockRangeCompletion(ctx context.Context, cursor *sink.Cursor) error {
 
 	s.logger.Info("stream completed, flushing to database", zap.Stringer("block", cursor.Block()))
-	_, err := s.loader.Flush(ctx, s.OutputModuleHash(), cursor, cursor.Block().Num())
+	_, err := s.flushWithRetry(ctx, s.OutputModuleHash(), cursor, cursor.Block().Num(), s.flushRetryCount)
 	if err != nil {
 		return fmt.Errorf("failed to flush %s block on completion: %w", cursor.Block(), err)
 	}

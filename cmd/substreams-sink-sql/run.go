@@ -35,6 +35,8 @@ var sinkRunCmd = Command(sinkRunE,
 		flags.Int("batch-row-flush-interval", 100_000, "When in catch up mode, flush every N rows or after batch-block-flush-interval, whichever comes first. Set to 0 to disable and only use batch-block-flush-interval. Ineffective if the sink is now in the live portion of the chain where only 'live-block-flush-interval' applies.")
 		flags.Int("live-block-flush-interval", 1, "When processing in live mode, flush every N blocks.")
 		flags.Int("flush-interval", 0, "(deprecated) please use --batch-block-flush-interval instead")
+		flags.Int("flush-retry-count", 3, "Number of retry attempts for flush operations")
+		flags.Duration("flush-retry-delay", 1*time.Second, "Base delay for incremental retry backoff on flush failures")
 		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
 	}),
 	Example("substreams-sink-sql run 'postgres://localhost:5432/posgres?sslmode=disable' uniswap-v3@v0.2.10"),
@@ -95,6 +97,8 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	}
 	batchRowFlushInterval := sflags.MustGetInt(cmd, "batch-row-flush-interval")
 	liveBlockFlushInterval := sflags.MustGetInt(cmd, "live-block-flush-interval")
+	flushRetryCount := sflags.MustGetInt(cmd, "flush-retry-count")
+	flushRetryDelay := sflags.MustGetDuration(cmd, "flush-retry-delay")
 
 	dsn, err := db.ParseDSN(dsnString)
 	if err != nil {
@@ -131,7 +135,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load psql table: %w", err)
 	}
 
-	postgresSinker, err := sinker2.New(sink, dbLoader, zlog, tracer)
+	postgresSinker, err := sinker2.New(sink, dbLoader, zlog, tracer, flushRetryCount, flushRetryDelay)
 	if err != nil {
 		return fmt.Errorf("unable to setup postgres sinker: %w", err)
 	}

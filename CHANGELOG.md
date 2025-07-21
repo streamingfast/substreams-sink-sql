@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.6.2
+
+### Added
+* Added flush retry mechanism with configurable retry count and incremental backoff delay
+  - New `--flush-retry-count` flag (default: 3) to set number of retry attempts for flush operations
+  - New `--flush-retry-delay` flag (default: 1s) to set base delay for incremental retry backoff
+  - Automatic retry on flush failures with exponential delay (1s, 2s, 3s, etc.)
+  - Improved error handling and logging for flush operations
+
 ## v4.6.1
 
 * Added support for `--clickhouse-cluster` on all `CREATE` statements.
