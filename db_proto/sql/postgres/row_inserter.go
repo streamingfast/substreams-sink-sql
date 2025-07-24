@@ -81,10 +81,10 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 	}
 
 	fieldCount++
-	fieldNames = append(fieldNames, "block_number")
+	fieldNames = append(fieldNames, sql2.DialectFieldBlockNumber)
 	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 	fieldCount++
-	fieldNames = append(fieldNames, "block_timestamp")
+	fieldNames = append(fieldNames, sql2.DialectFieldBlockTimestamp)
 	placeholders = append(placeholders, fmt.Sprintf("$%d", fieldCount))
 
 	if pk := table.PrimaryKey; pk != nil {
