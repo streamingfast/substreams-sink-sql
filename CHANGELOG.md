@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.6.3
+
+### Fixed
+* Replaced hardcoded field names with dialect constants in PostgreSQL inserters for better consistency
+  - Updated `accumulator_inserter.go` to use `DialectFieldBlockNumber` and `DialectFieldBlockTimestamp` constants
+  - Updated `row_inserter.go` to use `DialectFieldBlockNumber` and `DialectFieldBlockTimestamp` constants
+  - Ensures all proto-related code uses centralized field name constants instead of hardcoded strings
+
 ## v4.6.2
 
 ### Added
