@@ -77,7 +77,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 	tableName := d.FullTableName(table)
 
-	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
+	sb.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", tableName))
 
 	sb.WriteString(fmt.Sprintf(" %s INTEGER NOT NULL,", sql2.DialectFieldBlockNumber))
 	sb.WriteString(fmt.Sprintf(" %s TIMESTAMP NOT NULL,", sql2.DialectFieldBlockTimestamp))

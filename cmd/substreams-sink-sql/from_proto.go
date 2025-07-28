@@ -215,6 +215,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 			sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
 			true,
 			zlog,
+			tracer,
 		)
 		if err != nil {
 			return fmt.Errorf("creating clickhouse database: %w", err)
@@ -229,6 +230,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("fetching sink info: %w", err)
 	}
 
+	zlog.Info("sink info read", zap.Reflect("sink_info", sinkInfo))
 	if sinkInfo == nil {
 		err := database.BeginTransaction()
 		if err != nil {
@@ -304,17 +306,12 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 
 	stats := stats2.NewStats(zlog)
 	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, useConstraints, blockBatchSize, parallel, stats, zlog)
-	sinker.OnTerminating(func(err error) {
-		zlog.Error("sinker terminating", zap.Error(err))
-	})
 
 	err = sinker.Run(cmd.Context())
 	if err != nil {
-		return fmt.Errorf("runnning sinker:%w", err)
+		return fmt.Errorf("running sinker: %w", err)
 	}
 
 	stats.Log()
-	fmt.Println("Goodbye")
-
 	return nil
 }

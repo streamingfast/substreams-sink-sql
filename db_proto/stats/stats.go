@@ -83,7 +83,7 @@ func NewStats(logger *zap.Logger) *Stats {
 
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(30 * time.Second)
 			s.Log()
 		}
 	}()

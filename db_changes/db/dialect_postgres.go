@@ -110,7 +110,7 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 			}
 
 			if _, err := tx.ExecContext(ctx, query); err != nil {
-				return 0, fmt.Errorf("executing query %q: %w", query, err)
+				return 0, fmt.Errorf("executing flush query %q: %w", query, err)
 			}
 		}
 		rowCount += entries.Len()
@@ -283,7 +283,7 @@ func (d PostgresDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, usern
 
 	_, err := tx.ExecContext(ctx, q)
 	if err != nil {
-		return fmt.Errorf("executing query %q: %w", q, err)
+		return fmt.Errorf("executing create user query %q: %w", q, err)
 	}
 
 	return nil

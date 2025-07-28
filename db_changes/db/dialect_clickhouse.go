@@ -105,7 +105,7 @@ func (d ClickhouseDialect) GetCreateCursorQuery(schema string, withPostgraphile 
 	}
 
 	return fmt.Sprintf(cli.Dedent(`
-	CREATE TABLE IF NOT EXISTS %s.%s %s 
+	CREATE TABLE IF NOT EXISTS %s.%s %s
 	(
     id         String,
 		cursor     String,
@@ -219,7 +219,7 @@ func (d ClickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, use
 	createUserQ := fmt.Sprintf("CREATE USER IF NOT EXISTS %s %s IDENTIFIED WITH plaintext_password BY %s;", user, onClusterClause, pass)
 	_, err := tx.ExecContext(ctx, createUserQ)
 	if err != nil {
-		return fmt.Errorf("executing query %q: %w", createUserQ, err)
+		return fmt.Errorf("executing create user query %q: %w", createUserQ, err)
 	}
 
 	var grantQ string
@@ -235,7 +235,7 @@ func (d ClickhouseDialect) CreateUser(tx Tx, ctx context.Context, l *Loader, use
 
 	_, err = tx.ExecContext(ctx, grantQ)
 	if err != nil {
-		return fmt.Errorf("executing query %q: %w", grantQ, err)
+		return fmt.Errorf("executing grant query %q: %w", grantQ, err)
 	}
 
 	return nil

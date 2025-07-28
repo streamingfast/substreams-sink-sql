@@ -15,7 +15,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
-	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
+	github.com/streamingfast/logging v0.0.0-20250728160343-57342b174ace
 	github.com/streamingfast/substreams v1.15.10
 	github.com/streamingfast/substreams-sink v0.5.3-0.20250709174620-9e8293332a06
 	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72

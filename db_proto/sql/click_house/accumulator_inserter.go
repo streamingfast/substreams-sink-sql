@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ClickHouse/ch-go"
 	"github.com/ClickHouse/ch-go/proto"
+	"github.com/streamingfast/logging"
+	"github.com/streamingfast/logging/zapx"
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,9 +27,10 @@ type AccumulatorInserter struct {
 	accumulators map[string]*accumulator
 	cursorStmt   *sql.Stmt
 	logger       *zap.Logger
+	tracer       logging.Tracer
 }
 
-func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*AccumulatorInserter, error) {
+func NewAccumulatorInserter(database *Database, logger *zap.Logger, tracer logging.Tracer) (*AccumulatorInserter, error) {
 	logger = logger.Named("clickhouse inserter")
 
 	accumulators, err := createAccumulators(database.dialect)
@@ -36,6 +40,7 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger) (*Accumulato
 	return &AccumulatorInserter{
 		accumulators: accumulators,
 		logger:       logger,
+		tracer:       tracer,
 	}, nil
 }
 
@@ -46,9 +51,9 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 
 	accumulators := map[string]*accumulator{}
 
-	accumulators["_blocks_"] = &accumulator{
+	accumulators[sql2.DialectTableBlock] = &accumulator{
 		ordinal:   -1,
-		tableName: "_blocks_",
+		tableName: sql2.DialectTableBlock,
 		columns: map[int]string{
 			0: "number",
 			1: "hash",
@@ -72,10 +77,13 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 
 		input[sql2.DialectFieldBlockNumber] = &proto.ColUInt64{}
 		columns[0] = sql2.DialectFieldBlockNumber
+
 		input[sql2.DialectFieldBlockTimestamp] = &proto.ColDateTime{}
 		columns[1] = sql2.DialectFieldBlockTimestamp
+
 		input[sql2.DialectFieldVersion] = &proto.ColInt64{}
 		columns[2] = sql2.DialectFieldVersion
+
 		input[sql2.DialectFieldDeleted] = &proto.ColBool{}
 		columns[3] = sql2.DialectFieldDeleted
 
@@ -144,6 +152,15 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 		}
 		input := accumulator.input[colName]
 
+		if i.tracer.Enabled() {
+			i.logger.Debug("inserting column value",
+				zap.String("table", table),
+				zap.String("column", colName),
+				zapx.Type("column_type", input),
+				zapx.Type("value_type", value),
+			)
+		}
+
 		switch input := input.(type) {
 		case *proto.ColDateTime:
 			if t, ok := value.(*timestamppb.Timestamp); ok {
@@ -180,7 +197,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 }
 
 func (i *AccumulatorInserter) flush(database *Database) error {
-	i.logger.Info("flushing started", zap.Int("accumulators", len(i.accumulators)))
+	i.logger.Debug("flushing started", zap.Int("accumulators", len(i.accumulators)))
 	var accumulators []accumulator
 
 	start := time.Now()
@@ -194,7 +211,7 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 
 	client, err := database.client()
 	if err != nil {
-		return fmt.Errorf("clickhouse accumalator inserter: creating client: %w", err)
+		return fmt.Errorf("clickhouse accumulator inserter: creating client: %w", err)
 	}
 
 	queryDuration := time.Duration(0)
@@ -218,7 +235,7 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 			Body:  input.Into(acc.tableName), // helper that generates INSERT INTO query with all columns
 			Input: input,
 		}); err != nil {
-			return fmt.Errorf("clickhouse accumalator inserter: executing query: %w", err)
+			return fmt.Errorf("clickhouse accumulator inserter: executing query on %q: %w", acc.debugTableAndColumns(), err)
 		}
 
 		queryDuration += time.Since(qStart)
@@ -227,11 +244,25 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 	//reset
 	accs, err := createAccumulators(database.dialect)
 	if err != nil {
-		return fmt.Errorf("clickhouse accumalator inserter: creating accumulators: %w", err)
+		return fmt.Errorf("clickhouse accumulator inserter: creating accumulators: %w", err)
 	}
 	i.accumulators = accs
 
-	i.logger.Info("flushing done", zap.Duration("duration", time.Since(start)), zap.Int("rows", rowCount))
+	i.logger.Debug("flushing done", zap.Duration("duration", time.Since(start)), zap.Int("rows", rowCount))
 
 	return nil
+}
+
+func (acc *accumulator) debugTableAndColumns() string {
+	var b strings.Builder
+	b.WriteString(acc.tableName)
+	b.WriteString(" (")
+	for idx, col := range acc.columns {
+		if idx > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(col)
+	}
+	b.WriteString(")")
+	return b.String()
 }

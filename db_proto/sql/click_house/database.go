@@ -14,6 +14,7 @@ import (
 	"github.com/ClickHouse/ch-go"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
+	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
@@ -44,6 +45,7 @@ func NewDatabase(
 	cursorFilePath string,
 	useProtoOptions bool,
 	logger *zap.Logger,
+	tracer logging.Tracer,
 ) (*Database, error) {
 	baseDB, err := sql.NewBaseDatabase(moduleOutputType, rootMessageDescriptor, useProtoOptions, logger)
 	if err != nil {
@@ -64,7 +66,7 @@ func NewDatabase(
 		cursorFilePath: cursorFilePath,
 		logger:         logger,
 	}
-	inserter, err := NewAccumulatorInserter(database, logger)
+	inserter, err := NewAccumulatorInserter(database, logger, tracer)
 	if err != nil {
 		return nil, fmt.Errorf("creating accumulator inserter: %w", err)
 	}

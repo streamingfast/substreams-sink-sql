@@ -18,7 +18,7 @@ const staticSqlCreatDatabase = `
 `
 const staticSqlCreateBlock = `
 	CREATE TABLE IF NOT EXISTS %s._blocks_  (
-		number    integer,
+		number    UInt64,
 		hash      text,
 		timestamp timestamp,
 		version Int64,
@@ -26,7 +26,7 @@ const staticSqlCreateBlock = `
 
 	)
 	ENGINE = ReplacingMergeTree(version)
-	PARTITION BY (toYYYYMM(timestamp))		
+	PARTITION BY (toYYYYMM(timestamp))
 	PRIMARY KEY (number)
 	ORDER BY (number);
 `
@@ -74,9 +74,9 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 	tableName := d.FullTableName(table)
 
-	sb.WriteString(fmt.Sprintf("CREATE TABLE  IF NOT EXISTS %s (", tableName))
+	sb.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", tableName))
 
-	sb.WriteString(fmt.Sprintf(" %s Int64 NOT NULL,", sql2.DialectFieldBlockNumber))
+	sb.WriteString(fmt.Sprintf(" %s UInt64 NOT NULL,", sql2.DialectFieldBlockNumber))
 	sb.WriteString(fmt.Sprintf(" %s timestamp NOT NULL,", sql2.DialectFieldBlockTimestamp))
 	sb.WriteString(fmt.Sprintf(" %s Int64 NOT NULL,", sql2.DialectFieldVersion))
 	sb.WriteString(fmt.Sprintf(" %s bool NOT NULL,", sql2.DialectFieldDeleted))

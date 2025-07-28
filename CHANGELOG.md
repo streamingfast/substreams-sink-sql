@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.6.4
+
+### Clickhouse & `substreams-sink-sql from-proto`
+
+* Fixed generated schema column `_blocks_.number` to be of type `Uint64`.
+
+* Fixed generated schema column `<table>._block_number_` on all tables to be of type `UInt64`.
+
 ## v4.6.3
 
 ### Fixed
