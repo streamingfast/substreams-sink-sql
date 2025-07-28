@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Clickhouse & `substreams-sink-sql from-proto`
 
+* An `clickhouse_table_options` option `order_by_fields` is required now when using `substreams-sink-sql from proto`, for example you should go from:
+
+  ```proto
+  message Transfer {
+    option (schema.table) = {
+      name: "tranfers"
+    };
+
+    string id = 1;
+    string from = 2;
+    string to = 3;
+  }
+  ```
+
+ To:
+
+ ```proto
+  message Transfer {
+    option (schema.table) = {
+      name: "tranfers",
+      clickhouse_table_options: {
+        order_by_fields: [
+          { name: "id" }
+        ]
+      }
+    };
+
+    string id = 1;
+    string from = 2;
+    string to = 3;
+  }
+  ```
+
+  The selected column will be used to as the `ORDER BY <column>` clause when generating the table schema using `ReplacingMergeTree`.
+
 * Fixed generated schema column `_blocks_.number` to be of type `Uint64`.
 
 * Fixed generated schema column `<table>._block_number_` on all tables to be of type `UInt64`.
