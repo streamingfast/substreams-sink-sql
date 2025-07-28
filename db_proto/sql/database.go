@@ -158,7 +158,6 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 		if table != nil {
 			err := inserter.Insert(table.Name, fieldValues)
 			if err != nil {
-				fmt.Printf("fieldValues: %v\n", fieldValues)
 				return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 			}
 			if len(childs) > 0 && d.useProtoOptions {
