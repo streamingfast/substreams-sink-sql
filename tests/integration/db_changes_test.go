@@ -1,16 +1,14 @@
-package sinker
+package tests
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/streamingfast/bstream"
-	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
@@ -19,23 +17,13 @@ import (
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
-	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-var logger *zap.Logger
-var tracer logging.Tracer
-
-func init() {
-	logger, tracer = logging.ApplicationLogger("test", "test")
-}
-
 func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	testTables := db2.TestSinglePrimaryKeyTables("testschema")
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, nil)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, nil)
 
 	type XferSinglePKRow struct {
 		ID   string `db:"id"`
@@ -187,7 +175,7 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 		}),
 	})
 
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, nil)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, nil)
 
 	pk := compositePK
 
@@ -341,7 +329,7 @@ func TestSinker_Integration_Bytes(t *testing.T) {
 		}),
 	})
 
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, nil)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, nil)
 
 	type XferBytesRow struct {
 		ID    []byte `db:"id"`
@@ -391,7 +379,7 @@ func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
 		);
 	`, schema, schema, schema)
 
-	dbConnectionString, postgresContainer := setupPostgresContainer(t, testTables, &sqlSchema)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, &sqlSchema)
 
 	type XferRow struct {
 		ID   string `db:"id"`
@@ -513,64 +501,6 @@ func newUndoEvent(blockNum, libNum uint64) event {
 	}
 }
 
-// setupPostgresContainer spins up a Postgres Docker container and initialize the database with the corresponding
-// testTables. If the testTablesSQL is `nil`, it will generate the SQL from the testTables directly, otherwise
-// it will use the provided SQL to set up the tables.
-func setupPostgresContainer(t *testing.T, testTables map[string]*db2.TableInfo, testTablesSQL *string) (dbConnectionString string, container *postgres.PostgresContainer) {
-	t.Helper()
-	ctx := context.Background()
-
-	dbName := "users"
-	dbUser := "user"
-	dbPassword := "password"
-
-	postgresContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase(dbName),
-		postgres.WithUsername(dbUser),
-		postgres.WithPassword(dbPassword),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(5*time.Second)),
-	)
-	testcontainers.CleanupContainer(t, postgresContainer)
-	require.NoError(t, err)
-
-	dbConnectionString, err = postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	sqls := []string{
-		`CREATE SCHEMA testschema;`,
-	}
-
-	_, _, err = postgresContainer.Exec(ctx, []string{"psql", "-U", dbUser, "-d", dbName, "-c", strings.Join(sqls, "\n")})
-	require.NoError(t, err)
-
-	l := db2.NewTestLoader(
-		t,
-		dbConnectionString+"&schemaName=testschema",
-		nil,
-		testTables,
-		logger,
-		tracer,
-	)
-
-	if testTablesSQL == nil {
-		testTablesSQL = ptr(db2.GenerateCreateTableSQL(testTables))
-	}
-
-	err = l.Setup(context.Background(), "testschema", *testTablesSQL, false)
-	require.NoError(t, err)
-
-	require.NoError(t, l.Close())
-
-	err = postgresContainer.Snapshot(ctx)
-	require.NoError(t, err)
-
-	return dbConnectionString + "&schemaName=testschema", postgresContainer
-}
-
 var T = true
 var flushEveryBlock = &T
 
@@ -589,16 +519,6 @@ var testPackage = &pbsubstreams.Package{
 }
 
 var testClientConfig = &client.SubstreamsClientConfig{}
-
-func pruneAbove(blockNum uint64) string {
-	return fmt.Sprintf(`DELETE FROM "testschema"."inserts_history" WHERE block_num > %d;DELETE FROM "testschema"."updates_history" WHERE block_num > %d;DELETE FROM "testschema"."deletes_history" WHERE block_num > %d;`,
-		blockNum, blockNum, blockNum)
-}
-
-func pruneBelow(blockNum uint64) string {
-	return fmt.Sprintf(`DELETE FROM "testschema"."inserts_history" WHERE block_num <= %d;DELETE FROM "testschema"."updates_history" WHERE block_num <= %d;DELETE FROM "testschema"."deletes_history" WHERE block_num <= %d;`,
-		blockNum, blockNum, blockNum)
-}
 
 func getFields(fieldsAndValues ...string) (out []*pbdatabase.Field) {
 	if len(fieldsAndValues)%2 != 0 {
