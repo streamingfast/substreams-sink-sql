@@ -60,7 +60,11 @@ func (s *Sinker) Run(ctx context.Context) error {
 
 	s.stats.LastBlockProcessAt = time.Now()
 	s.Sinker.Run(ctx, cursor, s)
-	return nil
+	return s.Sinker.Err()
+}
+
+func (s *Sinker) LogStats() {
+	s.stats.Log()
 }
 
 type Holder struct {
@@ -157,7 +161,10 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 			return fmt.Errorf("flushing: %w", err)
 		}
 
-		flushDurationPerBlock := flushDuration / time.Duration(len(holding))
+		var flushDurationPerBlock time.Duration
+		if len(holding) > 0 {
+			flushDurationPerBlock = flushDuration / time.Duration(len(holding))
+		}
 		s.stats.FlushDuration.Add(flushDurationPerBlock)
 
 		err = s.db.StoreCursor(cursor)

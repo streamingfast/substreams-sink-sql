@@ -453,7 +453,7 @@ func runSinkerTest[R any](
 
 		err := sinker.HandleBlockScopedData(
 			ctx,
-			blockScopedData("db_out", evt.tableChanges, evt.blockNum, evt.libNum),
+			dbChangesBlockData("db_out", evt.tableChanges, evt.blockNum, evt.libNum),
 			flushEveryBlock, sink.MustNewCursor(simpleCursor(evt.blockNum, evt.libNum)),
 		)
 		require.NoError(t, err)
@@ -616,7 +616,7 @@ func deleteRowMultiplePK(table string, pk map[string]string) *pbdatabase.TableCh
 	}
 }
 
-func blockScopedData(module string, changes []*pbdatabase.TableChange, blockNum uint64, finalBlockNum uint64) *pbsubstreamsrpc.BlockScopedData {
+func dbChangesBlockData(module string, changes []*pbdatabase.TableChange, blockNum uint64, finalBlockNum uint64) *pbsubstreamsrpc.BlockScopedData {
 	mapOutput, err := anypb.New(&pbdatabase.DatabaseChanges{
 		TableChanges: changes,
 	})

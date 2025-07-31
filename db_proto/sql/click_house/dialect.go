@@ -233,7 +233,7 @@ func orderByString(table *schema.Table) (string, error) {
 	}
 
 	if len(info.OrderByFields) == 0 {
-		return "", fmt.Errorf("clickhouse table options for table %q don't have any order by fields. Require at least 1", table.Name)
+		return "", fmt.Errorf("clickhouse table options for table %q don't have any 'order_by_fields'. Require at least 1", table.Name)
 	}
 
 	out := ""
@@ -257,13 +257,29 @@ func partitionByString(table *schema.Table) (string, error) {
 		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
 	}
 
-	out := sql2.DialectFieldBlockTimestamp
+	var parts []string
+
+	// Check if any partition field is a function applied to _block_timestamp_
+	hasBlockTimestampFunction := false
 	for _, field := range info.PartitionFields {
-		w := wrapWithClickhouseFunction(field.Name, field.Function)
-		out += ", " + w
+		if field.Name == sql2.DialectFieldBlockTimestamp {
+			hasBlockTimestampFunction = true
+			break
+		}
 	}
 
-	return fmt.Sprintf("PARTITION BY (%s)", out), nil
+	// Only include raw _block_timestamp_ if no function is applied to it
+	if !hasBlockTimestampFunction {
+		parts = append(parts, wrapWithClickhouseFunction(sql2.DialectFieldBlockTimestamp, pbSchmema.Function_toYYYYMM))
+	}
+
+	// Add all partition fields
+	for _, field := range info.PartitionFields {
+		w := wrapWithClickhouseFunction(field.Name, field.Function)
+		parts = append(parts, w)
+	}
+
+	return fmt.Sprintf("PARTITION BY (%s)", strings.Join(parts, ", ")), nil
 }
 
 func replacingMergeTreeString(table *schema.Table) (string, error) {
