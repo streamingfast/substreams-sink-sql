@@ -160,8 +160,72 @@ func (l *Loader) FlushNeeded() bool {
 	return totalRows > l.batchRowFlushInterval
 }
 
+// getTablesExcludingTimescaleDB returns table information similar to schema.Tables()
+// but excludes TimescaleDB internal schemas to avoid "chunk has no dimension slices" errors
+func (l *Loader) getTablesExcludingTimescaleDB() (map[[2]string][]*sql.ColumnType, error) {
+	// First, get all table names excluding TimescaleDB internal schemas
+	query := `
+		SELECT table_schema, table_name 
+		FROM information_schema.tables 
+		WHERE table_type = 'BASE TABLE' 
+		AND table_schema NOT LIKE '_timescaledb_%'
+		ORDER BY table_schema, table_name
+	`
+	
+	rows, err := l.DB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("querying tables: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[[2]string][]*sql.ColumnType)
+	
+	for rows.Next() {
+		var schemaName, tableName string
+		if err := rows.Scan(&schemaName, &tableName); err != nil {
+			return nil, fmt.Errorf("scanning table row: %w", err)
+		}
+		
+		// Get column information for this table
+		columns, err := l.getTableColumns(schemaName, tableName)
+		if err != nil {
+			l.logger.Warn("failed to get columns for table, skipping",
+				zap.String("schema", schemaName),
+				zap.String("table", tableName),
+				zap.Error(err),
+			)
+			continue
+		}
+		
+		key := [2]string{schemaName, tableName}
+		result[key] = columns
+	}
+	
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating table rows: %w", err)
+	}
+	
+	return result, nil
+}
+
+// getTableColumns returns column information for a specific table
+func (l *Loader) getTableColumns(schemaName, tableName string) ([]*sql.ColumnType, error) {
+	// Use a simple query to get column information
+	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE 1=0", 
+		EscapeIdentifier(schemaName), 
+		EscapeIdentifier(tableName))
+	
+	rows, err := l.DB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("querying table structure: %w", err)
+	}
+	defer rows.Close()
+	
+	return rows.ColumnTypes()
+}
+
 func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTableName string) error {
-	schemaTables, err := schema.Tables(l.DB)
+	schemaTables, err := l.getTablesExcludingTimescaleDB()
 	if err != nil {
 		return fmt.Errorf("retrieving table and schemaName: %w", err)
 	}
