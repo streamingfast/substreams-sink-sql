@@ -14,10 +14,12 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	ctx = clickhouse.Context(context.Background(), clickhouse.WithStdAsync(false))
 
 	startAt := time.Now()
+
 	tx, err := l.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to being db transaction: %w", err)
 	}
+
 	defer func() {
 		if err != nil {
 			if err := tx.Rollback(); err != nil {
@@ -39,6 +41,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("failed to commit db transaction: %w", err)
 	}
+
 	l.reset()
 
 	// We add + 1 to the table count because the `cursors` table is an implicit table

@@ -11,6 +11,7 @@ import (
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	clickhouse "github.com/streamingfast/substreams-sink-sql/db_proto/sql/click_house"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/risingwave"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	"go.uber.org/zap"
@@ -87,6 +88,12 @@ func SinkerFactory(
 			)
 			if err != nil {
 				return nil, fmt.Errorf("creating clickhouse database: %w", err)
+			}
+
+		case "risingwave":
+			database, err = risingwave.NewDatabase(schema, dsn, outputModuleName, rootMessageDescriptor, options.UseProtoOption, options.UseConstraints, logger)
+			if err != nil {
+				return nil, fmt.Errorf("creating risingwave database: %w", err)
 			}
 		default:
 			panic(fmt.Sprintf("unsupported driver: %s", dsn.Driver()))

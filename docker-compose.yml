@@ -46,3 +46,20 @@ services:
       - "8123:8123"
       - "9000:9000"
       - "9005:9005"
+  risingwave:
+    container_name: risingwave-ssp2
+    image: risingwavelabs/risingwave:latest
+    hostname: risingwave
+    command: ["playground"]
+    environment:
+      - RUST_BACKTRACE=1
+    ports:
+      - "4566:4566"  # PostgreSQL wire protocol port
+      - "5691:5691"  # RisingWave dashboard
+    volumes:
+      - ./devel/data/risingwave:/risingwave/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5691/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 15

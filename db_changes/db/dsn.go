@@ -28,6 +28,7 @@ var driverMap = map[string]string{
 	"psql":       "postgres",
 	"postgres":   "postgres",
 	"clickhouse": "clickhouse",
+	"risingwave": "risingwave",
 }
 
 func ParseDSN(dsn string) (*DSN, error) {
@@ -100,6 +101,15 @@ func ParseDSN(dsn string) (*DSN, error) {
 }
 
 func (c *DSN) Driver() string {
+	return c.driver
+}
+
+// SqlDriver returns the SQL driver name that should be used with sql.Open()
+// For RisingWave, this returns "postgres" since RisingWave uses the PostgreSQL wire protocol
+func (c *DSN) SqlDriver() string {
+	if c.driver == "risingwave" {
+		return "postgres"
+	}
 	return c.driver
 }
 

@@ -44,6 +44,13 @@ func TestParseDSN(t *testing.T) {
 			expectSchema:     "default",
 			expectPassword:   "",
 		},
+		{
+			name:             "risingwave DSN",
+			dns:              "risingwave://root@risingwave:4566/dev?sslmode=disable",
+			expectConnString: "host=risingwave port=4566 dbname=dev sslmode=disable user=root",
+			expectSchema:     "public",
+			expectPassword:   "",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -59,4 +66,41 @@ func TestParseDSN(t *testing.T) {
 		})
 	}
 
+}
+
+func TestDSN_SqlDriver(t *testing.T) {
+	tests := []struct {
+		name              string
+		dsn               string
+		expectedDriver    string
+		expectedSqlDriver string
+	}{
+		{
+			name:              "postgres DSN",
+			dsn:               "postgres://user:pass@localhost/db",
+			expectedDriver:    "postgres",
+			expectedSqlDriver: "postgres",
+		},
+		{
+			name:              "risingwave DSN",
+			dsn:               "risingwave://root@risingwave:4566/dev",
+			expectedDriver:    "risingwave",
+			expectedSqlDriver: "postgres",
+		},
+		{
+			name:              "clickhouse DSN",
+			dsn:               "clickhouse://default@localhost:9000/default",
+			expectedDriver:    "clickhouse",
+			expectedSqlDriver: "clickhouse",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d, err := ParseDSN(test.dsn)
+			require.NoError(t, err)
+			assert.Equal(t, test.expectedDriver, d.Driver())
+			assert.Equal(t, test.expectedSqlDriver, d.SqlDriver())
+		})
+	}
 }

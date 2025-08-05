@@ -1,6 +1,6 @@
 # Substreams:SQL Sink
 
-The Substreams:SQL sink helps you quickly and easily sync Substreams modules to a PostgreSQL or Clickhouse database.
+The Substreams:SQL sink helps you quickly and easily sync Substreams modules to a PostgreSQL, RisingWave, or ClickHouse database.
 
 ### Quickstart
 
@@ -22,7 +22,19 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
    docker compose up -d
    ```
 
-   > You can wipe the database and restart from scratch by doing `docker compose down` and `rm -rf ./devel/data/postgres`.
+   This will start PostgreSQL, ClickHouse, and RisingWave services. Individual services can be started with:
+   ```bash
+   # Start only PostgreSQL
+   docker compose up -d postgres
+
+   # Start only RisingWave  
+   docker compose up -d risingwave
+
+   # Start only ClickHouse
+   docker compose up -d database
+   ```
+
+   > You can wipe the databases and restart from scratch by doing `docker compose down` and `rm -rf ./devel/data/`.
 
 1. Run the setup command:
 
@@ -33,7 +45,16 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
    substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
    ```
 
-   **Clickhouse**
+   **RisingWave**
+
+   ```bash
+   export DSN="risingwave://root:@localhost:4566/dev?schema=public"
+   substreams-sink-sql setup $DSN docs/tutorial/substreams.risingwave.yaml
+   ```
+
+   > **Note** RisingWave's dashboard is available at http://localhost:5691 when using Docker Compose. The default user for the playground mode is `root` with no password.
+
+   **ClickHouse**
 
    ```bash
    export DSN="clickhouse://default:@localhost:9000/default"
@@ -76,7 +97,7 @@ The [Substreams manifest in the tutorial](docs/tutorial/substreams.yaml#L37) def
 
 DSN stands for Data Source Name (or Database Source Name) and `substreams-sink-sql` expects a URL input that defines how to connect to the right driver. An example input for Postgres is `psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable` which lists hostname, user, password, port and database (with some options) in a single string input.
 
-The URL's scheme is used to determine the driver to use, `psql`, `clickhouse`, etc. In the example case above, the picked driver will be Postgres. The generic format of a DSN is of the form:
+The URL's scheme is used to determine the driver to use, `psql`, `risingwave`, `clickhouse`, etc. In the example case above, the picked driver will be Postgres. The generic format of a DSN is of the form:
 
 ```
 <scheme>:://<username>:<password>@<hostname>:<port>/<database_name>?<options>
@@ -109,9 +130,34 @@ Where `<options>` is URL query parameters in `<key>=<value>` format, multiple op
 
 Moreover, the `schema` option key can be used to select a particular schema within the `<dbname>` database.
 
+#### RisingWave
+
+The DSN format for RisingWave is:
+
+```
+risingwave://<user>:<password>@<host>:<port>/<dbname>[?<options>]
+```
+
+RisingWave is a PostgreSQL-compatible streaming database, so it uses similar connection parameters as PostgreSQL. The default port for RisingWave is typically `4566`. Supported options are similar to PostgreSQL since RisingWave implements the PostgreSQL wire protocol.
+
+**Example DSNs:**
+```bash
+# Local RisingWave instance
+risingwave://root:@localhost:4566/dev?schema=public
+
+# RisingWave with authentication
+risingwave://username:password@risingwave-host:4566/database?schema=substreams
+
+# RisingWave with SSL (if configured)
+risingwave://user:pass@host:4566/db?schema=public&sslmode=require
+```
+
+> [!NOTE]
+> RisingWave optimizes SQL for streaming workloads and provides real-time materialized views. While PostgreSQL-compatible, it uses RisingWave-specific data type mappings and SQL optimizations for better streaming performance.
+
 #### Others
 
-Only `psql` and `clickhouse` are supported today, adding support for a new _dialect_ is quite easy:
+Currently supported drivers are `psql` (PostgreSQL), `risingwave` (RisingWave), and `clickhouse` (ClickHouse). Adding support for a new _dialect_ is quite easy:
 
 - Copy [db/dialect_clickhouse.go](db_changes/db/dialect_clickhouse.go) to a new file `db/dialect_<name>.go` implementing the right functionality.
 - Update [`db.driverDialect` map](https://github.com/streamingfast/substreams-sink-sql/blob/develop/db/dialect.go#L27-L31) to add you dialect (key is the Golang type of your dialect implementation).
@@ -130,6 +176,46 @@ By convention, we name the `map` module that emits [sf.substreams.sink.database.
 
 > Note that using prior versions (0.2.0, 0.1.\*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
 
+### RisingWave Integration
+
+RisingWave is a cloud-native streaming database designed for real-time analytics. It provides several advantages when used with Substreams:
+
+#### Streaming-First Architecture
+- **Real-time Materialized Views**: RisingWave automatically maintains materialized views as new data arrives from Substreams
+- **Incremental Computation**: Efficiently processes only new/changed data rather than recomputing entire datasets
+- **SQL-based Stream Processing**: Use standard SQL to define complex analytics on streaming blockchain data
+
+#### Data Type Optimization
+RisingWave uses optimized data types for blockchain data:
+- `NUMERIC` for large unsigned integers (uint64)
+- `TIMESTAMPTZ` for blockchain timestamps with timezone support
+- `BYTEA` with hex encoding for blockchain addresses and hashes
+- `VARCHAR` instead of `TEXT` for better performance on indexed string fields
+
+#### Setup Example
+```bash
+# Start RisingWave (example with Docker)
+docker run -d --name risingwave \
+  -p 4566:4566 \
+  -p 5691:5691 \
+  risingwavelabs/risingwave:latest \
+  playground
+
+# Run substreams-sink-sql with RisingWave
+export DSN="risingwave://root:@localhost:4566/dev?schema=public"
+substreams-sink-sql setup $DSN your-substreams.yaml
+substreams-sink-sql run $DSN your-substreams.yaml
+```
+
+#### Performance Considerations
+- RisingWave excels at **append-heavy workloads** typical in blockchain data
+- **Materialized views** can pre-aggregate data for fast analytical queries
+- **Horizontal scaling** is built-in for handling high-throughput Substreams
+- Use **streaming joins** to combine data from multiple Substreams modules in real-time
+
+> [!TIP]
+> For optimal performance with RisingWave, design your Substreams output to minimize updates and maximize inserts, leveraging RisingWave's streaming-first architecture.
+
 ### Protobuf models
 
 - protobuf bindings are generated using `buf generate` at the root of this repo. See https://buf.build/docs/installation to install buf.
@@ -145,9 +231,18 @@ The `substreams-sink-sql` contains a fast injection mechanism for cases where bi
 
 The idea is to first dump the Substreams data to `CSV` files using `substreams-sink-sql generate-csv` command:
 
+**PostgreSQL:**
 ```bash
 substreams-sink-sql generate-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" --output-dir ./data/tables :14490000
 ```
+
+**RisingWave:**
+```bash
+substreams-sink-sql generate-csv "risingwave://root:@localhost:4566/dev?schema=public" --output-dir ./data/tables :14490000
+```
+
+> [!NOTE]
+> RisingWave's streaming architecture makes it particularly well-suited for high-throughput injection scenarios. Its append-optimized design can handle large CSV imports efficiently while maintaining real-time query performance.
 
 > [!NOTE]
 > We are using 14490000 as our stop block, pick you stop block close to chain's HEAD or smaller like us to perform an experiment, adjust to your needs.
@@ -156,9 +251,18 @@ This will generate block segmented CSV files for each table in your schema insid
 
 We offer `substreams-sink-sql inject-csv` command as a convenience. It's a per table invocation but feel free to run each table concurrently, your are bound by your database as this point, so it's up to you to decide you much concurrency you want to use. Here a small `Bash` command to loop through all tables and inject them all
 
+**PostgreSQL:**
 ```bash
 for i in `ls ./data/tables | grep -v state.yaml`; do \
   substreams-sink-sql inject-csv "psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable" ./data/tables "$i" :14490000; \
+  if [[ $? != 0 ]]; then break; fi; \
+done
+```
+
+**RisingWave:**
+```bash
+for i in `ls ./data/tables | grep -v state.yaml`; do \
+  substreams-sink-sql inject-csv "risingwave://root:@localhost:4566/dev?schema=public" ./data/tables "$i" :14490000; \
   if [[ $? != 0 ]]; then break; fi; \
 done
 ```

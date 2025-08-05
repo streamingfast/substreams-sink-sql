@@ -148,7 +148,6 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 				err = s.processHolder(h, s.stats)
 				if err != nil {
 					if s.useTransaction {
-						s.logger.Error("rolling back transaction", zap.Error(err))
 						s.db.RollbackTransaction()
 					}
 					return fmt.Errorf("process holder: %w", err)
