@@ -160,19 +160,19 @@ func (l *Loader) FlushNeeded() bool {
 	return totalRows > l.batchRowFlushInterval
 }
 
-// getPublicTables returns table information similar to schema.Tables()
-// but only inspects tables in the 'public' schema to avoid issues with database extensions
-func (l *Loader) getPublicTables() (map[[2]string][]*sql.ColumnType, error) {
-	// Only get tables from the public schema
+// getTablesFromSchema returns table information similar to schema.Tables()
+// but only inspects tables in the specified schema to avoid issues with database extensions
+func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.ColumnType, error) {
+	// Only get tables from the specified schema
 	query := `
 		SELECT table_schema, table_name 
 		FROM information_schema.tables 
 		WHERE table_type = 'BASE TABLE' 
-		AND table_schema = 'public'
+		AND table_schema = $1
 		ORDER BY table_schema, table_name
 	`
 	
-	rows, err := l.DB.Query(query)
+	rows, err := l.DB.Query(query, schemaName)
 	if err != nil {
 		return nil, fmt.Errorf("querying tables: %w", err)
 	}
@@ -225,7 +225,7 @@ func (l *Loader) getTableColumns(schemaName, tableName string) ([]*sql.ColumnTyp
 }
 
 func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTableName string) error {
-	schemaTables, err := l.getPublicTables()
+	schemaTables, err := l.getTablesFromSchema(schemaName)
 	if err != nil {
 		return fmt.Errorf("retrieving table and schemaName: %w", err)
 	}
