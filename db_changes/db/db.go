@@ -160,15 +160,15 @@ func (l *Loader) FlushNeeded() bool {
 	return totalRows > l.batchRowFlushInterval
 }
 
-// getTablesExcludingTimescaleDB returns table information similar to schema.Tables()
-// but excludes TimescaleDB internal schemas to avoid "chunk has no dimension slices" errors
-func (l *Loader) getTablesExcludingTimescaleDB() (map[[2]string][]*sql.ColumnType, error) {
-	// First, get all table names excluding TimescaleDB internal schemas
+// getPublicTables returns table information similar to schema.Tables()
+// but only inspects tables in the 'public' schema to avoid issues with database extensions
+func (l *Loader) getPublicTables() (map[[2]string][]*sql.ColumnType, error) {
+	// Only get tables from the public schema
 	query := `
 		SELECT table_schema, table_name 
 		FROM information_schema.tables 
 		WHERE table_type = 'BASE TABLE' 
-		AND table_schema NOT LIKE '_timescaledb_%'
+		AND table_schema = 'public'
 		ORDER BY table_schema, table_name
 	`
 	
@@ -225,7 +225,7 @@ func (l *Loader) getTableColumns(schemaName, tableName string) ([]*sql.ColumnTyp
 }
 
 func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTableName string) error {
-	schemaTables, err := l.getTablesExcludingTimescaleDB()
+	schemaTables, err := l.getPublicTables()
 	if err != nil {
 		return fmt.Errorf("retrieving table and schemaName: %w", err)
 	}
