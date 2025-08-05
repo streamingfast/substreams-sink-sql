@@ -555,16 +555,16 @@ func (d *PostgresDialect) normalizeValueType(value string, valueType reflect.Typ
 				return escapeStringValue(time.Unix(int64(i), 0).Format(time.RFC3339)), nil
 			}
 
-			// It's a plain string, parse by dialect it and pass it to the databaseName
+			// It's a plain string, parse by dialect it and pass it to the database
 			return d.ParseDatetimeNormalization(value), nil
 		}
 
 		return "", fmt.Errorf("unsupported struct type %s", valueType)
 	default:
 		// It's a column's type the schemaName parsing don't know how to represents as
-		// a Go type. In that case, we pass it unmodified to the databaseName engine. It
+		// a Go type. In that case, we pass it unmodified to the database engine. It
 		// will be the responsibility of the one sending the data to correctly represent
-		// it in the way accepted by the databaseName.
+		// it in the way accepted by the database.
 		//
 		// In most cases, it going to just work.
 		return value, nil

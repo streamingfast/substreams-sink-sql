@@ -12,15 +12,9 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
-	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
-	clickhouse "github.com/streamingfast/substreams-sink-sql/db_proto/sql/click_house"
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
-	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
-	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
 	"github.com/streamingfast/substreams-sink-sql/services"
 	"github.com/streamingfast/substreams/manifest"
-	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -174,13 +168,6 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("message descriptor not found for output type %q. Your substreams need to bundle its protobuf definitions", outputType)
 	}
 
-	schemaName := dsn.Schema()
-
-	schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, useProtoOption, zlog)
-	if err != nil {
-		return fmt.Errorf("creating schema: %w", err)
-	}
-
 	baseSink, err := sink.NewFromViper(
 		cmd,
 		outputType,
@@ -195,123 +182,28 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	var database protosql.Database
+	factory := db_proto.SinkerFactory(baseSink, outputModuleName, rootMessageDescriptor.UnwrapMessage(), db_proto.SinkerFactoryOptions{
+		UseProtoOption:  useProtoOption,
+		UseConstraints:  useConstraints,
+		UseTransactions: useTransactions,
+		BlockBatchSize:  blockBatchSize,
+		Parallel:        parallel,
+		Clickhouse: db_proto.SinkerFactoryClickhouse{
+			SinkInfoFolder: sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
+			CursorFilePath: sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
+		},
+	})
 
-	switch dsn.Driver() {
-	case "postgres":
-		database, err = postgres.NewDatabase(schema, dsn, outputModuleName, rootMessageDescriptor, useProtoOption, useConstraints, zlog)
-		if err != nil {
-			return fmt.Errorf("creating postgres database: %w", err)
-		}
-
-	case "clickhouse":
-		database, err = clickhouse.NewDatabase(
-			cmd.Context(),
-			schema,
-			dsn,
-			outputModuleName,
-			rootMessageDescriptor,
-			sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
-			sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
-			true,
-			zlog,
-			tracer,
-		)
-		if err != nil {
-			return fmt.Errorf("creating clickhouse database: %w", err)
-		}
-	default:
-		panic(fmt.Sprintf("unsupported driver: %s", dsn.Driver()))
-
-	}
-
-	sinkInfo, err := database.FetchSinkInfo(schema.Name)
+	sinker, err := factory(cmd.Context(), dsnString, dsn.Schema(), zlog, tracer)
 	if err != nil {
-		return fmt.Errorf("fetching sink info: %w", err)
+		return fmt.Errorf("creating sinker: %w", err)
 	}
-
-	zlog.Info("sink info read", zap.Reflect("sink_info", sinkInfo))
-	if sinkInfo == nil {
-		err := database.BeginTransaction()
-		if err != nil {
-			return fmt.Errorf("begin transaction: %w", err)
-		}
-		err = database.CreateDatabase(useConstraints)
-		if err != nil {
-			database.RollbackTransaction()
-			return fmt.Errorf("creating database: %w", err)
-		}
-
-		err = database.StoreSinkInfo(schemaName, database.GetDialect().SchemaHash())
-		if err != nil {
-			database.RollbackTransaction()
-			return fmt.Errorf("storing sink info: %w", err)
-		}
-
-		err = database.CommitTransaction()
-
-	} else {
-		migrationNeeded := sinkInfo.SchemaHash != database.GetDialect().SchemaHash()
-		if migrationNeeded {
-
-			tempSchemaName := schema.Name + "_" + database.GetDialect().SchemaHash()
-			tempSinkInfo, err := database.FetchSinkInfo(tempSchemaName)
-			if err != nil {
-				return fmt.Errorf("fetching temp schema sink info: %w", err)
-			}
-			if tempSinkInfo != nil {
-				hash, err := database.DatabaseHash(schema.Name)
-				if err != nil {
-					return fmt.Errorf("fetching schema %q hash: %w", schema.Name, err)
-				}
-				dbTempHash, err := database.DatabaseHash(tempSchemaName)
-				if err != nil {
-					return fmt.Errorf("fetching temp schema %q hash: %w", tempSchemaName, err)
-				}
-
-				if hash != dbTempHash {
-					return fmt.Errorf("schema %s and temp schema %s have different hash", schema.Name, tempSchemaName)
-				}
-				err = database.BeginTransaction()
-				if err != nil {
-					return fmt.Errorf("begin transaction: %w", err)
-				}
-				err = database.UpdateSinkInfoHash(schemaName, tempSinkInfo.SchemaHash)
-				if err != nil {
-					database.RollbackTransaction()
-					return fmt.Errorf("updating sink info hash: %w", err)
-				}
-
-				err = database.CommitTransaction()
-				if err != nil {
-					return fmt.Errorf("commit transaction: %w", err)
-				}
-
-			} else {
-				//todo: create the temp schema ... and exit
-
-				//err = schema.ChangeName(tempSchemaName, dialect)
-				//if err != nil {
-				//	return nil, fmt.Errorf("changing schema name: %w", err)
-				//}
-				//generateTempSchema = true
-			}
-		}
-	}
-
-	err = database.Open()
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
-	}
-
-	stats := stats2.NewStats(zlog)
-	sinker := db_proto.NewSinker(rootMessageDescriptor, baseSink, database, useTransactions, useConstraints, blockBatchSize, parallel, stats, zlog)
 
 	err = sinker.Run(cmd.Context())
 	if err != nil {
 		return fmt.Errorf("running sinker: %w", err)
 	}
 
-	stats.Log()
+	sinker.LogStats()
 	return nil
 }

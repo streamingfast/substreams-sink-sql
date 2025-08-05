@@ -13,7 +13,7 @@ type UnknownDriverError struct {
 
 // Error returns a formatted string description.
 func (e UnknownDriverError) Error() string {
-	return fmt.Sprintf("unknown databaseName driver: %s", e.Driver)
+	return fmt.Sprintf("unknown database driver: %s", e.Driver)
 }
 
 type Dialect interface {

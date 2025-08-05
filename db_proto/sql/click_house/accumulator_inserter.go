@@ -148,7 +148,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 	for idx, value := range values {
 		colName, found := accumulator.columns[idx]
 		if !found {
-			return fmt.Errorf("column not found for table %q at idx %d", table, idx)
+			return fmt.Errorf("column %q not found for table %q at idx %d", colName, table, idx)
 		}
 		input := accumulator.input[colName]
 

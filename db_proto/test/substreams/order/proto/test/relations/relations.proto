@@ -94,7 +94,8 @@ message OrderExtension {
     name: "order_extensions",
     child_of: "orders on order_id"
     clickhouse_table_options: {
-      order_by_fields: [{name: "order_id"}]
+      order_by_fields: [{name: "order_id"}],
+      partition_fields: [{name: "_block_timestamp_", function: toYYYYDD}]
     }
   };
   string description = 1;

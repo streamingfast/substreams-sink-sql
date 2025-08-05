@@ -42,7 +42,7 @@ func (l *Loader) Flush(ctx context.Context, outputModuleHash string, cursor *sin
 	l.reset()
 
 	// We add + 1 to the table count because the `cursors` table is an implicit table
-	l.logger.Debug("flushed table(s) rows to databaseName", zap.Int("table_count", l.entries.Len()+1), zap.Int("row_count", rowFlushedCount), zap.Duration("took", time.Since(startAt)))
+	l.logger.Debug("flushed table(s) rows to database", zap.Int("table_count", l.entries.Len()+1), zap.Int("row_count", rowFlushedCount), zap.Duration("took", time.Since(startAt)))
 	return rowFlushedCount, nil
 }
 
@@ -71,7 +71,7 @@ func (l *Loader) Revert(ctx context.Context, outputModuleHash string, cursor *si
 		return fmt.Errorf("failed to commit db transaction: %w", err)
 	}
 
-	l.logger.Debug("reverted changes to databaseName", zap.Uint64("last_valid_block", lastValidBlock))
+	l.logger.Debug("reverted changes to database", zap.Uint64("last_valid_block", lastValidBlock))
 	return nil
 }
 

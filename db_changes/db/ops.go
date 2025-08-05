@@ -173,7 +173,7 @@ func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map
 // check before with HasTable()
 func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
-		return fmt.Errorf("update operation is not supported by the current databaseName")
+		return fmt.Errorf("update operation is not supported by the current database")
 	}
 
 	uniqueID := createRowUniqueID(primaryKey)
@@ -235,7 +235,7 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 // check before with HasTable()
 func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
-		return fmt.Errorf("delete operation is not supported by the current databaseName")
+		return fmt.Errorf("delete operation is not supported by the current database")
 	}
 
 	uniqueID := createRowUniqueID(primaryKey)
