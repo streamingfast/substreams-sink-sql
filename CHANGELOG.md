@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### `substreams-sink-sql run`
+
+* Read tables information only for given schema to avoid walking non-related tables.
+
 ### Clickhouse & `substreams-sink-sql from-proto`
 
 * If a `clickhouse_table_options.partition_fields` already contains some partition for `_block_timestamp_`, the default `(toYYYYMM(_block_timestamp_))` will not be added anymore.
