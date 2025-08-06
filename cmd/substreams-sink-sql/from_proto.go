@@ -9,6 +9,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
+	sinksql "github.com/streamingfast/substreams-sink-sql"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
@@ -121,7 +122,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not find output type for module %s", outputModuleName)
 	}
 
-	service, err := extractSinkService(spkg)
+	service, err := sinksql.ExtractSinkService(spkg)
 	if err != nil {
 		service = &pbsql.Service{}
 	}

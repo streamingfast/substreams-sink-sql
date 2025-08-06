@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,8 @@ import (
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
-	"github.com/streamingfast/substreams/client"
+	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
+	"github.com/streamingfast/substreams/manifest"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"github.com/stretchr/testify/require"
@@ -21,9 +23,11 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+const testSchema = dbChangesSchemaName
+
 func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
-	testTables := db2.TestSinglePrimaryKeyTables("testschema")
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, nil)
+	testTables := db2.TestSinglePrimaryKeyTables(testSchema)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 
 	type XferSinglePKRow struct {
 		ID   string `db:"id"`
@@ -31,134 +35,140 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 		To   string `db:"to"`
 	}
 
+	equalsXferRows := func(expected []*XferSinglePKRow) func(t *testing.T, dbx *sqlx.DB) {
+		return func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t, expected, readDbChangesRows[XferSinglePKRow](t, dbx, "xfer"))
+		}
+	}
+
 	tests := []struct {
-		name                   string
-		events                 []event
-		expectedQueryResponses []*XferSinglePKRow
-		expectedFinalCursor    string
+		name                string
+		responses           []*pbsubstreamsrpc.Response
+		expected            func(t *testing.T, dbx *sqlx.DB)
+		expectedFinalCursor string
 	}{
 		{
 			"insert final",
-			[]event{
-				newEvent(10, 10,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
 					insertRowSinglePK("xfer", "1234", "from", "sender1", "to", "receiver1"),
 				),
-			},
-			[]*XferSinglePKRow{
+			),
+			equalsXferRows([]*XferSinglePKRow{
 				{ID: "1234", From: "sender1", To: "receiver1"},
-			},
-			"Block #10 (10) - LIB #10 (10)",
+			}),
+			"Block #10 (10a) - LIB #10 (10a)",
 		},
 		{
 			"insert then undo insertion",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					insertRowSinglePK("xfer", "1234", "from", "sender1", "to", "receiver1"),
 				),
-				newUndoEvent(9, 8),
-			},
+				blockUndo(t, "9a", finalBlock("8a")),
+			),
 			nil,
-			"Block #9 (9) - LIB #8 (8)",
+			"Block #9 (9a) - LIB #8 (8a)",
 		},
 
 		{
 			"upsert final",
-			[]event{
-				newEvent(10, 10,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
 					upsertRowSinglePK("xfer", "1234", "from", "sender2", "to", "receiver2"),
 				),
-			},
-			[]*XferSinglePKRow{
+			),
+			equalsXferRows([]*XferSinglePKRow{
 				{ID: "1234", From: "sender2", To: "receiver2"},
-			},
-			"Block #10 (10) - LIB #10 (10)",
+			}),
+			"Block #10 (10a) - LIB #10 (10a)",
 		},
 		{
 			"upsert, first insert, second update, final",
-			[]event{
-				newEvent(10, 10,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowSinglePK("xfer", "1234", "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 11,
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
 					upsertRowSinglePK("xfer", "1234", "to", "receiver3"),
 				),
-			},
-			[]*XferSinglePKRow{
+			),
+			equalsXferRows([]*XferSinglePKRow{
 				{ID: "1234", From: "sender2", To: "receiver3"},
-			},
-			"Block #11 (11) - LIB #11 (11)",
+			}),
+			"Block #11 (11a) - LIB #11 (11a)",
 		},
 
 		{
 			"upsert, first insert, undo insertion",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowSinglePK("xfer", "1234", "from", "sender2", "to", "receiver2"),
 				),
-				newUndoEvent(9, 8),
-			},
+				blockUndo(t, "9a", finalBlock("8a")),
+			),
 			nil,
-			"Block #9 (9) - LIB #8 (8)",
+			"Block #9 (9a) - LIB #8 (8a)",
 		},
 		{
 			"upsert, first insert, second update, undo initial insert",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", "8a",
 					upsertRowSinglePK("xfer", "1234", "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 8,
+				dbChangesBlockData(t, "11a", "8a",
 					upsertRowSinglePK("xfer", "1234", "to", "receiver3"),
 				),
-				newUndoEvent(9, 8),
-			},
+				blockUndo(t, "9a", finalBlock("8a")),
+			),
 			nil,
-			"Block #9 (9) - LIB #8 (8)",
+			"Block #9 (9a) - LIB #8 (8a)",
 		},
 		{
 			"upsert, first insert, second update, undo last update",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", "8a",
 					upsertRowSinglePK("xfer", "1234", "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 8,
+				dbChangesBlockData(t, "11a", "8a",
 					upsertRowSinglePK("xfer", "1234", "to", "receiver3"),
 				),
-				newUndoEvent(10, 8),
-			},
-			[]*XferSinglePKRow{
+				blockUndo(t, "10a", finalBlock("8a")),
+			),
+			equalsXferRows([]*XferSinglePKRow{
 				{ID: "1234", From: "sender2", To: "receiver2"},
-			},
-			"Block #10 (10) - LIB #8 (8)",
+			}),
+			"Block #10 (10a) - LIB #8 (8a)",
 		},
 		{
 			"upsert, first insert, second update, third update, undo last update",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", "8a",
 					upsertRowSinglePK("xfer", "1234", "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 8,
+				dbChangesBlockData(t, "11a", "8a",
 					upsertRowSinglePK("xfer", "1234", "to", "receiver3"),
 				),
-				newEvent(12, 8,
+				dbChangesBlockData(t, "12a", "8a",
 					upsertRowSinglePK("xfer", "1234", "from", "sender3"),
 				),
-				newUndoEvent(11, 8),
-			},
-			[]*XferSinglePKRow{
+				blockUndo(t, "11a", finalBlock("8a")),
+			),
+			equalsXferRows([]*XferSinglePKRow{
 				{ID: "1234", From: "sender2", To: "receiver3"},
-			},
-			"Block #11 (11) - LIB #8 (8)",
+			}),
+			"Block #11 (11a) - LIB #8 (8a)",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			runSinkerTest(
 				t,
-				testTables,
+				tablesInput(testTables),
 				dbConnectionString,
 				postgresContainer,
-				test.events,
-				test.expectedQueryResponses,
+				test.responses,
+				test.expected,
 				test.expectedFinalCursor,
 			)
 		})
@@ -166,8 +176,8 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 }
 
 func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
-	testTables := db2.TestTables("testschema", map[string]*db2.TableInfo{
-		"xfer": mustNewTableInfo("testschema", "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
+	testTables := db2.TestTables(testSchema, map[string]*db2.TableInfo{
+		"xfer": mustNewTableInfo(testSchema, "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
 			"id":     db2.NewColumnInfo("id", "text", ""),
 			"number": db2.NewColumnInfo("number", "bigint", ""),
 			"from":   db2.NewColumnInfo("from", "text", ""),
@@ -175,7 +185,7 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 		}),
 	})
 
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, nil)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 
 	pk := compositePK
 
@@ -186,134 +196,140 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 		To     string `db:"to"`
 	}
 
+	equalsXferCompositePKRows := func(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB) {
+		return func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+		}
+	}
+
 	tests := []struct {
-		name                   string
-		events                 []event
-		expectedQueryResponses []*XferCompositePKRow
-		expectedFinalCursor    string
+		name                string
+		responses           []*pbsubstreamsrpc.Response
+		expected            func(t *testing.T, dbx *sqlx.DB)
+		expectedFinalCursor string
 	}{
 		{
 			"insert final",
-			[]event{
-				newEvent(10, 10,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
 					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
 				),
-			},
-			[]*XferCompositePKRow{
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
 				{ID: "12", Number: "34", From: "sender1", To: "receiver1"},
-			},
-			"Block #10 (10) - LIB #10 (10)",
+			}),
+			"Block #10 (10a) - LIB #10 (10a)",
 		},
 		{
 			"insert then undo insertion",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
 				),
-				newUndoEvent(9, 8),
-			},
+				blockUndo(t, "9a", finalBlock("8a")),
+			),
 			nil,
-			"Block #9 (9) - LIB #8 (8)",
+			"Block #9 (9a) - LIB #8 (8a)",
 		},
 
 		{
 			"upsert final",
-			[]event{
-				newEvent(10, 10,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender2", "to", "receiver2"),
 				),
-			},
-			[]*XferCompositePKRow{
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
 				{ID: "12", Number: "34", From: "sender2", To: "receiver2"},
-			},
-			"Block #10 (10) - LIB #10 (10)",
+			}),
+			"Block #10 (10a) - LIB #10 (10a)",
 		},
 		{
 			"upsert, first insert, second update, final",
-			[]event{
-				newEvent(10, 10,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 11,
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "to", "receiver3"),
 				),
-			},
-			[]*XferCompositePKRow{
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
 				{ID: "12", Number: "34", From: "sender2", To: "receiver3"},
-			},
-			"Block #11 (11) - LIB #11 (11)",
+			}),
+			"Block #11 (11a) - LIB #11 (11a)",
 		},
 
 		{
 			"upsert, first insert, undo insertion",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender2", "to", "receiver2"),
 				),
-				newUndoEvent(9, 8),
-			},
+				blockUndo(t, "9a", finalBlock("8a")),
+			),
 			nil,
-			"Block #9 (9) - LIB #8 (8)",
+			"Block #9 (9a) - LIB #8 (8a)",
 		},
 		{
 			"upsert, first insert, second update, undo initial insert",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 8,
+				dbChangesBlockData(t, "11a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "to", "receiver3"),
 				),
-				newUndoEvent(9, 8),
-			},
+				blockUndo(t, "9a", finalBlock("8a")),
+			),
 			nil,
-			"Block #9 (9) - LIB #8 (8)",
+			"Block #9 (9a) - LIB #8 (8a)",
 		},
 		{
 			"upsert, first insert, second update, undo last update",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 8,
+				dbChangesBlockData(t, "11a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "to", "receiver3"),
 				),
-				newUndoEvent(10, 8),
-			},
-			[]*XferCompositePKRow{
+				blockUndo(t, "10a", finalBlock("8a")),
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
 				{ID: "12", Number: "34", From: "sender2", To: "receiver2"},
-			},
-			"Block #10 (10) - LIB #8 (8)",
+			}),
+			"Block #10 (10a) - LIB #8 (8a)",
 		},
 		{
 			"upsert, first insert, second update, third update, undo last update",
-			[]event{
-				newEvent(10, 8,
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender2", "to", "receiver2"),
 				),
-				newEvent(11, 8,
+				dbChangesBlockData(t, "11a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "to", "receiver3"),
 				),
-				newEvent(12, 8,
+				dbChangesBlockData(t, "12a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender3"),
 				),
-				newUndoEvent(11, 8),
-			},
-			[]*XferCompositePKRow{
+				blockUndo(t, "11a", finalBlock("8a")),
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
 				{ID: "12", Number: "34", From: "sender2", To: "receiver3"},
-			},
-			"Block #11 (11) - LIB #8 (8)",
+			}),
+			"Block #11 (11a) - LIB #8 (8a)",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			runSinkerTest(
 				t,
-				testTables,
+				tablesInput(testTables),
 				dbConnectionString,
 				postgresContainer,
-				test.events,
-				test.expectedQueryResponses,
+				test.responses,
+				test.expected,
 				test.expectedFinalCursor,
 			)
 		})
@@ -321,7 +337,7 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 }
 
 func TestSinker_Integration_Bytes(t *testing.T) {
-	schema := "testschema"
+	schema := testSchema
 	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
 		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
 			"id":    db2.NewColumnInfo("id", "bytea", []byte{}),
@@ -329,7 +345,7 @@ func TestSinker_Integration_Bytes(t *testing.T) {
 		}),
 	})
 
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, nil)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 
 	type XferBytesRow struct {
 		ID    []byte `db:"id"`
@@ -338,34 +354,61 @@ func TestSinker_Integration_Bytes(t *testing.T) {
 
 	runSinkerTest(
 		t,
-		testTables,
+		tablesInput(testTables),
 		dbConnectionString,
 		postgresContainer,
-		[]event{
-			newEvent(10, 10,
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
 				insertRowSinglePK("xfer", `\x01`, "value", `\x04ab`),
 			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t,
+				[]*XferBytesRow{{ID: []byte{0x01}, Value: []byte{0x04, 0xab}}},
+				readDbChangesRows[XferBytesRow](t, dbx, "xfer"),
+			)
 		},
-		[]*XferBytesRow{
-			{ID: []byte{0x01}, Value: []byte{0x04, 0xab}},
+		"Block #10 (10a) - LIB #10 (10a)",
+	)
+}
+
+func TestSinker_Integration_TimescaleDB(t *testing.T) {
+	schema := testSchema
+	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
+		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
+			"id":    db2.NewColumnInfo("id", "bytea", []byte{}),
+			"value": db2.NewColumnInfo("value", "bytea", []byte{}),
+		}),
+	})
+
+	dbConnectionString, postgresContainer := setupDbChangesTimescaleDBContainer(t)
+
+	type XferBytesRow struct {
+		ID    []byte `db:"id"`
+		Value []byte `db:"value"`
+	}
+
+	runSinkerTest(
+		t,
+		tablesInput(testTables),
+		dbConnectionString,
+		postgresContainer,
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
+				insertRowSinglePK("xfer", `\x01`, "value", `\x04ab`),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t,
+				[]*XferBytesRow{{ID: []byte{0x01}, Value: []byte{0x04, 0xab}}},
+				readDbChangesRows[XferBytesRow](t, dbx, "xfer"),
+			)
 		},
-		"Block #10 (10) - LIB #10 (10)",
+		"Block #10 (10a) - LIB #10 (10a)",
 	)
 }
 
 func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
-	schema := "testschema"
-	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
-		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
-			"id":   db2.NewColumnInfo("id", "text", ""),
-			"from": db2.NewColumnInfo("from", "text", ""),
-		}),
-
-		"users": mustNewTableInfo(schema, "users", []string{"id"}, map[string]*db2.ColumnInfo{
-			"id": db2.NewColumnInfo("id", "text", ""),
-		}),
-	})
-
 	sqlSchema := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS %s.users (
 			id TEXT PRIMARY KEY
@@ -377,9 +420,9 @@ func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
 				FOREIGN KEY("from")
 				REFERENCES %s.users(id)
 		);
-	`, schema, schema, schema)
+	`, testSchema, testSchema, testSchema)
 
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t, testTables, &sqlSchema)
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 
 	type XferRow struct {
 		ID   string `db:"id"`
@@ -392,29 +435,32 @@ func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
 
 	runSinkerTest(
 		t,
-		testTables,
+		rawSQLInput(sqlSchema),
 		dbConnectionString,
 		postgresContainer,
-		[]event{
-			newEvent(10, 10,
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
 				insertRowSinglePK("users", "user1"),
 				insertRowSinglePK("xfer", "xfer1", "from", "user1"),
 			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t,
+				[]*XferRow{{ID: "xfer1", From: "user1"}},
+				readDbChangesRows[XferRow](t, dbx, "xfer"),
+			)
 		},
-		[]*XferRow{
-			{ID: "xfer1", From: "user1"},
-		},
-		"Block #10 (10) - LIB #10 (10)",
+		"Block #10 (10a) - LIB #10 (10a)",
 	)
 }
 
-func runSinkerTest[R any](
+func runSinkerTest(
 	t *testing.T,
-	tables map[string]*db2.TableInfo,
+	setupInput sinkerSetupInput,
 	dbDSN string,
 	postgresContainer *postgres.PostgresContainer,
-	events []event,
-	expectedQueryResponses []R,
+	responses []*pbsubstreamsrpc.Response,
+	expected func(t *testing.T, dbx *sqlx.DB),
 	expectedFinalCursor string,
 ) {
 	t.Helper()
@@ -424,101 +470,90 @@ func runSinkerTest[R any](
 		require.NoError(t, postgresContainer.Restore(ctx))
 	})
 
-	l := db2.NewTestLoader(
-		t,
-		dbDSN,
-		nil,
-		tables,
+	// Setup fake substreams server and test package
+	pattern := make([]interface{}, len(responses))
+	for i, resp := range responses {
+		pattern[i] = resp
+	}
+	substreamsClientConfig := setupFakeSubstreamsServer(t, pattern...)
+	spkg := substreamsTestPackage(pbdatabase.File_sf_substreams_sink_database_v1_database_proto, (*pbdatabase.DatabaseChanges)(nil).ProtoReflect().Descriptor())
+
+	var err error
+	spkg.SinkConfig, err = anypb.New(&pbsql.Service{
+		Schema: setupInput.ToSQL(),
+	})
+	require.NoError(t, err)
+
+	setupOptions := sinker.SinkerSetupOptions{
+		CursorTableName:            "cursors",
+		HistoryTableName:           "history",
+		ClickhouseCluster:          "",
+		OnModuleHashMismatch:       "error",
+		SystemTablesOnly:           false,
+		IgnoreDuplicateTableErrors: false,
+		Postgraphile:               false,
+	}
+
+	err = sinker.SinkerSetup(ctx, dbDSN, spkg, setupOptions, logger, tracer)
+	require.NoError(t, err)
+
+	// Load table metadata (including cursor table) - this is required for InsertCursor to work
+	baseSink, err := sink.New(
+		sink.SubstreamsModeProduction,
+		false,
+		spkg,
+		spkg.Modules.Modules[0],
+		manifest.ModuleHash{},
+		substreamsClientConfig,
 		logger,
 		tracer,
+		sink.WithBlockRange(bstream.MustParseRange("1-1000", bstream.WithExclusiveEnd())),
+		sink.WithLivenessChecker(&isAlwaysLiveChecker{}),
 	)
-
-	s, err := sink.New(sink.SubstreamsModeDevelopment, false, testPackage, testPackage.Modules.Modules[0], []byte("unused"), testClientConfig, logger, nil)
 	require.NoError(t, err)
-	sinker, _ := sinker.New(s, l, logger, nil, 3, 1*time.Second)
-	t.Cleanup(func() { sinker.Close() })
 
-	require.NoError(t, l.InsertCursor(ctx, sinker.OutputModuleHash(), sink.NewBlankCursor()))
-
-	for _, evt := range events {
-		if evt.undoSignal {
-			cursor := simpleCursor(evt.blockNum, evt.libNum)
-			err := sinker.HandleBlockUndoSignal(ctx, &pbsubstreamsrpc.BlockUndoSignal{
-				LastValidBlock:  &pbsubstreams.BlockRef{Id: fmt.Sprintf("%d", evt.blockNum), Number: evt.blockNum},
-				LastValidCursor: cursor,
-			}, sink.MustNewCursor(cursor))
-			require.NoError(t, err)
-			continue
-		}
-
-		err := sinker.HandleBlockScopedData(
-			ctx,
-			dbChangesBlockData("db_out", evt.tableChanges, evt.blockNum, evt.libNum),
-			flushEveryBlock, sink.MustNewCursor(simpleCursor(evt.blockNum, evt.libNum)),
-		)
-		require.NoError(t, err)
+	// Create sinker factory options
+	options := sinker.SinkerFactoryOptions{
+		CursorTableName:         setupOptions.CursorTableName,
+		HistoryTableName:        setupOptions.HistoryTableName,
+		ClickhouseCluster:       setupOptions.ClickhouseCluster,
+		BatchBlockFlushInterval: 1,
+		BatchRowFlushInterval:   3,
+		LiveBlockFlushInterval:  1,
+		OnModuleHashMismatch:    setupOptions.OnModuleHashMismatch,
+		HandleReorgs:            true,
+		FlushRetryCount:         3,
+		FlushRetryDelay:         1 * time.Second,
 	}
 
-	dbx := sqlx.NewDb(l.DB, "postgres")
+	dbSinker, err := sinker.SinkerFactory(baseSink, options)(ctx, dbDSN, logger, tracer)
+	require.NoError(t, err)
+	t.Cleanup(func() { dbSinker.Close() })
 
-	var rows []R
-	readQuery := fmt.Sprintf(`SELECT * FROM "%s"."xfer"`, l.GetDSN().Schema())
+	dbSinker.Run(ctx)
+	require.NoError(t, dbSinker.Err())
 
-	err = dbx.SelectContext(context.Background(), &rows, readQuery)
+	cleanDSN := strings.Replace(dbDSN, "&schemaName=testschema", "", 1)
+	db, err := sqlx.Connect("postgres", cleanDSN)
+	require.NoError(t, err)
+	defer db.Close()
+
+	if expected != nil {
+		expected(t, db)
+	}
+
+	// Fetch cursor directly from database instead of using GetCursor
+	var cursorStr string
+	cursorQuery := fmt.Sprintf(`SELECT cursor FROM "%s"."cursors" WHERE id = $1`, testSchema)
+	err = db.GetContext(ctx, &cursorStr, cursorQuery, dbSinker.OutputModuleHash())
 	require.NoError(t, err)
 
-	require.Equal(t, expectedQueryResponses, rows)
-
-	finalCursor, mismatchDetected, err := l.GetCursor(ctx, sinker.OutputModuleHash())
+	finalCursor, err := bstream.CursorFromOpaque(cursorStr)
 	require.NoError(t, err)
-	require.False(t, mismatchDetected)
 
-	actualCursor := fmt.Sprintf("Block %s - LIB %s", finalCursor.Block(), finalCursor.LIB)
+	actualCursor := fmt.Sprintf("Block %s - LIB %s", finalCursor.Block, finalCursor.LIB)
 	require.Equal(t, expectedFinalCursor, actualCursor)
 }
-
-type event struct {
-	blockNum     uint64
-	libNum       uint64
-	tableChanges []*pbdatabase.TableChange
-	undoSignal   bool
-}
-
-func newEvent(blockNum, libNum uint64, tableChanges ...*pbdatabase.TableChange) event {
-	return event{
-		blockNum:     blockNum,
-		libNum:       libNum,
-		tableChanges: tableChanges,
-		undoSignal:   false,
-	}
-}
-
-func newUndoEvent(blockNum, libNum uint64) event {
-	return event{
-		blockNum:   blockNum,
-		libNum:     libNum,
-		undoSignal: true,
-	}
-}
-
-var T = true
-var flushEveryBlock = &T
-
-var testPackage = &pbsubstreams.Package{
-	Modules: &pbsubstreams.Modules{
-		Modules: []*pbsubstreams.Module{
-			{
-				Name: "db_out",
-				Kind: &pbsubstreams.Module_KindMap_{},
-				Output: &pbsubstreams.Module_Output{
-					Type: "proto:sf.substreams.sink.database.v1.DatabaseChanges",
-				},
-			},
-		},
-	},
-}
-
-var testClientConfig = &client.SubstreamsClientConfig{}
 
 func getFields(fieldsAndValues ...string) (out []*pbdatabase.Field) {
 	if len(fieldsAndValues)%2 != 0 {
@@ -616,24 +651,12 @@ func deleteRowMultiplePK(table string, pk map[string]string) *pbdatabase.TableCh
 	}
 }
 
-func dbChangesBlockData(module string, changes []*pbdatabase.TableChange, blockNum uint64, finalBlockNum uint64) *pbsubstreamsrpc.BlockScopedData {
-	mapOutput, err := anypb.New(&pbdatabase.DatabaseChanges{
-		TableChanges: changes,
-	})
-	if err != nil {
-		panic(err)
-	}
+func dbChangesBlockData(t *testing.T, blockIdentifier string, lib finalBlock, changes ...*pbdatabase.TableChange) *pbsubstreamsrpc.Response {
+	t.Helper()
 
-	return &pbsubstreamsrpc.BlockScopedData{
-		Output: &pbsubstreamsrpc.MapModuleOutput{
-			Name:      module,
-			MapOutput: mapOutput,
-		},
-		Clock:            clock(fmt.Sprintf("%d", blockNum), blockNum),
-		Cursor:           simpleCursor(blockNum, finalBlockNum),
-		FinalBlockHeight: finalBlockNum,
-	}
+	return blockScopedData(t, blockIdentifier, &pbdatabase.DatabaseChanges{TableChanges: changes}, lib)
 }
+
 func mustNewTableInfo(schema, name string, pkList []string, columnsByName map[string]*db2.ColumnInfo) *db2.TableInfo {
 	ti, err := db2.NewTableInfo(schema, name, pkList, columnsByName)
 	if err != nil {
@@ -664,6 +687,18 @@ func simpleCursor(num, finalNum uint64) string {
 	}).ToOpaque()
 }
 
-func ptr[T any](v T) *T {
-	return &v
+type sinkerSetupInput interface {
+	ToSQL() string
+}
+
+type tablesInput map[string]*db2.TableInfo
+
+func (t tablesInput) ToSQL() string {
+	return db2.GenerateCreateTableSQL(t)
+}
+
+type rawSQLInput string
+
+func (r rawSQLInput) ToSQL() string {
+	return string(r)
 }

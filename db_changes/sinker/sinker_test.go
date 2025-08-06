@@ -363,7 +363,3 @@ func simpleCursor(num, finalNum uint64) string {
 		HeadBlock: blk,
 	}).ToOpaque()
 }
-
-func ptr[T any](v T) *T {
-	return &v
-}

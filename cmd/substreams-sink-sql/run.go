@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
-	db "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
 	"github.com/streamingfast/substreams/manifest"
 )
@@ -100,42 +98,24 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	flushRetryCount := sflags.MustGetInt(cmd, "flush-retry-count")
 	flushRetryDelay := sflags.MustGetDuration(cmd, "flush-retry-delay")
 
-	dsn, err := db.ParseDSN(dsnString)
-	if err != nil {
-		return fmt.Errorf("parsing dsn: %w", err)
-	}
-
 	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 	historyTableName := sflags.MustGetString(cmd, "history-table")
-
 	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") != 0
-	dbLoader, err := db.NewLoader(
-		dsn,
-		cursorTableName,
-		historyTableName,
-		sflags.MustGetString(cmd, "clickhouse-cluster"),
-		batchBlockFlushInterval, batchRowFlushInterval, liveBlockFlushInterval,
-		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
-		&handleReorgs,
-		zlog, tracer,
-	)
 
-	if err != nil {
-		return fmt.Errorf("creating loader: %w", err)
-	}
+	sinkerFactory := sinker2.SinkerFactory(sink, sinker2.SinkerFactoryOptions{
+		CursorTableName:         cursorTableName,
+		HistoryTableName:        historyTableName,
+		ClickhouseCluster:       sflags.MustGetString(cmd, "clickhouse-cluster"),
+		BatchBlockFlushInterval: batchBlockFlushInterval,
+		BatchRowFlushInterval:   batchRowFlushInterval,
+		LiveBlockFlushInterval:  liveBlockFlushInterval,
+		OnModuleHashMismatch:    sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		HandleReorgs:            handleReorgs,
+		FlushRetryCount:         flushRetryCount,
+		FlushRetryDelay:         flushRetryDelay,
+	})
 
-	if err := dbLoader.LoadTables(dsn.Schema(), cursorTableName, historyTableName); err != nil {
-		var e *db.SystemTableError
-		if errors.As(err, &e) {
-			fmt.Printf("Error validating the system table: %s\n", e)
-			fmt.Println("Did you run setup ?")
-			return e
-		}
-
-		return fmt.Errorf("load psql table: %w", err)
-	}
-
-	postgresSinker, err := sinker2.New(sink, dbLoader, zlog, tracer, flushRetryCount, flushRetryDelay)
+	postgresSinker, err := sinkerFactory(app.Context(), dsnString, zlog, tracer)
 	if err != nil {
 		return fmt.Errorf("unable to setup postgres sinker: %w", err)
 	}

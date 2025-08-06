@@ -370,6 +370,7 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 			strings.Join(columns, ","),
 			strings.Join(values, ","),
 		)
+
 		if o.reversibleBlockNum != nil {
 			return d.saveInsert(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
 		}

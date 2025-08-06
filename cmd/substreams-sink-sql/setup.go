@@ -1,15 +1,13 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
+	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
 	"github.com/streamingfast/substreams/manifest"
 )
 
@@ -32,10 +30,6 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 
 	dsnString := args[0]
 	manifestPath := args[1]
-	ignoreDuplicateTableErrors := sflags.MustGetBool(cmd, "ignore-duplicate-table-errors")
-	systemTableOnly := sflags.MustGetBool(cmd, "system-tables-only")
-	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
-	historyTableName := sflags.MustGetString(cmd, "history-table")
 
 	reader, err := manifest.NewReader(manifestPath)
 	if err != nil {
@@ -46,61 +40,16 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("read manifest: %w", err)
 	}
 
-	sinkConfig, err := extractSinkService(pkgBundle.Package)
-	if err != nil {
-		return fmt.Errorf("extract sink config: %w", err)
+	options := sinker2.SinkerSetupOptions{
+		CursorTableName:            sflags.MustGetString(cmd, "cursors-table"),
+		HistoryTableName:           sflags.MustGetString(cmd, "history-table"),
+		ClickhouseCluster:          sflags.MustGetString(cmd, "clickhouse-cluster"),
+		OnModuleHashMismatch:       sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		SystemTablesOnly:           sflags.MustGetBool(cmd, "system-tables-only"),
+		IgnoreDuplicateTableErrors: sflags.MustGetBool(cmd, "ignore-duplicate-table-errors"),
+		Postgraphile:               sflags.MustGetBool(cmd, "postgraphile"),
 	}
 
-	dsn, err := db2.ParseDSN(dsnString)
-	if err != nil {
-		return fmt.Errorf("parse dsn: %w", err)
-	}
-
-	handleReorgs := false
-	dbLoader, err := db2.NewLoader(
-		dsn,
-		cursorTableName,
-		historyTableName,
-		sflags.MustGetString(cmd, "clickhouse-cluster"),
-		0, 0, 0,
-		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
-		&handleReorgs,
-		zlog, tracer,
-	)
-
-	if err != nil {
-		return fmt.Errorf("creating loader: %w", err)
-	}
-
-	userSQLSchema := sinkConfig.Schema
-	if systemTableOnly {
-		userSQLSchema = ""
-	}
-
-	err = dbLoader.Setup(ctx, dsn.Schema(), userSQLSchema, sflags.MustGetBool(cmd, "postgraphile"))
-	if err != nil {
-		if isDuplicateTableError(err) && ignoreDuplicateTableErrors {
-			zlog.Info("received duplicate table error, script did not execute successfully")
-		} else {
-			return fmt.Errorf("setup: %w", err)
-		}
-	}
-	zlog.Info("setup completed successfully")
-	return nil
+	return sinker2.SinkerSetup(ctx, dsnString, pkgBundle.Package, options, zlog, tracer)
 }
 
-func isDuplicateTableError(err error) bool {
-	var sqlError *pq.Error
-	if !errors.As(err, &sqlError) {
-		return false
-	}
-
-	// List at https://www.postgresql.org/docs/14/errcodes-appendix.html#ERRCODES-TABLE
-	switch sqlError.Code {
-	// Error code named `duplicate_table`
-	case "42P07":
-		return true
-	}
-
-	return false
-}
