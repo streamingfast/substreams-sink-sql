@@ -21,12 +21,16 @@ func init() {
 	}
 }
 
+const typeUrlPrefix = "type.googleapis.com/"
+
 func ExtractSinkService(pkg *pbsubstreams.Package) (*pbsql.Service, error) {
 	if pkg.SinkConfig == nil {
 		return nil, fmt.Errorf("no sink config found in spkg")
 	}
 
-	switch pkg.SinkConfig.TypeUrl {
+	configPackageID := strings.TrimPrefix(pkg.SinkConfig.TypeUrl, typeUrlPrefix)
+
+	switch configPackageID {
 	case deprecated_supportedDeployableService, supportedDeployableService:
 		service := &pbsql.Service{}
 
