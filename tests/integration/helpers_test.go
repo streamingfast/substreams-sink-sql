@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,7 +43,8 @@ func init() {
 type PostgresSeeder = func(ctx context.Context, user, password, database, schema, dsn string, container *postgres.PostgresContainer) error
 
 type PostgresContainerConfig struct {
-	Image string
+	Image        string
+	AvoidRestore bool
 }
 
 // setupRawPostgresContainer spins up a Postgres Docker container and let a seeder function seed the database.
@@ -77,8 +79,10 @@ func setupRawPostgresContainer(t *testing.T, schema string, seedDb PostgresSeede
 		require.NoError(t, seedDb(ctx, dbUser, dbPassword, dbName, schema, dbConnectionString, postgresContainer))
 	}
 
-	err = postgresContainer.Snapshot(ctx)
-	require.NoError(t, err)
+	if !config.AvoidRestore {
+		err = postgresContainer.Snapshot(ctx)
+		require.NoError(t, err)
+	}
 
 	return dbConnectionString, postgresContainer
 }
@@ -153,14 +157,15 @@ func setupClickhouseContainer(t *testing.T, seedDb ClickhouseSeeder) (dbConnecti
 }
 
 // setupFakeSubstreamsServer creates a new fake stream server using bucket-based iterator pattern.
-// The pattern is a slice of interface{} where:
-// - *pbsubstreamsrpc.Response: Send this message to the stream
-// - error: Close the stream with this error
-// - nil: End of bucket boundary (start new bucket for next Blocks() call)
+//
+// The pattern is a slice of [any] where:
+//   - [*pbsubstreamsrpc.Response]: Send this message to the stream
+//   - [error]: Close the stream with this error
+//   - nil: End of bucket boundary (start new bucket for next Blocks() call)
 //
 // For example, if you have a pattern like:
 //
-//	pattern := []interface{}{block1, block2, errors.New("stream error"), nil, block3, nil}
+//	pattern := []any{block1, block2, errors.New("stream error"), block3, nil}
 //
 // This will create two buckets:
 // - First bucket: sends block1, block2, then closes with error
@@ -297,7 +302,12 @@ type finalBlock string
 var fixedBaseTime = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // blockTime can be used in [blockScopedData] to specify the block time for the response.
-func blockTime(t *testing.T, in string) *timestamppb.Timestamp {
+func blockTime(t *testing.T, in string) time.Time {
+	return blockTimepb(t, in).AsTime()
+}
+
+// blockTimepb can be used in [blockScopedData] to specify the block time for the response.
+func blockTimepb(t *testing.T, in string) *timestamppb.Timestamp {
 	t.Helper()
 
 	if in == "now" {
@@ -348,15 +358,24 @@ func (c *isAlwaysLiveChecker) IsLive(block *pbsubstreams.Clock) bool {
 }
 
 // streamMock is a helper function that creates a stream of responses for testing
-func streamMock(responses ...*pbsubstreamsrpc.Response) []*pbsubstreamsrpc.Response {
+func streamMock(responses ...any) []any {
 	return responses
 }
 
-func readRowsBy[T any](t *testing.T, db *sqlx.DB, table, orderBy string) []*T {
+func readRowsBy[T any](t *testing.T, db *sqlx.DB, tableAndOrSchema, orderBy string) []*T {
 	t.Helper()
 
+	tableIdentifier := strings.TrimSpace(tableAndOrSchema)
+	if !strings.HasPrefix(tableIdentifier, `"`) {
+		tableIdentifier = `"` + tableIdentifier
+	}
+
+	if !strings.HasSuffix(tableIdentifier, `"`) {
+		tableIdentifier += `"`
+	}
+
 	var rows []*T
-	err := db.SelectContext(context.Background(), &rows, fmt.Sprintf(`SELECT * FROM "%s" ORDER BY %s`, table, orderBy))
+	err := db.SelectContext(context.Background(), &rows, fmt.Sprintf(`SELECT * FROM %s ORDER BY %s;`, tableIdentifier, orderBy))
 	require.NoError(t, err)
 
 	return rows
@@ -365,6 +384,5 @@ func readRowsBy[T any](t *testing.T, db *sqlx.DB, table, orderBy string) []*T {
 func readDbChangesRows[T any](t *testing.T, db *sqlx.DB, table string) []*T {
 	t.Helper()
 
-	// The " are expected and needed! It gives a the end 'select "<schema>"."<table>' query a fully qualified name.
-	return readRowsBy[T](t, db, fmt.Sprintf(`%s"."%s`, dbChangesSchemaName, table), "id")
+	return readRowsBy[T](t, db, fmt.Sprintf(`"%s"."%s"`, dbChangesSchemaName, table), "id")
 }

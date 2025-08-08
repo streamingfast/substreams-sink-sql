@@ -272,13 +272,19 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 				return fmt.Errorf("database delete: %w", err)
 			}
 		default:
-			//case database.TableChange_UNSET:
 		}
 	}
+
 	return nil
 }
 
 func (s *SQLSinker) HandleBlockRangeCompletion(ctx context.Context, cursor *sink.Cursor) error {
+	// To be moved in the base sinker library, happens usually only on integration tests where the connection
+	// can close with "nil" error but we haven't completed the range for real yet.
+	if !s.Sinker.BlockRange().ReachedEndBlock(cursor.Block().Num()) {
+		s.logger.Debug("range not completed yet, skipping", zap.Stringer("block", cursor.Block()), zap.Stringer("range", s.Sinker.BlockRange()))
+		return nil
+	}
 
 	s.logger.Info("stream completed, flushing to database", zap.Stringer("block", cursor.Block()))
 	_, err := s.flushWithRetry(ctx, s.OutputModuleHash(), cursor, cursor.Block().Num(), s.flushRetryCount)

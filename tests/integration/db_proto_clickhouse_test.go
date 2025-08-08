@@ -166,7 +166,7 @@ func relationsBlockData(t *testing.T, blockIdentifier string, blockTimeRaw strin
 
 	output := &pbrelations.Output{Entities: entities}
 
-	return blockScopedData(t, blockIdentifier, output, blockTime(t, blockTimeRaw))
+	return blockScopedData(t, blockIdentifier, output, blockTimepb(t, blockTimeRaw))
 }
 
 // entityCustomer creates a Customer entity with the given ID and name
@@ -239,7 +239,7 @@ func rowMeta(t *testing.T, blockNum uint, blockTimeRaw string) Meta {
 	return Meta{
 		IsDeleted:   false,
 		BlockNumber: uint64(blockNum),
-		BlockTime:   blockTime(t, blockTimeRaw).AsTime(),
+		BlockTime:   blockTime(t, blockTimeRaw),
 	}
 }
 

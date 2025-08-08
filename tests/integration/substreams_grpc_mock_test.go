@@ -110,6 +110,11 @@ func (s *FakeStreamServer) Blocks(req *pbsubstreamsrpc.Request, stream pbsubstre
 			return err
 		}
 
+		if response == nil {
+			// This indicates the end of the stream, we can return nil to indicate EOF
+			return nil
+		}
+
 		if err := stream.Send(response); err != nil {
 			return fmt.Errorf("failed to send message: %w", err)
 		}
