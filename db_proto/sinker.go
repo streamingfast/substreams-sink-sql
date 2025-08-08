@@ -43,6 +43,9 @@ func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker,
 }
 
 func (s *Sinker) Run(ctx context.Context) error {
+	// Show stats one last time before exiting run
+	defer s.LogStats()
+
 	cursor, err := s.db.FetchCursor()
 	if err != nil {
 		return fmt.Errorf("fetch cursor: %w", err)
@@ -52,14 +55,15 @@ func (s *Sinker) Run(ctx context.Context) error {
 	if cursor != nil {
 		err = s.db.HandleBlocksUndo(cursor.Block().Num())
 		if err != nil {
-			return fmt.Errorf("handle blocks undo from %d : %w", cursor.Block().Num(), err)
+			return fmt.Errorf("handle blocks undo from %s: %w", cursor.Block(), err)
 		}
 	}
 
-	s.logger.Info("fetched cursor", zap.Uint64("block_num", cursor.Block().Num()))
+	s.logger.Info("fetched cursor", zap.Stringer("block", cursor.Block()))
 
 	s.stats.LastBlockProcessAt = time.Now()
 	s.Sinker.Run(ctx, cursor, s)
+
 	return s.Sinker.Err()
 }
 

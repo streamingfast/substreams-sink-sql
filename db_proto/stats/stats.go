@@ -92,18 +92,19 @@ func NewStats(logger *zap.Logger) *Stats {
 }
 
 func (s *Stats) Log() {
+	s.logger.Info("-----------------------------------")
+
 	if s.BlockCount == 0 {
-		s.logger.Info("no blocks processed yet")
-		return
+		s.logger.Info("Stats: no blocks processed yet")
+	} else {
+		s.logger.Info("Stats", zap.Int("block_count", s.BlockCount), zap.Duration("Processing Time", s.TotalProcessingDuration), zap.Duration("Total Wait Duration", s.TotalDurationBetween), zap.Duration("Total Duration", s.TotalDurationBetween+s.TotalProcessingDuration), zap.Time("Last Block Process At", s.LastBlockProcessAt))
+		s.WaitDurationBetweenBlocks.Log(s.logger)
+		s.BlockProcessingDuration.Log(s.logger)
+		s.UnmarshallingDuration.Log(s.logger)
+		s.BlockInsertDuration.Log(s.logger)
+		s.EntitiesInsertDuration.Log(s.logger)
+		s.FlushDuration.Log(s.logger)
 	}
 
-	s.logger.Info("-----------------------------------")
-	s.logger.Info("Stats", zap.Int("block_count", s.BlockCount), zap.Duration("Processing Time", s.TotalProcessingDuration), zap.Duration("Total Wait Duration", s.TotalDurationBetween), zap.Duration("Total Duration", s.TotalDurationBetween+s.TotalProcessingDuration), zap.Time("Last Block Process At", s.LastBlockProcessAt))
-	s.WaitDurationBetweenBlocks.Log(s.logger)
-	s.BlockProcessingDuration.Log(s.logger)
-	s.UnmarshallingDuration.Log(s.logger)
-	s.BlockInsertDuration.Log(s.logger)
-	s.EntitiesInsertDuration.Log(s.logger)
-	s.FlushDuration.Log(s.logger)
 	s.logger.Info("-----------------------------------")
 }
