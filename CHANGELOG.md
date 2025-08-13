@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### `substreams-sink-sql run`
 
+* Fixed delete operation on composite keys.
+
 * Read tables information only for given schema to avoid walking non-related tables.
 
 ### Clickhouse & `substreams-sink-sql from-proto`

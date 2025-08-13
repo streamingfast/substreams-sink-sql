@@ -25,28 +25,11 @@ import (
 
 const testSchema = dbChangesSchemaName
 
-type XferSinglePKRow struct {
-	ID   string `db:"id"`
-	From string `db:"from"`
-	To   string `db:"to"`
-}
-
 func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	testTables := db2.TestSinglePrimaryKeyTables(testSchema)
 	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 
-	equalsXferRows := func(expected []*XferSinglePKRow) func(t *testing.T, dbx *sqlx.DB) {
-		return func(t *testing.T, dbx *sqlx.DB) {
-			require.Equal(t, expected, readDbChangesRows[XferSinglePKRow](t, dbx, "xfer"))
-		}
-	}
-
-	tests := []struct {
-		name                string
-		responses           []any
-		expected            func(t *testing.T, dbx *sqlx.DB)
-		expectedFinalCursor string
-	}{
+	tests := []sinkerTestCase{
 		{
 			"insert final",
 			streamMock(
@@ -186,28 +169,11 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 	})
 
 	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
-
 	pk := compositePK
 
-	type XferCompositePKRow struct {
-		ID     string `db:"id"`
-		Number string `db:"number"`
-		From   string `db:"from"`
-		To     string `db:"to"`
-	}
+	tests := []sinkerTestCase{
+		// Insert testing
 
-	equalsXferCompositePKRows := func(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB) {
-		return func(t *testing.T, dbx *sqlx.DB) {
-			require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
-		}
-	}
-
-	tests := []struct {
-		name                string
-		responses           []any
-		expected            func(t *testing.T, dbx *sqlx.DB)
-		expectedFinalCursor string
-	}{
 		{
 			"insert final",
 			streamMock(
@@ -231,6 +197,8 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 			nil,
 			"Block #9 (9a) - LIB #8 (8a)",
 		},
+
+		// Upsert testing
 
 		{
 			"upsert final",
@@ -320,60 +288,14 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 			}),
 			"Block #11 (11a) - LIB #8 (8a)",
 		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			runSinkerTest(
-				t,
-				dbConnectionString,
-				postgresContainer,
-				tablesInput(testTables),
-				test.responses,
-				test.expected,
-				test.expectedFinalCursor,
-			)
-		})
-	}
-}
 
-func TestSinker_Integration_CompositePrimaryKey_Delete(t *testing.T) {
-	testTables := db2.TestTables(testSchema, map[string]*db2.TableInfo{
-		"xfer": mustNewTableInfo(testSchema, "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
-			"id":     db2.NewColumnInfo("id", "text", ""),
-			"number": db2.NewColumnInfo("number", "bigint", ""),
-			"from":   db2.NewColumnInfo("from", "text", ""),
-			"to":     db2.NewColumnInfo("to", "text", ""),
-		}),
-	})
+		// Delete testing
 
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
-
-	pk := compositePK
-
-	type XferCompositePKRow struct {
-		ID     string `db:"id"`
-		Number string `db:"number"`
-		From   string `db:"from"`
-		To     string `db:"to"`
-	}
-
-	equalsXferCompositePKRows := func(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB) {
-		return func(t *testing.T, dbx *sqlx.DB) {
-			require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
-		}
-	}
-
-	tests := []struct {
-		name                string
-		responses           []*pbsubstreamsrpc.Response
-		expected            func(t *testing.T, dbx *sqlx.DB)
-		expectedFinalCursor string
-	}{
 		{
 			"insert then delete - composite primary key",
 			streamMock(
 				dbChangesBlockData(t, "10a", finalBlock("8a"),
-					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+					insertRowCompositePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
 				),
 				dbChangesBlockData(t, "11a", finalBlock("11a"),
 					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
@@ -388,7 +310,7 @@ func TestSinker_Integration_CompositePrimaryKey_Delete(t *testing.T) {
 			"insert, update, then delete - composite primary key",
 			streamMock(
 				dbChangesBlockData(t, "10a", finalBlock("8a"),
-					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+					insertRowCompositePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
 				),
 				dbChangesBlockData(t, "11a", finalBlock("8a"),
 					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "to", "receiver2"),
@@ -406,8 +328,8 @@ func TestSinker_Integration_CompositePrimaryKey_Delete(t *testing.T) {
 			"multiple inserts with different composite keys, delete one",
 			streamMock(
 				dbChangesBlockData(t, "10a", finalBlock("8a"),
-					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
-					insertRowMultiplePK("xfer", pk("id", "56", "number", "78"), "from", "sender2", "to", "receiver2"),
+					insertRowCompositePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+					insertRowCompositePK("xfer", pk("id", "56", "number", "78"), "from", "sender2", "to", "receiver2"),
 				),
 				dbChangesBlockData(t, "11a", finalBlock("11a"),
 					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
@@ -422,7 +344,7 @@ func TestSinker_Integration_CompositePrimaryKey_Delete(t *testing.T) {
 			"insert then delete with undo",
 			streamMock(
 				dbChangesBlockData(t, "10a", finalBlock("8a"),
-					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+					insertRowCompositePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
 				),
 				dbChangesBlockData(t, "11a", finalBlock("8a"),
 					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
@@ -439,9 +361,9 @@ func TestSinker_Integration_CompositePrimaryKey_Delete(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runSinkerTest(
 				t,
-				tablesInput(testTables),
 				dbConnectionString,
 				postgresContainer,
+				tablesInput(testTables),
 				test.responses,
 				test.expected,
 				test.expectedFinalCursor,
@@ -606,6 +528,13 @@ func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
 		},
 		"Block #10 (10a) - LIB #8 (8a)",
 	)
+}
+
+type sinkerTestCase struct {
+	name                string
+	responses           []any
+	expected            func(t *testing.T, dbx *sqlx.DB)
+	expectedFinalCursor string
 }
 
 func runSinkerTest(
@@ -860,4 +789,29 @@ func (r rawSQLInputType) ToSQL() string {
 
 func sqlPreambule(schema string) string {
 	return fmt.Sprintf(`SET search_path TO %s, public;`+"\n\n", schema)
+}
+
+type XferSinglePKRow struct {
+	ID   string `db:"id"`
+	From string `db:"from"`
+	To   string `db:"to"`
+}
+
+func equalsXferRows(expected []*XferSinglePKRow) func(t *testing.T, dbx *sqlx.DB) {
+	return func(t *testing.T, dbx *sqlx.DB) {
+		require.Equal(t, expected, readDbChangesRows[XferSinglePKRow](t, dbx, "xfer"))
+	}
+}
+
+type XferCompositePKRow struct {
+	ID     string `db:"id"`
+	Number string `db:"number"`
+	From   string `db:"from"`
+	To     string `db:"to"`
+}
+
+func equalsXferCompositePKRows(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB) {
+	return func(t *testing.T, dbx *sqlx.DB) {
+		require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+	}
 }
