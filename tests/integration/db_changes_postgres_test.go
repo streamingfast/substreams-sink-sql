@@ -336,6 +336,120 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 	}
 }
 
+func TestSinker_Integration_CompositePrimaryKey_Delete(t *testing.T) {
+	testTables := db2.TestTables(testSchema, map[string]*db2.TableInfo{
+		"xfer": mustNewTableInfo(testSchema, "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
+			"id":     db2.NewColumnInfo("id", "text", ""),
+			"number": db2.NewColumnInfo("number", "bigint", ""),
+			"from":   db2.NewColumnInfo("from", "text", ""),
+			"to":     db2.NewColumnInfo("to", "text", ""),
+		}),
+	})
+
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
+
+	pk := compositePK
+
+	type XferCompositePKRow struct {
+		ID     string `db:"id"`
+		Number string `db:"number"`
+		From   string `db:"from"`
+		To     string `db:"to"`
+	}
+
+	equalsXferCompositePKRows := func(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB) {
+		return func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+		}
+	}
+
+	tests := []struct {
+		name                string
+		responses           []*pbsubstreamsrpc.Response
+		expected            func(t *testing.T, dbx *sqlx.DB)
+		expectedFinalCursor string
+	}{
+		{
+			"insert then delete - composite primary key",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
+					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB) {
+				require.Empty(t, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"insert, update, then delete - composite primary key",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
+					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("8a"),
+					upsertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "to", "receiver2"),
+				),
+				dbChangesBlockData(t, "12a", finalBlock("12a"),
+					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB) {
+				require.Empty(t, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+			},
+			"Block #12 (12a) - LIB #12 (12a)",
+		},
+		{
+			"multiple inserts with different composite keys, delete one",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
+					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+					insertRowMultiplePK("xfer", pk("id", "56", "number", "78"), "from", "sender2", "to", "receiver2"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
+				),
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
+				{ID: "56", Number: "78", From: "sender2", To: "receiver2"},
+			}),
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"insert then delete with undo",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
+					insertRowMultiplePK("xfer", pk("id", "12", "number", "34"), "from", "sender1", "to", "receiver1"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("8a"),
+					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
+				),
+				blockUndo(t, "10a", finalBlock("8a")),
+			),
+			equalsXferCompositePKRows([]*XferCompositePKRow{
+				{ID: "12", Number: "34", From: "sender1", To: "receiver1"},
+			}),
+			"Block #10 (10a) - LIB #8 (8a)",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runSinkerTest(
+				t,
+				tablesInput(testTables),
+				dbConnectionString,
+				postgresContainer,
+				test.responses,
+				test.expected,
+				test.expectedFinalCursor,
+			)
+		})
+	}
+}
+
 func TestSinker_Integration_Bytes(t *testing.T) {
 	schema := testSchema
 	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{

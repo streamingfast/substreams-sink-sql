@@ -248,7 +248,7 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversib
 		return fmt.Errorf("unknown table %q", tableName)
 	}
 
-	if len(table.primaryColumns) != 1 {
+	if len(table.primaryColumns) == 0 {
 		return fmt.Errorf("trying to perform a DELETE operation but table %q don't have a primary key(s) set, this is not accepted", tableName)
 	}
 
