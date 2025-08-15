@@ -73,7 +73,6 @@ func (s *Stats) LogNow() {
 	s.logger.Info("postgres sink stats",
 		zap.Stringer("db_flush_rate", s.dbFlushRate),
 		zap.Stringer("db_flush_duration_rate", s.dbFlushAvgDuration),
-		zap.Uint64("flushed_rows", s.flushedRows.ValueUint()),
 		zap.Stringer("db_flushed_rows_rate", s.dbFlushedRowsRate),
 		zap.Stringer("last_block", s.lastBlock),
 	)
