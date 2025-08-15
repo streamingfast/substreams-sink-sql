@@ -39,6 +39,10 @@ func (s *Stats) RecordBlock(block bstream.BlockRef) {
 	s.lastBlock = block
 }
 
+func (s *Stats) AverageFlushDuration() time.Duration {
+	return s.dbFlushAvgDuration.Average()
+}
+
 func (s *Stats) RecordFlushDuration(duration time.Duration) {
 	s.dbFlushAvgDuration.AddDuration(duration)
 }

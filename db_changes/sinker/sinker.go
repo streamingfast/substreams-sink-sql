@@ -27,8 +27,9 @@ type SQLSinker struct {
 	logger *zap.Logger
 	tracer logging.Tracer
 
-	stats               *Stats
-	lastAppliedBlockNum uint64
+	stats                *Stats
+	lastAppliedBlockNum  uint64
+	lastAppliedBlockTime time.Time
 
 	flushRetryCount int
 	flushRetryDelay time.Duration
@@ -173,7 +174,11 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		}
 	}
 
-	blockFlushNeeded := s.batchBlockModulo(isLive) > 0 && data.Clock.Number-s.lastAppliedBlockNum >= s.batchBlockModulo(isLive)
+	blockFlushNeeded := s.batchBlockModulo(isLive) > 0 &&
+		data.Clock.Number-s.lastAppliedBlockNum >= s.batchBlockModulo(isLive) &&
+		!(isLive != nil && *isLive && s.stats.AverageFlushDuration() > data.Clock.Timestamp.AsTime().Sub(s.lastAppliedBlockTime))
+		// we dont consider blockFlushNeeded if we are live and flush time is longer than time between blocks
+
 	rowFlushNeeded := s.loader.FlushNeeded()
 
 	if blockFlushNeeded || rowFlushNeeded {
@@ -210,6 +215,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		s.stats.RecordBlock(cursor.Block())
 		s.stats.RecordFlushDuration(flushDuration)
 		s.lastAppliedBlockNum = data.Clock.Number
+		s.lastAppliedBlockTime = data.Clock.Timestamp.AsTime()
 	}
 
 	return nil
