@@ -27,6 +27,8 @@ type Sinker struct {
 	rootMessageDescriptor *desc.MessageDescriptor
 	useConstraints        bool
 	flushLock             sync.Mutex
+	lastAppliedBlockNum   uint64
+	lastAppliedBlockTime  time.Time
 }
 
 func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, useConstraints bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
@@ -110,7 +112,12 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		cursor: cursor,
 	}
 	holding = append(holding, holder)
-	if data.Clock.Number%s.blockBatchSize == 0 || s.blockBatchSize == 1 || (isLive != nil && *isLive) {
+	if data.Clock.Number > (s.lastAppliedBlockNum+s.blockBatchSize) || s.blockBatchSize == 1 || (isLive != nil && *isLive) {
+		if isLive != nil && *isLive && s.stats.FlushDuration.Average() > data.Clock.Timestamp.AsTime().Sub(s.lastAppliedBlockTime) {
+			s.logger.Debug("skipping a flush because we are LIVE and flush average duration is above time between blocks", zap.Duration("flush_duration_average", s.stats.FlushDuration.Average()), zap.Time("last_block_time", s.lastAppliedBlockTime), zap.Time("block_time", data.Clock.Timestamp.AsTime()))
+			return nil
+		}
+
 		if s.useTransaction && !s.parallel {
 			if err := s.db.BeginTransaction(); err != nil {
 				return fmt.Errorf("begin tx: %w", err)
@@ -171,6 +178,8 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		}
 		s.stats.FlushDuration.Add(flushDurationPerBlock)
 
+		s.lastAppliedBlockNum = data.Clock.Number
+		s.lastAppliedBlockTime = data.Clock.Timestamp.AsTime()
 		err = s.db.StoreCursor(cursor)
 		if err != nil {
 			return fmt.Errorf("inserting cursor: %w", err)
