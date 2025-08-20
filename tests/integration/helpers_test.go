@@ -386,3 +386,7 @@ func readDbChangesRows[T any](t *testing.T, db *sqlx.DB, table string) []*T {
 
 	return readRowsBy[T](t, db, fmt.Sprintf(`"%s"."%s"`, dbChangesSchemaName, table), "id")
 }
+
+func ptr[T any](in T) *T {
+	return &in
+}

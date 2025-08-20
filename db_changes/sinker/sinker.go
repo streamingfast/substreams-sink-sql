@@ -216,7 +216,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 }
 
 func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, blockNum, finalBlockNum uint64) error {
-	for _, change := range dbChanges.TableChanges {
+	for ordinal, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
 				"your Substreams sent us a change for a table named %s we don't know about on %s (available tables: %s)",
@@ -252,22 +252,22 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 
 		switch change.Operation {
 		case pbdatabase.TableChange_OPERATION_CREATE:
-			err := s.loader.Insert(change.Table, primaryKeys, changes, reversibleBlockNum)
+			err := s.loader.Insert(change.Table, primaryKeys, changes, uint64(ordinal), reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
 		case pbdatabase.TableChange_OPERATION_UPSERT:
-			err := s.loader.Upsert(change.Table, primaryKeys, changes, reversibleBlockNum)
+			err := s.loader.Upsert(change.Table, primaryKeys, changes, uint64(ordinal), reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database upsert: %w", err)
 			}
 		case pbdatabase.TableChange_OPERATION_UPDATE:
-			err := s.loader.Update(change.Table, primaryKeys, changes, reversibleBlockNum)
+			err := s.loader.Update(change.Table, primaryKeys, changes, uint64(ordinal), reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
 		case pbdatabase.TableChange_OPERATION_DELETE:
-			err := s.loader.Delete(change.Table, primaryKeys, reversibleBlockNum)
+			err := s.loader.Delete(change.Table, primaryKeys, uint64(ordinal), reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)
 			}
