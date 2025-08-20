@@ -1,11 +1,13 @@
 package db
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -89,31 +91,43 @@ func (d PostgresDialect) Revert(tx Tx, ctx context.Context, l *Loader, lastValid
 }
 
 func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModuleHash string, lastFinalBlock uint64) (int, error) {
-	var rowCount int
+	var totalRows int
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
-		tableName := entriesPair.Key
 		entries := entriesPair.Value
+		totalRows += entries.Len()
 
 		if l.tracer.Enabled() {
-			l.logger.Debug("flushing table rows", zap.String("table_name", tableName), zap.Int("row_count", entries.Len()))
+			l.logger.Debug("flushing table rows", zap.String("table_name", entriesPair.Key), zap.Int("row_count", entries.Len()))
 		}
+	}
+
+	allOperations := make([]*Operation, 0, totalRows)
+	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
+		entries := entriesPair.Value
 		for entryPair := entries.Oldest(); entryPair != nil; entryPair = entryPair.Next() {
-			entry := entryPair.Value
-
-			query, err := d.prepareStatement(d.schemaName, entry)
-			if err != nil {
-				return 0, fmt.Errorf("failed to prepare statement: %w", err)
-			}
-
-			if l.tracer.Enabled() {
-				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query))
-			}
-
-			if _, err := tx.ExecContext(ctx, query); err != nil {
-				return 0, fmt.Errorf("executing flush query %q: %w", query, err)
-			}
+			allOperations = append(allOperations, entryPair.Value)
 		}
-		rowCount += entries.Len()
+	}
+
+	slices.SortFunc(allOperations, func(a, b *Operation) int {
+		return cmp.Compare(a.ordinal, b.ordinal)
+	})
+
+	var rowCount int
+	for _, entry := range allOperations {
+		query, err := d.prepareStatement(d.schemaName, entry)
+		if err != nil {
+			return 0, fmt.Errorf("failed to prepare statement: %w", err)
+		}
+
+		if l.tracer.Enabled() {
+			l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query), zap.Uint64("ordinal", entry.ordinal))
+		}
+
+		if _, err := tx.ExecContext(ctx, query); err != nil {
+			return 0, fmt.Errorf("executing flush query %q: %w", query, err)
+		}
+		rowCount++
 	}
 
 	if err := d.pruneReversibleSegment(tx, ctx, d.schemaName, lastFinalBlock); err != nil {

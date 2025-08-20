@@ -11,7 +11,7 @@ import (
 
 // Insert a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]string, ordinal uint64, reversibleBlockNum *uint64) error {
 	uniqueID := createRowUniqueID(primaryKey)
 
 	if l.tracer.Enabled() {
@@ -59,7 +59,7 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 		}
 	}
 
-	entry.Set(uniqueID, l.newInsertOperation(table, primaryKey, data, reversibleBlockNum))
+	entry.Set(uniqueID, l.newInsertOperation(table, primaryKey, data, ordinal, reversibleBlockNum))
 	l.entriesCount++
 	return nil
 }
@@ -101,7 +101,7 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 
 // Upsert a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable().
-func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map[string]string, ordinal uint64, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
 		return fmt.Errorf("update operation is not supported by the current database")
 	}
@@ -147,7 +147,7 @@ func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map
 			l.logger.Debug("primary key entry already exist for table, merging columns together", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 		}
 
-		op.mergeData(data)
+		op.mergeOperation(ordinal, data)
 		entry.Set(uniqueID, op)
 		return nil
 	} else {
@@ -165,13 +165,13 @@ func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map
 		}
 	}
 
-	entry.Set(uniqueID, l.newUpsertOperation(table, primaryKey, data, reversibleBlockNum))
+	entry.Set(uniqueID, l.newUpsertOperation(table, primaryKey, data, ordinal, reversibleBlockNum))
 	return nil
 }
 
 // Update a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string, ordinal uint64, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
 		return fmt.Errorf("update operation is not supported by the current database")
 	}
@@ -216,7 +216,7 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 			l.logger.Debug("primary key entry already exist for table, merging fields together", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 		}
 
-		op.mergeData(data)
+		op.mergeOperation(ordinal, data)
 		entry.Set(uniqueID, op)
 		return nil
 	} else {
@@ -227,13 +227,13 @@ func (l *Loader) Update(tableName string, primaryKey map[string]string, data map
 		l.logger.Debug("primary key entry never existed for table, adding update operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	entry.Set(uniqueID, l.newUpdateOperation(table, primaryKey, data, reversibleBlockNum))
+	entry.Set(uniqueID, l.newUpdateOperation(table, primaryKey, data, ordinal, reversibleBlockNum))
 	return nil
 }
 
 // Delete a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Delete(tableName string, primaryKey map[string]string, ordinal uint64, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
 		return fmt.Errorf("delete operation is not supported by the current database")
 	}
@@ -274,6 +274,6 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversib
 		l.logger.Debug("adding deleting operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
 	}
 
-	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey, reversibleBlockNum))
+	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey, ordinal, reversibleBlockNum))
 	return nil
 }
