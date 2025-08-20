@@ -18,8 +18,6 @@ const (
 	supportedDeployableService            = "type.googleapis.com/sf.substreams.sink.sql.service.v1.Service"
 )
 
-var supportedDeployableUnits = []string{deprecated_supportedDeployableService, supportedDeployableService}
-
 // SinkerSetupOptions contains configuration for the setup operation
 type SinkerSetupOptions struct {
 	CursorTableName            string

@@ -497,6 +497,135 @@ func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
 	)
 }
 
+func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
+
+	runSinkerTest(
+		t,
+		dbConnectionString,
+		postgresContainer,
+		rawSQLInput(`
+			CREATE TABLE IF NOT EXISTS %[1]s.departments (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS %[1]s.employees (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				department_id TEXT NOT NULL,
+				manager_id TEXT,
+				CONSTRAINT fk_department
+					FOREIGN KEY(department_id)
+					REFERENCES %[1]s.departments(id),
+				CONSTRAINT fk_manager
+					FOREIGN KEY(manager_id)
+					REFERENCES %[1]s.employees(id)
+			);
+
+			-- Pre-existing data, like if the sinker had stopped at that point
+			INSERT INTO %[1]s.departments (id, name) VALUES ('dept1', 'Engineering');
+		`, testSchema),
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
+				insertRowSinglePK("employees", "emp1", "name", "Alice Manager", "department_id", "dept1"),
+				insertRowSinglePK("departments", "dept2", "name", "Sales"),
+				insertRowSinglePK("employees", "emp3", "name", "Carol Sales", "department_id", "dept2"),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			type DepartmentRow struct {
+				ID   string `db:"id"`
+				Name string `db:"name"`
+			}
+
+			type EmployeeRow struct {
+				ID           string  `db:"id"`
+				Name         string  `db:"name"`
+				DepartmentID string  `db:"department_id"`
+				ManagerID    *string `db:"manager_id"`
+			}
+
+			expectedDepts := []*DepartmentRow{
+				{ID: "dept1", Name: "Engineering"},
+				{ID: "dept2", Name: "Sales"},
+			}
+			require.Equal(t, expectedDepts, readDbChangesRows[DepartmentRow](t, dbx, "departments"))
+
+			expectedEmps := []*EmployeeRow{
+				{ID: "emp1", Name: "Alice Manager", DepartmentID: "dept1", ManagerID: nil},
+				{ID: "emp2", Name: "Bob Engineer", DepartmentID: "dept1", ManagerID: ptr("emp1")},
+				{ID: "emp3", Name: "Carol Sales", DepartmentID: "dept2", ManagerID: nil},
+			}
+			require.Equal(t, expectedEmps, readDbChangesRows[EmployeeRow](t, dbx, "employees"))
+		},
+		"Block #10 (10a) - LIB #10 (10a)",
+	)
+}
+
+func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
+
+	runSinkerTest(
+		t,
+		dbConnectionString,
+		postgresContainer,
+		rawSQLInput(`
+			CREATE TABLE IF NOT EXISTS %[1]s.departments (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS %[1]s.employees (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				department_id TEXT NOT NULL,
+				manager_id TEXT,
+				CONSTRAINT fk_department
+					FOREIGN KEY(department_id)
+					REFERENCES %[1]s.departments(id),
+				CONSTRAINT fk_manager
+					FOREIGN KEY(manager_id)
+					REFERENCES %[1]s.employees(id)
+			);
+
+			-- Pre-existing data, like if the sinker had stopped at that point
+			INSERT INTO %[1]s.departments (id, name) VALUES ('dept1', 'Engineering');
+		`, testSchema),
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
+				insertRowSinglePK("employees", "emp1", "name", "Alice Manager", "department_id", "dept1"),
+				insertRowSinglePK("departments", "dept2", "name", "Sales"),
+				insertRowSinglePK("employees", "emp3", "name", "Carol Sales", "department_id", "dept2"),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			type DepartmentRow struct {
+				ID   string `db:"id"`
+				Name string `db:"name"`
+			}
+
+			type EmployeeRow struct {
+				ID           string  `db:"id"`
+				Name         string  `db:"name"`
+				DepartmentID string  `db:"department_id"`
+				ManagerID    *string `db:"manager_id"`
+			}
+
+			expectedDepts := []*DepartmentRow{
+				{ID: "dept1", Name: "Engineering"},
+				{ID: "dept2", Name: "Sales"},
+			}
+			require.Equal(t, expectedDepts, readDbChangesRows[DepartmentRow](t, dbx, "departments"))
+
+			expectedEmps := []*EmployeeRow{
+				{ID: "emp1", Name: "Alice Manager", DepartmentID: "dept1", ManagerID: nil},
+				{ID: "emp2", Name: "Bob Engineer", DepartmentID: "dept1", ManagerID: ptr("emp1")},
+				{ID: "emp3", Name: "Carol Sales", DepartmentID: "dept2", ManagerID: nil},
+			}
+			require.Equal(t, expectedEmps, readDbChangesRows[EmployeeRow](t, dbx, "employees"))
+		},
+		"Block #10 (10a) - LIB #10 (10a)",
+	)
+}
 func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
 	testTables := db2.TestSinglePrimaryKeyTables(testSchema)
 	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
@@ -624,8 +753,8 @@ func runCustomizedSinkerTest(
 		LiveBlockFlushInterval:  1,
 		OnModuleHashMismatch:    setupOptions.OnModuleHashMismatch,
 		HandleReorgs:            true,
-		FlushRetryCount:         3,
-		FlushRetryDelay:         1 * time.Second,
+		FlushRetryCount:         0,
+		FlushRetryDelay:         0,
 	}
 
 	dbSinker, err := sinker.SinkerFactory(baseSink, options)(ctx, dbDSN, logger, tracer)

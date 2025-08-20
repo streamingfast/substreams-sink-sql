@@ -120,6 +120,11 @@ func (s *SQLSinker) flushWithRetry(ctx context.Context, moduleHash string, curso
 	var lastErr error
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
+			// Do not retry if flush delay is 0, useful in tests
+			if s.flushRetryDelay == 0 {
+				return 0, lastErr
+			}
+
 			delay := time.Duration(attempt) * s.flushRetryDelay
 			s.logger.Warn("retrying flush after error",
 				zap.Int("attempt", attempt),
