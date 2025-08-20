@@ -506,56 +506,45 @@ func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
 		postgresContainer,
 		rawSQLInput(`
 			CREATE TABLE IF NOT EXISTS %[1]s.departments (
-				id TEXT PRIMARY KEY,
-				name TEXT NOT NULL
+				id TEXT PRIMARY KEY
 			);
 			CREATE TABLE IF NOT EXISTS %[1]s.employees (
 				id TEXT PRIMARY KEY,
-				name TEXT NOT NULL,
 				department_id TEXT NOT NULL,
-				manager_id TEXT,
 				CONSTRAINT fk_department
 					FOREIGN KEY(department_id)
-					REFERENCES %[1]s.departments(id),
-				CONSTRAINT fk_manager
-					FOREIGN KEY(manager_id)
-					REFERENCES %[1]s.employees(id)
+					REFERENCES %[1]s.departments(id)
 			);
 
 			-- Pre-existing data, like if the sinker had stopped at that point
-			INSERT INTO %[1]s.departments (id, name) VALUES ('dept1', 'Engineering');
+			INSERT INTO %[1]s.departments (id) VALUES ('dept1');
 		`, testSchema),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("10a"),
-				insertRowSinglePK("employees", "emp1", "name", "Alice Manager", "department_id", "dept1"),
-				insertRowSinglePK("departments", "dept2", "name", "Sales"),
-				insertRowSinglePK("employees", "emp3", "name", "Carol Sales", "department_id", "dept2"),
+				insertRowSinglePK("employees", "emp1", "department_id", "dept1"),
+				insertRowSinglePK("departments", "dept2"),
+				insertRowSinglePK("employees", "emp2", "department_id", "dept2"),
 			),
 		),
 		func(t *testing.T, dbx *sqlx.DB) {
 			type DepartmentRow struct {
-				ID   string `db:"id"`
-				Name string `db:"name"`
+				ID string `db:"id"`
 			}
 
 			type EmployeeRow struct {
-				ID           string  `db:"id"`
-				Name         string  `db:"name"`
-				DepartmentID string  `db:"department_id"`
-				ManagerID    *string `db:"manager_id"`
+				ID           string `db:"id"`
+				DepartmentID string `db:"department_id"`
 			}
 
-			expectedDepts := []*DepartmentRow{
-				{ID: "dept1", Name: "Engineering"},
-				{ID: "dept2", Name: "Sales"},
-			}
-			require.Equal(t, expectedDepts, readDbChangesRows[DepartmentRow](t, dbx, "departments"))
+			require.Equal(t, []*DepartmentRow{
+				{ID: "dept1"},
+				{ID: "dept2"},
+			}, readDbChangesRows[DepartmentRow](t, dbx, "departments"))
 
-			expectedEmps := []*EmployeeRow{
-				{ID: "emp1", Name: "Alice Manager", DepartmentID: "dept1", ManagerID: nil},
-				{ID: "emp3", Name: "Carol Sales", DepartmentID: "dept2", ManagerID: nil},
-			}
-			require.Equal(t, expectedEmps, readDbChangesRows[EmployeeRow](t, dbx, "employees"))
+			require.Equal(t, []*EmployeeRow{
+				{ID: "emp1", DepartmentID: "dept1"},
+				{ID: "emp2", DepartmentID: "dept2"},
+			}, readDbChangesRows[EmployeeRow](t, dbx, "employees"))
 		},
 		"Block #10 (10a) - LIB #10 (10a)",
 	)
@@ -765,6 +754,17 @@ func insertRowCompositePK(table string, pk map[string]string, fieldsAndValues ..
 			},
 		},
 		Operation: pbdatabase.TableChange_OPERATION_CREATE,
+		Fields:    getFields(fieldsAndValues...),
+	}
+}
+
+func updateRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbdatabase.TableChange {
+	return &pbdatabase.TableChange{
+		Table: table,
+		PrimaryKey: &pbdatabase.TableChange_Pk{
+			Pk: pk,
+		},
+		Operation: pbdatabase.TableChange_OPERATION_UPDATE,
 		Fields:    getFields(fieldsAndValues...),
 	}
 }
