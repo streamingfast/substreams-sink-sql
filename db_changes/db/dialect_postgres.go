@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -513,26 +514,60 @@ func getPrimaryKeyWhereClause(primaryKey map[string]string, escapedTableName str
 	// Avoid any allocation if there is a single primary key
 	if len(primaryKey) == 1 {
 		for key, value := range primaryKey {
+			formatted := formatWhereValue(value)
 			if escapedTableName == "" {
-				return EscapeIdentifier(key) + " = " + escapeStringValue(value)
+				return EscapeIdentifier(key) + " = " + formatted
 			}
 
-			return escapedTableName + "." + EscapeIdentifier(key) + " = " + escapeStringValue(value)
+			return escapedTableName + "." + EscapeIdentifier(key) + " = " + formatted
 		}
 	}
 
 	reg := make([]string, 0, len(primaryKey))
 	for key, value := range primaryKey {
 
+		formatted := formatWhereValue(value)
 		if escapedTableName == "" {
-			reg = append(reg, EscapeIdentifier(key)+" = "+escapeStringValue(value))
+			reg = append(reg, EscapeIdentifier(key)+" = "+formatted)
 		} else {
-			reg = append(reg, escapedTableName+"."+EscapeIdentifier(key)+" = "+escapeStringValue(value))
+			reg = append(reg, escapedTableName+"."+EscapeIdentifier(key)+" = "+formatted)
 		}
 	}
 	sort.Strings(reg)
 
 	return strings.Join(reg[:], " AND ")
+}
+
+var arrayConstructorRegex = regexp.MustCompile(`^ARRAY\[(.*)\](::[A-Za-z0-9_]+(\[\])*)?$`)
+
+// formatWhereValue prepares a primary key value for use on the right-hand side
+// of a WHERE equality comparison. It keeps valid SQL expressions unquoted and
+// converts ARRAY[...]::type[] constructs to proper array literals ('{...}') so
+// that Postgres can type-cast them to the column's array type during comparison.
+func formatWhereValue(value string) string {
+	// Handle ARRAY[...]::type[] (including empty ARRAY[])
+	if matches := arrayConstructorRegex.FindStringSubmatch(value); matches != nil {
+		inner := matches[1] // may be empty
+		cast := ""
+		if len(matches) >= 3 {
+			cast = matches[2] // includes leading :: if present
+		}
+		// Convert to a curly-brace array literal, quote it, and preserve explicit cast when provided
+		return escapeStringValue("{"+inner+"}") + cast
+	}
+
+	// If already looks like a raw array literal (e.g., {1,2}) without quotes, quote it
+	if strings.HasPrefix(value, "{") && strings.HasSuffix(value, "}") {
+		return escapeStringValue(value)
+	}
+
+	// If value appears already quoted and casted (e.g., '{}''::bigint[]'), keep as-is
+	if strings.HasPrefix(value, "'{") && strings.Contains(value, "}'::") {
+		return value
+	}
+
+	// Default: treat as a plain string literal
+	return escapeStringValue(value)
 }
 
 // Format based on type, value returned unescaped
