@@ -36,6 +36,11 @@ var sinkRunCmd = Command(sinkRunE,
 		flags.Int("flush-retry-count", 3, "Number of retry attempts for flush operations")
 		flags.Duration("flush-retry-delay", 1*time.Second, "Base delay for incremental retry backoff on flush failures")
 		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
+
+		// Postgres insert-only batching (runtime-only flags)
+		flags.String("pg-insert-batch-mode", "off", "Postgres insert batching mode: off|values|unnest (runtime-only)")
+		flags.Int("pg-insert-batch-size", 1000, "Postgres insert batch size when batching is enabled (runtime-only)")
+		flags.Bool("pg-insert-only", false, "Assert insert-only processing; if other ops are present, fallback or error based on future wiring (runtime-only)")
 	}),
 	Example("substreams-sink-sql run 'postgres://localhost:5432/posgres?sslmode=disable' uniswap-v3@v0.2.10"),
 	OnCommandErrorLogAndExit(zlog),
@@ -98,6 +103,11 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 	flushRetryCount := sflags.MustGetInt(cmd, "flush-retry-count")
 	flushRetryDelay := sflags.MustGetDuration(cmd, "flush-retry-delay")
 
+	// Read Postgres insert batching flags
+	pgInsertBatchMode := sflags.MustGetString(cmd, "pg-insert-batch-mode")
+	pgInsertBatchSize := sflags.MustGetInt(cmd, "pg-insert-batch-size")
+	pgInsertOnly := sflags.MustGetBool(cmd, "pg-insert-only")
+
 	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 	historyTableName := sflags.MustGetString(cmd, "history-table")
 	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") != 0
@@ -113,6 +123,9 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		HandleReorgs:            handleReorgs,
 		FlushRetryCount:         flushRetryCount,
 		FlushRetryDelay:         flushRetryDelay,
+		PgInsertBatchMode:       pgInsertBatchMode,
+		PgInsertBatchSize:       pgInsertBatchSize,
+		PgInsertOnly:            pgInsertOnly,
 	})
 
 	postgresSinker, err := sinkerFactory(app.Context(), dsnString, zlog, tracer)

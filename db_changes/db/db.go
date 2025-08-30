@@ -47,6 +47,11 @@ type Loader struct {
 
 	testTx *TestTx // used for testing: if non-nil, 'loader.BeginTx()' will return this object instead of a real *sql.Tx
 	dsn    *DSN
+
+	// Postgres insert batching (runtime-configurable; defaults imply disabled)
+	pgInsertBatchMode string // off|values|unnest
+	pgInsertBatchSize int    // >0 when enabled
+	pgInsertOnly      bool   // assert-only mode; if true, non-insert ops should be rejected or cause fallback
 }
 
 func NewLoader(
@@ -160,6 +165,32 @@ func (l *Loader) FlushNeeded() bool {
 	return totalRows > l.batchRowFlushInterval
 }
 
+// PgInsertBatchMode returns the configured Postgres batch mode ("off" if unset).
+func (l *Loader) PgInsertBatchMode() string {
+	if l.pgInsertBatchMode == "" {
+		return "off"
+	}
+	return l.pgInsertBatchMode
+}
+
+// PgInsertBatchSize returns the configured batch size (0 means unset/disabled).
+func (l *Loader) PgInsertBatchSize() int {
+	return l.pgInsertBatchSize
+}
+
+// PgInsertOnly indicates whether insert-only assertions are enabled.
+func (l *Loader) PgInsertOnly() bool {
+	return l.pgInsertOnly
+}
+
+// ConfigurePgInsertBatching sets Postgres insert batching configuration on the loader.
+// mode should be one of: "off", "values", "unnest". size <= 0 disables batching.
+func (l *Loader) ConfigurePgInsertBatching(mode string, size int, insertOnly bool) {
+	l.pgInsertBatchMode = mode
+	l.pgInsertBatchSize = size
+	l.pgInsertOnly = insertOnly
+}
+
 // getTablesFromSchema returns table information similar to schema.Tables()
 // but only inspects tables in the specified schema to avoid issues with database extensions
 func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.ColumnType, error) {
@@ -224,6 +255,43 @@ func (l *Loader) getTableColumns(schemaName, tableName string) ([]*sql.ColumnTyp
 	return rows.ColumnTypes()
 }
 
+// fetchColumnPgTypes returns a mapping of column name to PostgreSQL type name (pg_type.typname),
+// which properly reflects user-defined types (e.g., enums) and array types (leading underscore).
+// Example: bigint[] -> _int8, enum call_type -> call_type, enum[] -> _call_type.
+func (l *Loader) fetchColumnPgTypes(schemaName, tableName string) (map[string]string, error) {
+	query := `
+        SELECT a.attname, t.typname
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_type t ON t.oid = a.atttypid
+        WHERE n.nspname = $1
+          AND c.relname = $2
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+        ORDER BY a.attnum`
+
+	rows, err := l.DB.Query(query, schemaName, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("querying pg types for %s.%s: %w", schemaName, tableName, err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]string)
+	for rows.Next() {
+		var col string
+		var typ string
+		if err := rows.Scan(&col, &typ); err != nil {
+			return nil, fmt.Errorf("scanning pg types row: %w", err)
+		}
+		out[col] = typ
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating pg types rows: %w", err)
+	}
+	return out, nil
+}
+
 func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTableName string) error {
 	schemaTables, err := l.getTablesFromSchema(schemaName)
 	if err != nil {
@@ -255,11 +323,17 @@ func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTa
 		}
 
 		columnByName := make(map[string]*ColumnInfo, len(columns))
+		// Try to enrich with real PostgreSQL type names (handles enums/domains/arrays)
+		pgTypes, _ := l.fetchColumnPgTypes(schemaName, tableName)
 		for _, f := range columns {
+			dbType := f.DatabaseTypeName()
+			if real, ok := pgTypes[f.Name()]; ok && real != "" {
+				dbType = real
+			}
 			columnByName[f.Name()] = &ColumnInfo{
 				name:             f.Name(),
 				escapedName:      EscapeIdentifier(f.Name()),
-				databaseTypeName: f.DatabaseTypeName(),
+				databaseTypeName: dbType,
 				scanType:         f.ScanType(),
 			}
 		}

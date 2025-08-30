@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ = time.Second // keep import
+
 type SinkerFactoryFunc func(ctx context.Context, dsnString string, logger *zap.Logger, tracer logging.Tracer) (*SQLSinker, error)
 
 type SinkerFactoryOptions struct {
@@ -25,6 +27,10 @@ type SinkerFactoryOptions struct {
 	HandleReorgs            bool
 	FlushRetryCount         int
 	FlushRetryDelay         time.Duration
+	// Postgres insert batching (runtime flags wired in from run.go)
+	PgInsertBatchMode string // off|values|unnest
+	PgInsertBatchSize int
+	PgInsertOnly      bool
 }
 
 func SinkerFactory(
@@ -53,6 +59,9 @@ func SinkerFactory(
 		if err != nil {
 			return nil, fmt.Errorf("creating loader: %w", err)
 		}
+
+		// Configure Postgres insert batching on the loader (no-op for other dialects)
+		dbLoader.ConfigurePgInsertBatching(options.PgInsertBatchMode, options.PgInsertBatchSize, options.PgInsertOnly)
 
 		if err := dbLoader.LoadTables(dsn.Schema(), options.CursorTableName, options.HistoryTableName); err != nil {
 			var e *db.SystemTableError
