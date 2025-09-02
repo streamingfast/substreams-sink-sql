@@ -53,6 +53,22 @@ message TypesTest {
 
   google.protobuf.Timestamp timestamp_field = 30;
 
+  // Array fields for all supported proto types
+  repeated int32 repeated_int32_field = 50;
+  repeated int64 repeated_int64_field = 51;
+  repeated uint32 repeated_uint32_field = 52;
+  repeated uint64 repeated_uint64_field = 53;
+  repeated sint32 repeated_sint32_field = 54;
+  repeated sint64 repeated_sint64_field = 55;
+  repeated fixed32 repeated_fixed32_field = 56;
+  repeated fixed64 repeated_fixed64_field = 57;
+  repeated sfixed32 repeated_sfixed32_field = 58;
+  repeated sfixed64 repeated_sfixed64_field = 59;
+  repeated double repeated_double_field = 60;
+  repeated float repeated_float_field = 61;
+  repeated bool repeated_bool_field = 62;
+  repeated string repeated_string_field = 63;
+
 }
 
 message Customer {

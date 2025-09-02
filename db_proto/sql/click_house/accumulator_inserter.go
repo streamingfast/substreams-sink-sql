@@ -188,6 +188,113 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			input.Append(value.([]byte))
 		case *proto.ColBool:
 			input.Append(value.(bool))
+		// Handle array column types
+		case *proto.ColArr[int32]:
+			if arr, ok := value.([]interface{}); ok {
+				int32Arr := make([]int32, len(arr))
+				for i, v := range arr {
+					int32Arr[i] = v.(int32)
+				}
+				input.Append(int32Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[int64]:
+			if arr, ok := value.([]interface{}); ok {
+				int64Arr := make([]int64, len(arr))
+				for i, v := range arr {
+					int64Arr[i] = v.(int64)
+				}
+				input.Append(int64Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[uint32]:
+			if arr, ok := value.([]interface{}); ok {
+				uint32Arr := make([]uint32, len(arr))
+				for i, v := range arr {
+					uint32Arr[i] = v.(uint32)
+				}
+				input.Append(uint32Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[uint64]:
+			if arr, ok := value.([]interface{}); ok {
+				uint64Arr := make([]uint64, len(arr))
+				for i, v := range arr {
+					uint64Arr[i] = v.(uint64)
+				}
+				input.Append(uint64Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[float32]:
+			if arr, ok := value.([]interface{}); ok {
+				float32Arr := make([]float32, len(arr))
+				for i, v := range arr {
+					float32Arr[i] = v.(float32)
+				}
+				input.Append(float32Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[float64]:
+			if arr, ok := value.([]interface{}); ok {
+				float64Arr := make([]float64, len(arr))
+				for i, v := range arr {
+					float64Arr[i] = v.(float64)
+				}
+				input.Append(float64Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[bool]:
+			if arr, ok := value.([]interface{}); ok {
+				boolArr := make([]bool, len(arr))
+				for i, v := range arr {
+					boolArr[i] = v.(bool)
+				}
+				input.Append(boolArr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[string]:
+			if arr, ok := value.([]interface{}); ok {
+				stringArr := make([]string, len(arr))
+				for i, v := range arr {
+					stringArr[i] = v.(string)
+				}
+				input.Append(stringArr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[[]byte]:
+			if arr, ok := value.([]interface{}); ok {
+				bytesArr := make([][]byte, len(arr))
+				for i, v := range arr {
+					bytesArr[i] = v.([]byte)
+				}
+				input.Append(bytesArr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
+		case *proto.ColArr[time.Time]:
+			if arr, ok := value.([]interface{}); ok {
+				timeArr := make([]time.Time, len(arr))
+				for i, v := range arr {
+					if t, ok := v.(*timestamppb.Timestamp); ok {
+						timeArr[i] = t.AsTime()
+					} else if t, ok := v.(time.Time); ok {
+						timeArr[i] = t
+					} else {
+						panic(fmt.Sprintf("unknown time type %T in array for column %s of table %s", v, colName, table))
+					}
+				}
+				input.Append(timeArr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+			}
 		default:
 			panic(fmt.Sprintf("unknown input type %T for column %s of table %s", input, colName, table))
 		}
