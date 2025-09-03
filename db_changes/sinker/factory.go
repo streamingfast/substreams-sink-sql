@@ -62,6 +62,11 @@ func SinkerFactory(
 
 		// Configure Postgres insert batching on the loader (no-op for other dialects)
 		dbLoader.ConfigurePgInsertBatching(options.PgInsertBatchMode, options.PgInsertBatchSize, options.PgInsertOnly)
+		logger.Info("pg insert batching settings",
+			zap.String("mode", options.PgInsertBatchMode),
+			zap.Int("batch_size", options.PgInsertBatchSize),
+			zap.Bool("insert_only", options.PgInsertOnly),
+		)
 
 		if err := dbLoader.LoadTables(dsn.Schema(), options.CursorTableName, options.HistoryTableName); err != nil {
 			var e *db.SystemTableError

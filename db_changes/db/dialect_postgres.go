@@ -128,9 +128,7 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 		entries := entriesPair.Value
 		totalRows += entries.Len()
 
-		if l.tracer.Enabled() {
-			l.logger.Debug("flushing table rows", zap.String("table_name", entriesPair.Key), zap.Int("row_count", entries.Len()))
-		}
+		l.logger.Debug("flushing table rows", zap.String("table_name", entriesPair.Key), zap.Int("row_count", entries.Len()))
 	}
 
 	allOperations := make([]*Operation, 0, totalRows)
@@ -161,6 +159,13 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 		batchSize = 2
 	}
 
+	// Trace effective batching configuration
+	l.logger.Info("postgres batching config",
+		zap.String("mode", string(mode)),
+		zap.Int("batch_size", batchSize),
+		zap.Bool("insert_only", d.isPgInsertOnly(l)),
+	)
+
 	for i := 0; i < len(allOperations); {
 		op := allOperations[i]
 		if (mode == PgBatchModeValues || mode == PgBatchModeUnnest) && op.opType == OperationTypeInsert {
@@ -178,20 +183,37 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 				count++
 			}
 
+			var reason string
+			if count >= batchSize {
+				reason = "batch_size_cap"
+			} else if end+1 < len(allOperations) {
+				next := allOperations[end+1]
+				if next.table != tbl {
+					reason = "table_change"
+				} else if next.opType != OperationTypeInsert {
+					reason = "op_change"
+				} else {
+					reason = "unknown"
+				}
+			}
+			l.logger.Debug("batch boundary (insert)",
+				zap.String("table_name", tbl.identifier),
+				zap.Int("rows", count),
+				zap.String("reason", reason),
+			)
+
 			if count >= 2 {
 				cols, vals, planErr := d.computeInsertBatchPlan(allOperations[start : end+1])
 				cte, needsHistory := d.buildInsertHistoryCTE(d.schemaName, allOperations[start:end+1])
 				if planErr == nil && (needsHistory || true) { // allow both irreversible and reversible (with CTE)
-					if l.tracer.Enabled() {
-						l.logger.Debug("detected insert-only batch",
-							zap.String("table_name", tbl.identifier),
-							zap.Int("rows", count),
-							zap.Int("columns", len(cols)),
-							zap.Uint64("start_ordinal", allOperations[start].ordinal),
-							zap.Uint64("end_ordinal", allOperations[end].ordinal),
-							zap.Bool("with_history_cte", needsHistory),
-						)
-					}
+					l.logger.Debug("detected insert-only batch",
+						zap.String("table_name", tbl.identifier),
+						zap.Int("rows", count),
+						zap.Int("columns", len(cols)),
+						zap.Uint64("start_ordinal", allOperations[start].ordinal),
+						zap.Uint64("end_ordinal", allOperations[end].ordinal),
+						zap.Bool("with_history_cte", needsHistory),
+					)
 					if mode == PgBatchModeValues {
 						batchSQL := d.buildValuesInsertSQL(tbl, cols, vals)
 						if needsHistory {
@@ -199,36 +221,23 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 						}
 						segments = append(segments, execSegment{kind: "values-batch", start: start, end: end, sql: batchSQL, mode: PgBatchModeValues})
 					} else if mode == PgBatchModeUnnest {
-						if batchSQL, err := d.buildUnnestInsertSQL(tbl, cols, vals); err == nil {
+						if batchSQL, err := d.buildUnnestInsertSQL(tbl, cols, vals); err != nil {
+							return 0, fmt.Errorf("building UNNEST insert SQL: %w", err)
+						} else {
 							if needsHistory {
 								batchSQL = cte + " " + strings.TrimSuffix(batchSQL, ";") + ";"
 							}
 							segments = append(segments, execSegment{kind: "values-batch", start: start, end: end, sql: batchSQL, mode: PgBatchModeUnnest})
-						} else {
-							// Fallback to VALUES batch when UNNEST cannot be built (e.g., ragged arrays)
-							batchSQL := d.buildValuesInsertSQL(tbl, cols, vals)
-							if needsHistory {
-								batchSQL = cte + " " + strings.TrimSuffix(batchSQL, ";") + ";"
-							}
-							segments = append(segments, execSegment{kind: "values-batch", start: start, end: end, sql: batchSQL, mode: PgBatchModeValues})
-							if l.tracer.Enabled() {
-								l.logger.Debug("fell back to VALUES batch after UNNEST build error",
-									zap.String("table_name", tbl.identifier),
-									zap.Error(err),
-								)
-							}
 						}
 					}
 					i = end + 1
 					continue
 				}
 
-				if l.tracer.Enabled() {
-					l.logger.Debug("skipping batch candidate",
-						zap.String("table_name", tbl.identifier),
-						zap.Error(planErr),
-					)
-				}
+				l.logger.Debug("skipping batch candidate",
+					zap.String("table_name", tbl.identifier),
+					zap.Error(planErr),
+				)
 			}
 		}
 
@@ -247,45 +256,53 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 				count++
 			}
 
+			var reason string
+			if count >= batchSize {
+				reason = "batch_size_cap"
+			} else if end+1 < len(allOperations) {
+				next := allOperations[end+1]
+				if next.table != tbl {
+					reason = "table_change"
+				} else if next.opType != OperationTypeUpsert {
+					reason = "op_change"
+				} else {
+					reason = "unknown"
+				}
+			}
+			l.logger.Debug("batch boundary (upsert)",
+				zap.String("table_name", tbl.identifier),
+				zap.Int("rows", count),
+				zap.String("reason", reason),
+			)
+
 			if count >= 2 {
-				cols, vals, planErr := d.computeUpsertBatchPlan(allOperations[start : end+1])
+				cols, vals, pres, planErr := d.computeUpsertSupersetPlanWithPresence(allOperations[start : end+1])
 				cte, needsHistory := d.buildUpsertHistoryCTE(d.schemaName, tbl, allOperations[start:end+1])
 				if planErr == nil {
-					if l.tracer.Enabled() {
-						l.logger.Debug("detected upsert-only UNNEST batch",
-							zap.String("table_name", tbl.identifier),
-							zap.Int("rows", count),
-							zap.Int("columns", len(cols)),
-							zap.Uint64("start_ordinal", allOperations[start].ordinal),
-							zap.Uint64("end_ordinal", allOperations[end].ordinal),
-							zap.Bool("with_history_cte", needsHistory),
-						)
-					}
-					if batchSQL, err := d.buildUnnestUpsertSQL(tbl, cols, vals); err == nil {
+					l.logger.Debug("detected upsert-only UNNEST batch",
+						zap.String("table_name", tbl.identifier),
+						zap.Int("rows", count),
+						zap.Int("columns", len(cols)),
+						zap.Uint64("start_ordinal", allOperations[start].ordinal),
+						zap.Uint64("end_ordinal", allOperations[end].ordinal),
+						zap.Bool("with_history_cte", needsHistory),
+					)
+					if batchSQL, err := d.buildUnnestUpsertSQLWithPresence(tbl, cols, vals, pres); err != nil {
+						return 0, fmt.Errorf("building UNNEST upsert SQL: %w", err)
+					} else {
 						if needsHistory {
 							batchSQL = cte + " " + strings.TrimSuffix(batchSQL, ";") + ";"
 						}
 						segments = append(segments, execSegment{kind: "values-batch", start: start, end: end, sql: batchSQL, mode: PgBatchModeUnnest})
 						i = end + 1
 						continue
-					} else {
-						// Fallback to VALUES upsert when UNNEST cannot be built
-						batchSQL := d.buildValuesUpsertSQL(tbl, cols, vals)
-						if needsHistory {
-							batchSQL = cte + " " + strings.TrimSuffix(batchSQL, ";") + ";"
-						}
-						segments = append(segments, execSegment{kind: "values-batch", start: start, end: end, sql: batchSQL, mode: PgBatchModeValues})
-						i = end + 1
-						continue
 					}
 				}
 
-				if l.tracer.Enabled() {
-					l.logger.Debug("skipping upsert UNNEST batch candidate",
-						zap.String("table_name", tbl.identifier),
-						zap.Error(planErr),
-					)
-				}
+				l.logger.Debug("skipping upsert UNNEST batch candidate",
+					zap.String("table_name", tbl.identifier),
+					zap.Error(planErr),
+				)
 			}
 		}
 
@@ -304,20 +321,37 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 				count++
 			}
 
+			var reason string
+			if count >= batchSize {
+				reason = "batch_size_cap"
+			} else if end+1 < len(allOperations) {
+				next := allOperations[end+1]
+				if next.table != tbl {
+					reason = "table_change"
+				} else if next.opType != OperationTypeUpsert {
+					reason = "op_change"
+				} else {
+					reason = "unknown"
+				}
+			}
+			l.logger.Debug("batch boundary (upsert)",
+				zap.String("table_name", tbl.identifier),
+				zap.Int("rows", count),
+				zap.String("reason", reason),
+			)
+
 			if count >= 2 {
 				cols, vals, planErr := d.computeUpsertBatchPlan(allOperations[start : end+1])
 				cte, needsHistory := d.buildUpsertHistoryCTE(d.schemaName, tbl, allOperations[start:end+1])
 				if planErr == nil {
-					if l.tracer.Enabled() {
-						l.logger.Debug("detected upsert-only batch",
-							zap.String("table_name", tbl.identifier),
-							zap.Int("rows", count),
-							zap.Int("columns", len(cols)),
-							zap.Uint64("start_ordinal", allOperations[start].ordinal),
-							zap.Uint64("end_ordinal", allOperations[end].ordinal),
-							zap.Bool("with_history_cte", needsHistory),
-						)
-					}
+					l.logger.Debug("detected upsert-only batch",
+						zap.String("table_name", tbl.identifier),
+						zap.Int("rows", count),
+						zap.Int("columns", len(cols)),
+						zap.Uint64("start_ordinal", allOperations[start].ordinal),
+						zap.Uint64("end_ordinal", allOperations[end].ordinal),
+						zap.Bool("with_history_cte", needsHistory),
+					)
 					batchSQL := d.buildValuesUpsertSQL(tbl, cols, vals)
 					if needsHistory {
 						batchSQL = cte + " " + strings.TrimSuffix(batchSQL, ";") + ";"
@@ -327,12 +361,10 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 					continue
 				}
 
-				if l.tracer.Enabled() {
-					l.logger.Debug("skipping upsert batch candidate",
-						zap.String("table_name", tbl.identifier),
-						zap.Error(planErr),
-					)
-				}
+				l.logger.Debug("skipping upsert batch candidate",
+					zap.String("table_name", tbl.identifier),
+					zap.Error(planErr),
+				)
 			}
 		}
 
@@ -342,12 +374,11 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 	}
 
 	var rowCount int
+	singleLogCount := 0
 	for _, seg := range segments {
 		switch seg.kind {
 		case "values-batch":
-			if l.tracer.Enabled() {
-				l.logger.Debug("executing VALUES batch insert", zap.Int("rows", seg.end-seg.start+1), zap.String("sql", seg.sql))
-			}
+			l.logger.Debug("executing batch", zap.String("mode", string(seg.mode)), zap.Int("rows", seg.end-seg.start+1), zap.String("sql", seg.sql))
 			// For UNNEST mode, fail fast without per-row fallback to ease testing
 			if seg.mode == PgBatchModeUnnest {
 				if _, err := tx.ExecContext(ctx, seg.sql); err != nil {
@@ -361,9 +392,7 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 			if _, spErr := tx.ExecContext(ctx, "SAVEPOINT sp_batch"); spErr == nil {
 				if _, err := tx.ExecContext(ctx, seg.sql); err != nil {
 					_, _ = tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT sp_batch")
-					if l.tracer.Enabled() {
-						l.logger.Debug("batch failed, falling back to per-row", zap.Error(err))
-					}
+					l.logger.Debug("batch failed, falling back to per-row", zap.Error(err))
 					for i := seg.start; i <= seg.end; i++ {
 						entry := allOperations[i]
 						query, qerr := d.prepareStatement(d.schemaName, entry)
@@ -392,13 +421,14 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 			if err != nil {
 				return 0, fmt.Errorf("failed to prepare statement: %w", err)
 			}
-			if l.tracer.Enabled() {
+			if singleLogCount%100 == 0 {
 				l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query), zap.Uint64("ordinal", entry.ordinal))
 			}
 			if _, err := tx.ExecContext(ctx, query); err != nil {
 				return 0, fmt.Errorf("executing flush query %q: %w", query, err)
 			}
 			rowCount++
+			singleLogCount++
 		}
 	}
 
@@ -576,7 +606,7 @@ func (d PostgresDialect) effectivePgBatchMode(l *Loader) PgBatchMode {
 func (d PostgresDialect) effectivePgBatchSize(l *Loader) int {
 	size := l.PgInsertBatchSize()
 	if size <= 0 {
-		return 1000
+		return 50
 	}
 	return size
 }
@@ -1347,6 +1377,282 @@ func (d *PostgresDialect) computeUpsertBatchPlan(ops []*Operation) (columnsEscap
 	}
 
 	return columnsEscaped, perRowValues, nil
+}
+
+// computeUpsertSupersetPlanWithPresence computes a superset of columns across the UPSERT batch,
+// ensuring all primary key columns are present in every row's data map. It returns escaped column
+// names, per-row normalized values aligned to that order, and a parallel per-row presence matrix
+// indicating whether each column was explicitly present in the row's input (as opposed to being
+// filled with NULL due to absence). Presence is used to preserve single-row semantics during
+// UNNEST-based upserts.
+func (d *PostgresDialect) computeUpsertSupersetPlanWithPresence(ops []*Operation) (columnsEscaped []string, perRowValues [][]string, perRowPresence [][]bool, err error) {
+	if len(ops) == 0 {
+		return nil, nil, nil, fmt.Errorf("empty operation slice for upsert superset plan")
+	}
+
+	table := ops[0].table
+	for _, op := range ops {
+		if op.opType != OperationTypeUpsert {
+			return nil, nil, nil, fmt.Errorf("non-upsert operation encountered in upsert batch candidate")
+		}
+		if op.table != table {
+			return nil, nil, nil, fmt.Errorf("mixed tables in upsert batch candidate")
+		}
+	}
+
+	// Build superset of raw column names across rows
+	rawNamesSet := make(map[string]struct{})
+	for _, op := range ops {
+		for k := range op.data {
+			rawNamesSet[k] = struct{}{}
+		}
+	}
+	// Ensure primary key columns are included
+	for _, pk := range table.primaryColumns {
+		if _, ok := rawNamesSet[pk.name]; !ok {
+			return nil, nil, nil, fmt.Errorf("primary key column %q missing from upsert data", pk.name)
+		}
+	}
+
+	rawNames := make([]string, 0, len(rawNamesSet))
+	for name := range rawNamesSet {
+		if _, found := table.columnsByName[name]; !found {
+			return nil, nil, nil, fmt.Errorf("unknown column %q for table %s", name, table.identifier)
+		}
+		rawNames = append(rawNames, name)
+	}
+	sort.Strings(rawNames)
+
+	// Produce escaped names and lookup
+	columnsEscaped = make([]string, len(rawNames))
+	colInfos := make([]*ColumnInfo, len(rawNames))
+	for i, name := range rawNames {
+		info := table.columnsByName[name]
+		colInfos[i] = info
+		columnsEscaped[i] = info.escapedName
+	}
+
+	// Build per-row values and presence
+	perRowValues = make([][]string, len(ops))
+	perRowPresence = make([][]bool, len(ops))
+	for rowIdx, op := range ops {
+		rowVals := make([]string, len(rawNames))
+		rowPres := make([]bool, len(rawNames))
+		for colIdx, name := range rawNames {
+			if v, ok := op.data[name]; ok {
+				normalized, nerr := d.normalizeValueType(v, colInfos[colIdx].scanType)
+				if nerr != nil {
+					return nil, nil, nil, fmt.Errorf("normalize value for column %q: %w", name, nerr)
+				}
+				rowVals[colIdx] = normalized
+				rowPres[colIdx] = true
+			} else {
+				rowVals[colIdx] = "NULL"
+				rowPres[colIdx] = false
+			}
+		}
+		perRowValues[rowIdx] = rowVals
+		perRowPresence[rowIdx] = rowPres
+	}
+
+	return columnsEscaped, perRowValues, perRowPresence, nil
+}
+
+// buildUnnestUpsertSQLWithPresence constructs an UNNEST-based upsert using a superset of columns
+// and per-column presence flags to preserve single-row semantics. For each column, we provide both
+// values and presence (boolean). Presence indicates whether a field was explicitly provided; when
+// absent, the DO UPDATE clause retains the target value.
+func (d *PostgresDialect) buildUnnestUpsertSQLWithPresence(table *TableInfo, columnsEscaped []string, perRowValues [][]string, perRowPresence [][]bool) (string, error) {
+	if len(columnsEscaped) == 0 || len(perRowValues) == 0 {
+		return "", fmt.Errorf("empty columns or rows for UNNEST upsert (presence)")
+	}
+
+	numCols := len(columnsEscaped)
+	// Invert rows to columns (values + presence)
+	colsToValues := make([][]string, numCols)
+	colsToPresence := make([][]string, numCols)
+	for i := 0; i < numCols; i++ {
+		colsToValues[i] = make([]string, len(perRowValues))
+		colsToPresence[i] = make([]string, len(perRowValues))
+	}
+	for r, row := range perRowValues {
+		if len(row) != numCols {
+			return "", fmt.Errorf("row %d has %d values, expected %d", r, len(row), numCols)
+		}
+		pres := perRowPresence[r]
+		if len(pres) != numCols {
+			return "", fmt.Errorf("row %d has %d presence flags, expected %d", r, len(pres), numCols)
+		}
+		for c := 0; c < numCols; c++ {
+			colsToValues[c][r] = row[c]
+			if pres[c] {
+				colsToPresence[c][r] = "TRUE"
+			} else {
+				colsToPresence[c][r] = "FALSE"
+			}
+		}
+	}
+
+	// Reverse-map escaped to ColumnInfo and determine base types
+	escapedToInfo := make(map[string]*ColumnInfo, len(table.columnsByName))
+	for _, ci := range table.columnsByName {
+		escapedToInfo[ci.escapedName] = ci
+	}
+	baseTypes := make([]string, numCols)
+	isArrayCol := make([]bool, numCols)
+	for i, esc := range columnsEscaped {
+		ci := escapedToInfo[esc]
+		bt, isArr := canonicalizePostgresType(ci.databaseTypeName)
+		baseTypes[i] = bt
+		isArrayCol[i] = isArr
+	}
+
+	// Build UNNEST args and aliases: for each column i
+	//  - scalar: value array (typed) + presence array (::boolean[])
+	//  - array:  presence array only (value via CASE on ord)
+	sUnnestArgs := make([]string, 0, numCols*2)
+	sAliases := make([]string, 0, numCols*2+1)
+	for i := 0; i < numCols; i++ {
+		// presence arg for all columns
+		pArr := fmt.Sprintf("ARRAY[%s]::boolean[]", strings.Join(colsToPresence[i], ","))
+		// For scalars, also include value arg
+		if !isArrayCol[i] {
+			vArr := fmt.Sprintf("ARRAY[%s]", strings.Join(colsToValues[i], ","))
+			if bt := baseTypes[i]; bt != "" {
+				vArr = fmt.Sprintf("%s::%s[]", vArr, bt)
+			}
+			sUnnestArgs = append(sUnnestArgs, vArr, pArr)
+			sAliases = append(sAliases, fmt.Sprintf("v%d", i), fmt.Sprintf("p%d", i))
+		} else {
+			sUnnestArgs = append(sUnnestArgs, pArr)
+			sAliases = append(sAliases, fmt.Sprintf("p%d", i))
+		}
+	}
+	sAliases = append(sAliases, "ord")
+
+	// Build projection list for src CTE: for each column i, output value and presence
+	// Value expression (11c hardened):
+	//  - scalar: CASE WHEN present THEN typed(s.v{i}) ELSE default_expr_or_null END
+	//  - array: CASE by ord yielding typed array; wrapped with presence to use default/empty on absence
+	projections := make([]string, 0, numCols*2)
+	cteCols := make([]string, 0, numCols*2)
+	for i := 0; i < numCols; i++ {
+		// value expr with default inlining for absent values
+		var valExpr string
+		colInfo := escapedToInfo[columnsEscaped[i]]
+		if colInfo == nil {
+			return "", fmt.Errorf("missing ColumnInfo for %s", columnsEscaped[i])
+		}
+		defaultScalar := "NULL"
+		if colInfo.hasDefault && colInfo.defaultExpr != "" {
+			defaultScalar = colInfo.defaultExpr
+		}
+		if !isArrayCol[i] {
+			alias := fmt.Sprintf("s.v%d", i)
+			var typed string
+			if bt := baseTypes[i]; bt != "" {
+				typed = fmt.Sprintf("(%s)::%s", alias, bt)
+			} else {
+				typed = alias
+			}
+			valExpr = fmt.Sprintf("CASE WHEN s.p%d THEN %s ELSE %s END", i, typed, defaultScalar)
+		} else {
+			bt := baseTypes[i]
+			cases := make([]string, 0, len(perRowValues)+3)
+			cases = append(cases, "CASE ((s.ord)::int)")
+			for r := 0; r < len(perRowValues); r++ {
+				v := colsToValues[i][r]
+				var rowExpr string
+				if v == "NULL" {
+					rowExpr = fmt.Sprintf("NULL::%s[]", bt)
+				} else {
+					textLit := arrayExprToTextLiteral(strings.Trim(v, "'"))
+					rowExpr = fmt.Sprintf("(%s)::%s[]", escapeStringValue(textLit), bt)
+				}
+				cases = append(cases, fmt.Sprintf("WHEN %d THEN %s", r+1, rowExpr))
+			}
+			elseExpr := fmt.Sprintf("'{}'::%s[]", bt)
+			if colInfo.hasDefault && colInfo.defaultExpr != "" {
+				elseExpr = fmt.Sprintf("(%s)::%s[]", colInfo.defaultExpr, bt)
+			}
+			cases = append(cases, fmt.Sprintf("ELSE %s END", elseExpr))
+			valExpr = fmt.Sprintf("CASE WHEN s.p%d THEN (%s) ELSE %s END", i, strings.Join(cases, " "), elseExpr)
+		}
+		projections = append(projections, valExpr)
+		cteCols = append(cteCols, fmt.Sprintf("c%d", i))
+		// presence expr
+		projections = append(projections, fmt.Sprintf("s.p%d", i))
+		cteCols = append(cteCols, fmt.Sprintf("c%dp", i))
+	}
+
+	// Conflict target and update expressions using presence
+	conflictCols := make([]string, len(table.primaryColumns))
+	for i, pk := range table.primaryColumns {
+		conflictCols[i] = pk.escapedName
+	}
+	updates := make([]string, numCols)
+	for i := 0; i < numCols; i++ {
+		updates[i] = fmt.Sprintf("%s=CASE WHEN src.c%dp THEN EXCLUDED.%s ELSE %s.%s END", columnsEscaped[i], i, columnsEscaped[i], table.identifier, columnsEscaped[i])
+	}
+
+	// Map column index by escaped name for PK join expression
+	indexByEsc := make(map[string]int, numCols)
+	for i, esc := range columnsEscaped {
+		indexByEsc[esc] = i
+	}
+	// Build scalar subquery predicate: src.pk = EXCLUDED.pk
+	var joinOnExcluded []string
+	for _, pk := range table.primaryColumns {
+		idx, ok := indexByEsc[pk.escapedName]
+		if !ok {
+			return "", fmt.Errorf("primary key %s not found in columnsEscaped", pk.escapedName)
+		}
+		joinOnExcluded = append(joinOnExcluded, fmt.Sprintf("src.c%d = EXCLUDED.%s", idx, pk.escapedName))
+	}
+	sort.Strings(joinOnExcluded)
+	joinOnExcludedExpr := strings.Join(joinOnExcluded, " AND ")
+	// Build assignments using scalar subquery for presence
+	updates = make([]string, numCols)
+	for i := 0; i < numCols; i++ {
+		presenceSubq := fmt.Sprintf("(SELECT src.c%dp FROM src WHERE %s LIMIT 1)", i, joinOnExcludedExpr)
+		updates[i] = fmt.Sprintf("%s=CASE WHEN %s THEN EXCLUDED.%s ELSE %s.%s END", columnsEscaped[i], presenceSubq, columnsEscaped[i], table.identifier, columnsEscaped[i])
+	}
+
+	// Guard: refuse UNNEST superset when a NOT NULL column without default is absent in any row
+	for i := 0; i < numCols; i++ {
+		ci := escapedToInfo[columnsEscaped[i]]
+		if ci != nil && !ci.nullable && !ci.hasDefault {
+			for _, p := range colsToPresence[i] {
+				if p == "FALSE" {
+					return "", fmt.Errorf("unsafe UNNEST superset: column %s is NOT NULL without default and some rows omit it", columnsEscaped[i])
+				}
+			}
+		}
+	}
+
+	// Assemble SQL
+	selectList := strings.Join(projections, ",")
+	aliasList := strings.Join(sAliases, ",")
+	cteColsList := strings.Join(cteCols, ",")
+	unnestArgs := strings.Join(sUnnestArgs, ", ")
+
+	insertTargets := strings.Join(columnsEscaped, ",")
+	selectValues := make([]string, numCols)
+	for i := 0; i < numCols; i++ {
+		selectValues[i] = fmt.Sprintf("src.c%d", i)
+	}
+
+	return fmt.Sprintf("WITH src(%s) AS (SELECT %s FROM unnest(%s) WITH ORDINALITY AS s(%s)) INSERT INTO %s (%s) SELECT %s FROM src ON CONFLICT (%s) DO UPDATE SET %s;",
+		cteColsList,
+		selectList,
+		unnestArgs,
+		aliasList,
+		table.identifier,
+		insertTargets,
+		strings.Join(selectValues, ","),
+		strings.Join(conflictCols, ","),
+		strings.Join(updates, ", "),
+	), nil
 }
 
 // buildValuesUpsertSQL constructs a multi-row VALUES upsert for a single table using the provided

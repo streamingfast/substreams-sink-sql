@@ -292,6 +292,63 @@ func (l *Loader) fetchColumnPgTypes(schemaName, tableName string) (map[string]st
 	return out, nil
 }
 
+// fetchColumnNullabilityDefaults returns per-column nullability and default expression info.
+// defaultExpr is returned as a raw SQL expression via pg_get_expr(adbin, adrelid).
+func (l *Loader) fetchColumnNullabilityDefaults(schemaName, tableName string) (map[string]struct {
+	Nullable    bool
+	HasDefault  bool
+	DefaultExpr string
+}, error) {
+	query := `
+        SELECT a.attname,
+               NOT a.attnotnull AS nullable,
+               (ad.adbin IS NOT NULL) AS has_default,
+               pg_get_expr(ad.adbin, ad.adrelid) AS default_expr
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
+        WHERE n.nspname = $1
+          AND c.relname = $2
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+        ORDER BY a.attnum`
+
+	rows, err := l.DB.Query(query, schemaName, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("querying nullability/defaults for %s.%s: %w", schemaName, tableName, err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]struct {
+		Nullable    bool
+		HasDefault  bool
+		DefaultExpr string
+	})
+	for rows.Next() {
+		var col string
+		var nullable bool
+		var hasDefault bool
+		var defaultExpr sql.NullString
+		if err := rows.Scan(&col, &nullable, &hasDefault, &defaultExpr); err != nil {
+			return nil, fmt.Errorf("scanning nullability/default row: %w", err)
+		}
+		expr := ""
+		if defaultExpr.Valid {
+			expr = defaultExpr.String
+		}
+		out[col] = struct {
+			Nullable    bool
+			HasDefault  bool
+			DefaultExpr string
+		}{Nullable: nullable, HasDefault: hasDefault, DefaultExpr: expr}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating nullability/default rows: %w", err)
+	}
+	return out, nil
+}
+
 func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTableName string) error {
 	schemaTables, err := l.getTablesFromSchema(schemaName)
 	if err != nil {
@@ -325,17 +382,25 @@ func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTa
 		columnByName := make(map[string]*ColumnInfo, len(columns))
 		// Try to enrich with real PostgreSQL type names (handles enums/domains/arrays)
 		pgTypes, _ := l.fetchColumnPgTypes(schemaName, tableName)
+		// Also fetch nullability/defaults metadata for 11c default inlining
+		ndMeta, _ := l.fetchColumnNullabilityDefaults(schemaName, tableName)
 		for _, f := range columns {
 			dbType := f.DatabaseTypeName()
 			if real, ok := pgTypes[f.Name()]; ok && real != "" {
 				dbType = real
 			}
-			columnByName[f.Name()] = &ColumnInfo{
+			info := &ColumnInfo{
 				name:             f.Name(),
 				escapedName:      EscapeIdentifier(f.Name()),
 				databaseTypeName: dbType,
 				scanType:         f.ScanType(),
 			}
+			if meta, ok := ndMeta[f.Name()]; ok {
+				info.nullable = meta.Nullable
+				info.hasDefault = meta.HasDefault
+				info.defaultExpr = meta.DefaultExpr
+			}
+			columnByName[f.Name()] = info
 		}
 
 		key, err := schema.PrimaryKey(l.DB, schemaName, tableName)

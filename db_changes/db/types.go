@@ -62,6 +62,9 @@ type ColumnInfo struct {
 	escapedName      string
 	databaseTypeName string
 	scanType         reflect.Type
+	nullable         bool
+	hasDefault       bool
+	defaultExpr      string
 }
 
 func NewColumnInfo(name string, databaseTypeName string, scanType any) *ColumnInfo {
