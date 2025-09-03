@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"strings"
 
 	"github.com/jimsmart/schema"
 	"github.com/streamingfast/logging"
@@ -208,16 +209,52 @@ func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.Co
 	return result, nil
 }
 
-// getTableColumns returns column information for a specific table
+// getTableColumns returns column information for a specific table, excluding AggregateFunction columns
 func (l *Loader) getTableColumns(schemaName, tableName string) ([]*sql.ColumnType, error) {
-	// Use a simple query to get column information
-	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE 1=0",
+	// First, get column information using DESCRIBE TABLE
+	describeQuery := fmt.Sprintf("DESCRIBE TABLE %s.%s",
 		EscapeIdentifier(schemaName),
 		EscapeIdentifier(tableName))
 
-	rows, err := l.DB.Query(query)
+	describeRows, err := l.DB.Query(describeQuery)
 	if err != nil {
-		return nil, fmt.Errorf("querying table structure: %w", err)
+		return nil, fmt.Errorf("describing table structure: %w", err)
+	}
+	defer describeRows.Close()
+
+	var nonAggregateColumns []string
+
+	// Parse DESCRIBE results to filter out AggregateFunction columns
+	for describeRows.Next() {
+		var name, dataType, defaultKind, defaultExpression, comment, codecExpression, ttlExpression string
+		err := describeRows.Scan(&name, &dataType, &defaultKind, &defaultExpression, &comment, &codecExpression, &ttlExpression)
+		if err != nil {
+			return nil, fmt.Errorf("scanning describe results: %w", err)
+		}
+
+		if !strings.Contains(dataType, "AggregateFunction") {
+			nonAggregateColumns = append(nonAggregateColumns, EscapeIdentifier(name))
+		}
+	}
+
+	if err := describeRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating describe results: %w", err)
+	}
+
+	if len(nonAggregateColumns) == 0 {
+		return nil, fmt.Errorf("no non-aggregate columns found in table %s.%s", schemaName, tableName)
+	}
+
+	// Now query for column types with only the non-aggregate columns
+	columnList := strings.Join(nonAggregateColumns, ", ")
+	selectQuery := fmt.Sprintf("SELECT %s FROM %s.%s WHERE 1=0",
+		columnList,
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	rows, err := l.DB.Query(selectQuery)
+	if err != nil {
+		return nil, fmt.Errorf("querying filtered table structure: %w", err)
 	}
 	defer rows.Close()
 
