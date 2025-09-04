@@ -201,7 +201,7 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
   - Progress:
     - Expected work: Implemented `computeUpsertSupersetPlanWithPresence` and `buildUnnestUpsertSQLWithPresence`; integrated in `Flush` for `mode=unnest` UPSERT spans. Presence flags control DO UPDATE to preserve single-row semantics. Array-typed columns use CASE-by-ordinal projections.
     - Unexpected skipped work: INSERT path currently uses the superset directly; absent fields become SQL NULL on brand-new rows, bypassing table defaults and potentially violating NOT NULL constraints (e.g., `status`). No catalog-aware default inlining or NOT NULL guard yet.
-    - Unexpected extra work: Added presence matrix plumbing and CASE-by-ordinal logic for arrays; expanded logs for detection/execution.
+    - Unexpected extra work: Added presence matrix plumbing and CASE-by-ordinal logic for arrays; expanded logs for detection/execution.an
     - Learnings: Presence is sufficient for DO UPDATE, but INSERT requires either default inlining or partitioning to preserve omission semantics. See Tasks 11c and 11d.
     - Deliberate tech debt: Missing default inlining/NOT NULL safeguards; no fallback to VALUES when unsafe; metrics/tests pending.
 
@@ -234,6 +234,67 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
   - Definition:
     - Cover VALUES and UNNEST builders, column superset logic, and value normalization; verify stable, deterministic SQL.
     - Relevant files: `db_changes/db/dialect_postgres.go` (tests alongside), new `_test.go` files. Confidence: medium-high.
+  - Progress:
+    - Expected work:
+    - Unexpected skipped work:
+    - Unexpected extra work:
+    - Learnings:
+    - Deliberate tech debt:
+
+- [ ] 12a. Unit tests: UNNEST INSERT builder
+  - Definition:
+    - Verify `buildUnnestInsertSQL` for mixed scalar and array-typed columns:
+      - Scalar columns become typed `ARRAY[...]::type[]` and participate in `WITH ORDINALITY`.
+      - Array-typed columns are projected via `CASE ((s.ord)::int)` with per-row typed arrays and `ELSE '{}'::type[]` fallback.
+      - Error when there are no scalar columns (guarded path).
+      - NULL arrays render as `NULL::type[]` in CASE arms.
+    - Relevant files: `db_changes/db/dialect_postgres.go` (UNNEST insert builder), `db_changes/db/dialect_postgres_test.go`.
+    - Confidence: high.
+  - Progress:
+    - Expected work:
+    - Unexpected skipped work:
+    - Unexpected extra work:
+    - Learnings:
+    - Deliberate tech debt:
+
+- [ ] 12b. Unit tests: UNNEST UPSERT with presence
+  - Definition:
+    - Verify `buildUnnestUpsertSQLWithPresence` behavior:
+      - Builds per-column `boolean[]` presence alongside typed value arrays for scalars; arrays use CASE-by-ordinal.
+      - `ON CONFLICT ... DO UPDATE` uses presence to conditionally assign `EXCLUDED.col` or retain target value.
+      - Guard: error when any NOT NULL column without a default is absent in any row.
+      - Default inlining for INSERT value projection when presence=false (scalar and array columns).
+    - Relevant files: `db_changes/db/dialect_postgres.go`, `db_changes/db/dialect_postgres_test.go`.
+    - Confidence: medium-high.
+  - Progress:
+    - Expected work:
+    - Unexpected skipped work:
+    - Unexpected extra work:
+    - Learnings:
+    - Deliberate tech debt:
+
+- [ ] 12c. Unit tests: batch planning helpers
+  - Definition:
+    - `computeInsertBatchPlan`: superset column computation, PK inclusion, NULL fill for absent fields, deterministic order.
+    - `computeUpsertBatchPlan`: identical column-set enforcement across rows and PK presence; normalization of values.
+    - `computeUpsertSupersetPlanWithPresence`: superset columns, value normalization, and correct presence matrix per row/column.
+    - Relevant files: `db_changes/db/dialect_postgres.go`, `db_changes/db/dialect_postgres_test.go`.
+    - Confidence: high.
+  - Progress:
+    - Expected work:
+    - Unexpected skipped work:
+    - Unexpected extra work:
+    - Learnings:
+    - Deliberate tech debt:
+
+- [ ] 12d. Unit tests: typing and SQL helper utilities
+  - Definition:
+    - `canonicalizePostgresType`: maps DatabaseTypeName (and arrays via leading `_`) to base types; unknowns lowercased.
+    - `arrayExprToTextLiteral`: transforms `ARRAY[...]`/brace literals to text array literal for array CASE arms.
+    - `buildInsertHistoryCTE` and `buildUpsertHistoryCTE`: shape and essential fields (op, pk JSON, prev_value) for reversible rows.
+    - Optional light checks on segmentation preconditions (strings present) without asserting full SQL text.
+    - Relevant files: `db_changes/db/dialect_postgres.go`, `db_changes/db/dialect_postgres_test.go`.
+    - Confidence: medium.
   - Progress:
     - Expected work:
     - Unexpected skipped work:
