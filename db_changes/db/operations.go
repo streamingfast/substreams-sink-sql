@@ -92,14 +92,9 @@ func (o *Operation) mergeData(newData map[string]string) error {
 }
 
 // mergeOperation merges another operation into this one, keeping the lowest ordinal
-func (o *Operation) mergeOperation(otherOrdinal uint64, otherData map[string]string) error {
+func (o *Operation) mergeOperation(otherData map[string]string) error {
 	if o.opType == OperationTypeDelete {
 		return fmt.Errorf("unable to merge operation for a delete operation")
-	}
-
-	// Keep the lowest ordinal
-	if otherOrdinal < o.ordinal {
-		o.ordinal = otherOrdinal
 	}
 
 	return o.mergeData(otherData)
