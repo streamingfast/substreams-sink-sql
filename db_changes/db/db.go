@@ -47,6 +47,8 @@ type Loader struct {
 
 	testTx *TestTx // used for testing: if non-nil, 'loader.BeginTx()' will return this object instead of a real *sql.Tx
 	dsn    *DSN
+
+	batchOrdinal uint64 // Counter for ordinals within the current batch, resets on flush
 }
 
 func NewLoader(
@@ -403,6 +405,13 @@ func (l *Loader) GetIdentifier() string {
 // GetIdentifier returns <database>/<schema> suitable for user presentation
 func (l *Loader) GetDSN() *DSN {
 	return l.dsn
+}
+
+// NextBatchOrdinal returns the next ordinal for the current batch and increments the counter
+func (l *Loader) NextBatchOrdinal() uint64 {
+	ordinal := l.batchOrdinal
+	l.batchOrdinal++
+	return ordinal
 }
 
 type obfuscatedString string
