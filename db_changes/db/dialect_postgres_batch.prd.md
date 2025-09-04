@@ -273,7 +273,7 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Learnings: The 11c safety guard prevents UNNEST superset when a NOT NULL column without a default is omitted by any row; tests must reflect safe insert/update semantics or provide defaults/nullable columns.
     - Deliberate tech debt: No history CTE assertions for UNNEST paths; no coverage of partitioning mixed column sets (11d) or metrics observability (15).
 
-- [ ] 12c. Unit tests: batch planning helpers
+- [x] 12c. Unit tests: batch planning helpers
   - Definition:
     - `computeInsertBatchPlan`: superset column computation, PK inclusion, NULL fill for absent fields, deterministic order.
     - `computeUpsertBatchPlan`: identical column-set enforcement across rows and PK presence; normalization of values.
@@ -281,11 +281,11 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Relevant files: `db_changes/db/dialect_postgres.go`, `db_changes/db/dialect_postgres_test.go`.
     - Confidence: high.
   - Progress:
-    - Expected work:
-    - Unexpected skipped work:
-    - Unexpected extra work:
-    - Learnings:
-    - Deliberate tech debt:
+    - Expected work: Added `Test_computeInsertBatchPlan_SupersetAndNulls`, `Test_computeUpsertBatchPlan_IdenticalAndHeterogeneous`, and `Test_computeUpsertSupersetPlanWithPresence_Basics` to validate superset computation, identical-set enforcement, normalization, and presence matrix.
+    - Unexpected skipped work: Skipped any SQL text assertions by design; avoided history/CTE checks (covered elsewhere).
+    - Unexpected extra work: Wrote comprehensive docstrings for all sections/tests to clarify intent and coverage boundaries.
+    - Learnings: Column order is deterministic (sorted); PKs are enforced; heterogeneous UPSERT sets correctly error; presence matrix reliably flags explicit fields.
+    - Deliberate tech debt: Missing negative tests for unknown columns/type normalization errors; no tests for missing PK in UPSERT inputs; partitioning logic (11d) not exercised.
 
 - [ ] 12d. Unit tests: typing and SQL helper utilities
   - Definition:

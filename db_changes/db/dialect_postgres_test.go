@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestPrimaryKeyToJSON verifies deterministic JSON encoding of primary key maps:
+// - single and multi-key support
+// - stable lexical ordering of keys in output JSON
 func TestPrimaryKeyToJSON(t *testing.T) {
 
 	tests := []struct {
@@ -51,6 +54,8 @@ func TestPrimaryKeyToJSON(t *testing.T) {
 
 }
 
+// TestJSONToPrimaryKey verifies decoding a JSON primary key back to a string map
+// and preserves all keys/values regardless of input ordering.
 func TestJSONToPrimaryKey(t *testing.T) {
 
 	tests := []struct {
@@ -94,6 +99,8 @@ func TestJSONToPrimaryKey(t *testing.T) {
 
 }
 
+// TestGetPrimaryKeyFakeEmptyValues verifies formatting of fake empty values used
+// in history queries and that output is stable and lexically sorted for multi-keys.
 func TestGetPrimaryKeyFakeEmptyValues(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -148,6 +155,8 @@ func TestGetPrimaryKeyFakeEmptyValues(t *testing.T) {
 	}
 }
 
+// TestGetPrimaryKeyFakeEmptyValuesAssertion verifies the IS NULL assertion builder
+// for one or multiple primary key columns, including schema-qualified table names.
 func TestGetPrimaryKeyFakeEmptyValuesAssertion(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -206,6 +215,10 @@ func TestGetPrimaryKeyFakeEmptyValuesAssertion(t *testing.T) {
 	}
 }
 
+// TestRevertOp validates SQL emitted to revert history operations:
+// - I (insert) => DELETE target row
+// - D (delete) => INSERT row from stored JSON
+// - U (update) => UPDATE FROM json_populate_record of previous state
 func TestRevertOp(t *testing.T) {
 
 	type row struct {
@@ -269,7 +282,13 @@ func TestRevertOp(t *testing.T) {
 }
 
 // --- 12a: UNNEST INSERT builder tests ---
+// These tests exercise buildUnnestInsertSQL for INSERT-only batches, ensuring:
+// - scalar columns use typed ARRAY[...] with WITH ORDINALITY
+// - array-typed columns are projected via CASE-by-ordinal with typed casts
+// - NULL arrays and empty fallback ('{}'::type[]) are correctly emitted
+// - an error is returned if there are no scalar columns to drive WITH ORDINALITY
 
+// mkTestTable is a small helper to construct a table with given columns and PKs.
 func mkTestTable(t *testing.T, name string, pk []string, cols map[string]*ColumnInfo) *TableInfo {
 	t.Helper()
 	tbl, err := NewTableInfo("public", name, pk, cols)
@@ -277,6 +296,10 @@ func mkTestTable(t *testing.T, name string, pk []string, cols map[string]*Column
 	return tbl
 }
 
+// Test_buildUnnestInsertSQL_MixedScalarAndArray verifies that the INSERT UNNEST builder:
+// - emits typed arrays for scalars with WITH ORDINALITY aliases
+// - selects array columns via CASE ((s.ord)::int) with per-row typed arrays
+// - uses '{}'::varchar[] as the ELSE fallback and NULL::varchar[] when absent
 func Test_buildUnnestInsertSQL_MixedScalarAndArray(t *testing.T) {
 	cols := map[string]*ColumnInfo{
 		"id":     NewColumnInfo("id", "INT8", int64(0)), // bigint
@@ -308,6 +331,8 @@ func Test_buildUnnestInsertSQL_MixedScalarAndArray(t *testing.T) {
 	assert.Contains(t, sql, `NULL::varchar[]`)
 }
 
+// Test_buildUnnestInsertSQL_NoScalarColumns_Error verifies the guarded path that
+// returns an error when a batch contains only array-typed columns (no scalars).
 func Test_buildUnnestInsertSQL_NoScalarColumns_Error(t *testing.T) {
 	cols := map[string]*ColumnInfo{
 		// contrived: only array-typed column (also PK)
@@ -327,7 +352,16 @@ func Test_buildUnnestInsertSQL_NoScalarColumns_Error(t *testing.T) {
 }
 
 // --- 12b: UNNEST UPSERT with presence ---
+// These tests exercise buildUnnestUpsertSQLWithPresence for UPSERT batches, ensuring:
+// - per-column boolean[] presence arrays drive conditional updates in DO UPDATE
+// - typed scalar value arrays and CASE-by-ordinal projections for array columns
+// - default inlining occurs for presence=false in projection (both scalar and array)
+// - tests avoid the 11c NOT NULL guard by making omitted columns nullable or defaulted
 
+// Test_buildUnnestUpsertSQLWithPresence_Basics validates SQL shape for UNNEST UPSERT:
+// - boolean presence arrays (::boolean[])
+// - typed scalar arrays and WITH ORDINALITY
+// - ON CONFLICT ... DO UPDATE uses presence via a subquery on src (c{idx}p)
 func Test_buildUnnestUpsertSQLWithPresence_Basics(t *testing.T) {
 	// Columns: age (INT8), id (INT8, PK), name (TEXT)
 	age := NewColumnInfo("age", "INT8", int64(0))
@@ -367,6 +401,8 @@ func Test_buildUnnestUpsertSQLWithPresence_Basics(t *testing.T) {
 	assert.Contains(t, sql, `CASE WHEN (SELECT src.c2p FROM src WHERE`)
 }
 
+// Test_buildUnnestUpsertSQLWithPresence_DefaultInlining validates that when presence=false
+// the projection inlines defaults: scalar uses ELSE default, array uses ELSE default::type[].
 func Test_buildUnnestUpsertSQLWithPresence_DefaultInlining(t *testing.T) {
 	// Scalar default for score; array default for tags
 	score := NewColumnInfo("score", "INT8", int64(0))
@@ -402,4 +438,95 @@ func Test_buildUnnestUpsertSQLWithPresence_DefaultInlining(t *testing.T) {
 	// Array default inlining for tags: ELSE ('{}')::varchar[]
 	assert.Contains(t, sql, `CASE WHEN s.p2 THEN`)
 	assert.Contains(t, sql, `ELSE ('{}')::varchar[] END`)
+}
+
+// --- 12c: batch planning helpers ---
+// These tests validate pre-SQL planning helpers (no SQL text assertions):
+// - computeInsertBatchPlan: superset columns, PK inclusion, NULL filling, order
+// - computeUpsertBatchPlan: identical column-set enforcement vs heterogeneous error
+// - computeUpsertSupersetPlanWithPresence: superset, normalized values, presence matrix
+
+// Test_computeInsertBatchPlan_SupersetAndNulls ensures superset columns across INSERT rows,
+// deterministic sorted order, PK inclusion, and NULL for absent fields.
+func Test_computeInsertBatchPlan_SupersetAndNulls(t *testing.T) {
+	cols := map[string]*ColumnInfo{
+		"id":   NewColumnInfo("id", "INT8", int64(0)),
+		"name": NewColumnInfo("name", "TEXT", ""),
+		"age":  NewColumnInfo("age", "INT8", int64(0)),
+	}
+	tbl := mkTestTable(t, "users", []string{"id"}, cols)
+
+	ops := []*Operation{
+		{opType: OperationTypeInsert, table: tbl, data: map[string]string{"id": "1", "name": "alice"}},
+		{opType: OperationTypeInsert, table: tbl, data: map[string]string{"id": "2", "age": "30"}},
+	}
+
+	colsEsc, rows, err := (&PostgresDialect{}).computeInsertBatchPlan(ops)
+	require.NoError(t, err)
+
+	// Sorted by raw name: age, id, name
+	assert.Equal(t, []string{`"age"`, `"id"`, `"name"`}, colsEsc)
+	require.Len(t, rows, 2)
+	assert.Equal(t, []string{"NULL", "1", "'alice'"}, rows[0])
+	assert.Equal(t, []string{"30", "2", "NULL"}, rows[1])
+}
+
+// Test_computeUpsertBatchPlan_IdenticalAndHeterogeneous verifies that UPSERT batches require
+// identical column sets across rows and error out on heterogeneous sets.
+func Test_computeUpsertBatchPlan_IdenticalAndHeterogeneous(t *testing.T) {
+	cols := map[string]*ColumnInfo{
+		"id":   NewColumnInfo("id", "INT8", int64(0)),
+		"name": NewColumnInfo("name", "TEXT", ""),
+		"age":  NewColumnInfo("age", "INT8", int64(0)),
+	}
+	tbl := mkTestTable(t, "users", []string{"id"}, cols)
+
+	t.Run("identical_column_set", func(t *testing.T) {
+		ops := []*Operation{
+			{opType: OperationTypeUpsert, table: tbl, data: map[string]string{"id": "1", "name": "alice"}},
+			{opType: OperationTypeUpsert, table: tbl, data: map[string]string{"id": "2", "name": "bob"}},
+		}
+		colsEsc, rows, err := (&PostgresDialect{}).computeUpsertBatchPlan(ops)
+		require.NoError(t, err)
+		assert.Equal(t, []string{`"id"`, `"name"`}, colsEsc)
+		require.Len(t, rows, 2)
+		assert.Equal(t, []string{"1", "'alice'"}, rows[0])
+		assert.Equal(t, []string{"2", "'bob'"}, rows[1])
+	})
+
+	t.Run("heterogeneous_sets_error", func(t *testing.T) {
+		ops := []*Operation{
+			{opType: OperationTypeUpsert, table: tbl, data: map[string]string{"id": "1", "name": "alice"}},
+			{opType: OperationTypeUpsert, table: tbl, data: map[string]string{"id": "2", "age": "30"}},
+		}
+		_, _, err := (&PostgresDialect{}).computeUpsertBatchPlan(ops)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "heterogeneous")
+	})
+}
+
+// Test_computeUpsertSupersetPlanWithPresence_Basics validates superset columns are computed,
+// values normalized, and presence matrix flags which columns were explicitly provided.
+func Test_computeUpsertSupersetPlanWithPresence_Basics(t *testing.T) {
+	cols := map[string]*ColumnInfo{
+		"id":   NewColumnInfo("id", "INT8", int64(0)),
+		"name": NewColumnInfo("name", "TEXT", ""),
+		"age":  NewColumnInfo("age", "INT8", int64(0)),
+	}
+	tbl := mkTestTable(t, "users", []string{"id"}, cols)
+
+	ops := []*Operation{
+		{opType: OperationTypeUpsert, table: tbl, data: map[string]string{"id": "1", "name": "alice"}},
+		{opType: OperationTypeUpsert, table: tbl, data: map[string]string{"id": "2", "age": "30"}},
+	}
+
+	colsEsc, vals, pres, err := (&PostgresDialect{}).computeUpsertSupersetPlanWithPresence(ops)
+	require.NoError(t, err)
+	assert.Equal(t, []string{`"age"`, `"id"`, `"name"`}, colsEsc)
+	require.Len(t, vals, 2)
+	require.Len(t, pres, 2)
+	assert.Equal(t, []string{"NULL", "1", "'alice'"}, vals[0])
+	assert.Equal(t, []bool{false, true, true}, pres[0])
+	assert.Equal(t, []string{"30", "2", "NULL"}, vals[1])
+	assert.Equal(t, []bool{true, true, false}, pres[1])
 }
