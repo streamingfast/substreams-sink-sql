@@ -241,7 +241,7 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Learnings:
     - Deliberate tech debt:
 
-- [ ] 12a. Unit tests: UNNEST INSERT builder
+- [x] 12a. Unit tests: UNNEST INSERT builder
   - Definition:
     - Verify `buildUnnestInsertSQL` for mixed scalar and array-typed columns:
       - Scalar columns become typed `ARRAY[...]::type[]` and participate in `WITH ORDINALITY`.
@@ -251,13 +251,13 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Relevant files: `db_changes/db/dialect_postgres.go` (UNNEST insert builder), `db_changes/db/dialect_postgres_test.go`.
     - Confidence: high.
   - Progress:
-    - Expected work:
-    - Unexpected skipped work:
-    - Unexpected extra work:
-    - Learnings:
-    - Deliberate tech debt:
+    - Expected work: Added `Test_buildUnnestInsertSQL_MixedScalarAndArray` and `Test_buildUnnestInsertSQL_NoScalarColumns_Error` to validate mixed scalar/array handling, typed scalar arrays with `WITH ORDINALITY`, CASE-by-ordinal projections for arrays, empty-array fallback, and the no-scalar error path.
+    - Unexpected skipped work: None.
+    - Unexpected extra work: Introduced `mkTestTable` helper for concise table setup; assertions use fragment matching to avoid brittle full-SQL equality.
+    - Learnings: `WITH ORDINALITY` requires at least one scalar column; array-typed columns project via CASE-by-ordinal with typed casts and `'{}'::type[]` fallback; NULL arrays must render as `NULL::type[]` within CASE arms.
+    - Deliberate tech debt: No negative tests for malformed row/column lengths; VALUES-mode default inlining still untested; no benchmarking of SQL size.
 
-- [ ] 12b. Unit tests: UNNEST UPSERT with presence
+- [x] 12b. Unit tests: UNNEST UPSERT with presence
   - Definition:
     - Verify `buildUnnestUpsertSQLWithPresence` behavior:
       - Builds per-column `boolean[]` presence alongside typed value arrays for scalars; arrays use CASE-by-ordinal.
@@ -267,11 +267,11 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Relevant files: `db_changes/db/dialect_postgres.go`, `db_changes/db/dialect_postgres_test.go`.
     - Confidence: medium-high.
   - Progress:
-    - Expected work:
-    - Unexpected skipped work:
-    - Unexpected extra work:
-    - Learnings:
-    - Deliberate tech debt:
+    - Expected work: Added `Test_buildUnnestUpsertSQLWithPresence_Basics` (presence arrays, typed scalar arrays, `WITH ORDINALITY`, presence-controlled `ON CONFLICT ... DO UPDATE`) and `Test_buildUnnestUpsertSQLWithPresence_DefaultInlining` (default inlining for scalars and array-typed columns when presence=false).
+    - Unexpected skipped work: Skipped full-SQL equality assertions in favor of resilient fragment checks; did not add exhaustive array-presence permutations or parameterized arrays.
+    - Unexpected extra work: Hit 11c NOT NULL guard initially; adjusted test schema (`name.nullable = true`) to model a safe scenario and document the guard behavior.
+    - Learnings: The 11c safety guard prevents UNNEST superset when a NOT NULL column without a default is omitted by any row; tests must reflect safe insert/update semantics or provide defaults/nullable columns.
+    - Deliberate tech debt: No history CTE assertions for UNNEST paths; no coverage of partitioning mixed column sets (11d) or metrics observability (15).
 
 - [ ] 12c. Unit tests: batch planning helpers
   - Definition:

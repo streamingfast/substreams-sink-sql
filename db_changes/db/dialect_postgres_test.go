@@ -325,3 +325,81 @@ func Test_buildUnnestInsertSQL_NoScalarColumns_Error(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no scalar columns")
 }
+
+// --- 12b: UNNEST UPSERT with presence ---
+
+func Test_buildUnnestUpsertSQLWithPresence_Basics(t *testing.T) {
+	// Columns: age (INT8), id (INT8, PK), name (TEXT)
+	age := NewColumnInfo("age", "INT8", int64(0))
+	id := NewColumnInfo("id", "INT8", int64(0))
+	name := NewColumnInfo("name", "TEXT", "")
+	name.nullable = true
+	cols := map[string]*ColumnInfo{
+		"age":  age,
+		"id":   id,
+		"name": name,
+	}
+	tbl := mkTestTable(t, "users", []string{"id"}, cols)
+
+	columnsEscaped := []string{`"age"`, `"id"`, `"name"`}
+	perRowValues := [][]string{
+		{"30", "1", "NULL"},  // name absent
+		{"40", "2", "'bob'"}, // name present
+	}
+	perRowPresence := [][]bool{
+		{true, true, false},
+		{true, true, true},
+	}
+
+	sql, err := (&PostgresDialect{}).buildUnnestUpsertSQLWithPresence(tbl, columnsEscaped, perRowValues, perRowPresence)
+	require.NoError(t, err)
+
+	// Basic shape: INSERT ... SELECT ... FROM unnest(...) WITH ORDINALITY AS s(...)
+	assert.Contains(t, sql, `INSERT INTO "public"."users" ("age","id","name") SELECT`)
+	assert.Contains(t, sql, `WITH ORDINALITY AS s(`)
+	// Presence arrays must be boolean[] alongside typed value arrays for scalars
+	assert.Contains(t, sql, `::boolean[]`)
+	assert.Contains(t, sql, `ARRAY[30,40]::bigint[]`)
+	assert.Contains(t, sql, `ARRAY[1,2]::bigint[]`)
+	// Upsert with presence-controlled updates
+	assert.Contains(t, sql, `ON CONFLICT ("id") DO UPDATE SET`)
+	// Update should reference presence via subquery on src with pk join; for name (index 2) expect c2p
+	assert.Contains(t, sql, `CASE WHEN (SELECT src.c2p FROM src WHERE`)
+}
+
+func Test_buildUnnestUpsertSQLWithPresence_DefaultInlining(t *testing.T) {
+	// Scalar default for score; array default for tags
+	score := NewColumnInfo("score", "INT8", int64(0))
+	score.hasDefault = true
+	score.defaultExpr = "42"
+	// tags is array-typed TEXT[] with '{}' default
+	tags := NewColumnInfo("tags", "_TEXT", "")
+	tags.hasDefault = true
+	tags.defaultExpr = "'{}'"
+	id := NewColumnInfo("id", "INT8", int64(0))
+	cols := map[string]*ColumnInfo{
+		"id":    id,
+		"score": score,
+		"tags":  tags,
+	}
+	tbl := mkTestTable(t, "users", []string{"id"}, cols)
+
+	columnsEscaped := []string{`"score"`, `"id"`, `"tags"`}
+	perRowValues := [][]string{
+		{"NULL", "1", "NULL"},   // both defaults apply when absent
+		{"100", "2", "'{x,y}'"}, // both present
+	}
+	perRowPresence := [][]bool{
+		{false, true, false},
+		{true, true, true},
+	}
+
+	sql, err := (&PostgresDialect{}).buildUnnestUpsertSQLWithPresence(tbl, columnsEscaped, perRowValues, perRowPresence)
+	require.NoError(t, err)
+
+	// Scalar default inlining for score: ELSE 42 in projection, typed to bigint
+	assert.Contains(t, sql, `CASE WHEN s.p0 THEN (s.v0)::bigint ELSE 42 END`)
+	// Array default inlining for tags: ELSE ('{}')::varchar[]
+	assert.Contains(t, sql, `CASE WHEN s.p2 THEN`)
+	assert.Contains(t, sql, `ELSE ('{}')::varchar[] END`)
+}
