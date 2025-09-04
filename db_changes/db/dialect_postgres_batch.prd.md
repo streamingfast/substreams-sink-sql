@@ -287,7 +287,7 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Learnings: Column order is deterministic (sorted); PKs are enforced; heterogeneous UPSERT sets correctly error; presence matrix reliably flags explicit fields.
     - Deliberate tech debt: Missing negative tests for unknown columns/type normalization errors; no tests for missing PK in UPSERT inputs; partitioning logic (11d) not exercised.
 
-- [ ] 12d. Unit tests: typing and SQL helper utilities
+- [x] 12d. Unit tests: typing and SQL helper utilities
   - Definition:
     - `canonicalizePostgresType`: maps DatabaseTypeName (and arrays via leading `_`) to base types; unknowns lowercased.
     - `arrayExprToTextLiteral`: transforms `ARRAY[...]`/brace literals to text array literal for array CASE arms.
@@ -296,11 +296,11 @@ Reference: TigerData article on UNNEST-based batching performance improvements i
     - Relevant files: `db_changes/db/dialect_postgres.go`, `db_changes/db/dialect_postgres_test.go`.
     - Confidence: medium.
   - Progress:
-    - Expected work:
-    - Unexpected skipped work:
-    - Unexpected extra work:
-    - Learnings:
-    - Deliberate tech debt:
+    - Expected work: Added `Test_canonicalizePostgresType`, `Test_arrayExprToTextLiteral`, `Test_buildInsertHistoryCTE_Shape`, and `Test_buildUpsertHistoryCTE_Shape` to validate type mapping/array literal conversion and the essential shape/contents of history CTEs for reversible rows.
+    - Unexpected skipped work: Skipped segmentation precondition checks and exhaustive type matrix coverage; no parameterized arrays; no full-SQL equality assertions.
+    - Unexpected extra work: Wrote clarifying docstrings across tests and sections for readability.
+    - Learnings: Canonicalization normalizes driver names and detects arrays via leading `_`; array text conversion reliably handles ARRAY[...] and brace literals; history CTEs include only reversible rows and use a `src` CTE with LEFT JOIN to compute op/prev_value.
+    - Deliberate tech debt: Additional base types/enums/domains not enumerated; no integration proving transaction atomicity; observability/metrics tests deferred (Task 15).
 
 - [ ] 13. Integration tests against Postgres
   - Definition:

@@ -530,3 +530,108 @@ func Test_computeUpsertSupersetPlanWithPresence_Basics(t *testing.T) {
 	assert.Equal(t, []string{"30", "2", "NULL"}, vals[1])
 	assert.Equal(t, []bool{true, true, false}, pres[1])
 }
+
+// --- 12d: typing and SQL helper utilities ---
+// These tests cover utility functions and CTE builders used by batching:
+// - canonicalizePostgresType: DatabaseTypeName -> (baseType, isArray)
+// - arrayExprToTextLiteral: ARRAY[...] and brace literals -> text array literal
+// - buildInsertHistoryCTE/buildUpsertHistoryCTE: shape/essential fields for reversible rows
+
+// Test_canonicalizePostgresType validates base type mapping and array detection.
+func Test_canonicalizePostgresType(t *testing.T) {
+	bt, arr := canonicalizePostgresType("INT8")
+	assert.Equal(t, "bigint", bt)
+	assert.False(t, arr)
+
+	bt, arr = canonicalizePostgresType("_INT8")
+	assert.Equal(t, "bigint", bt)
+	assert.True(t, arr)
+
+	bt, arr = canonicalizePostgresType("TEXT")
+	assert.Equal(t, "varchar", bt)
+	assert.False(t, arr)
+
+	bt, arr = canonicalizePostgresType("TIMESTAMPTZ")
+	assert.Equal(t, "timestamptz", bt)
+	assert.False(t, arr)
+
+	bt, arr = canonicalizePostgresType("FOO_BAR")
+	assert.Equal(t, "foo_bar", bt)
+	assert.False(t, arr)
+}
+
+// Test_arrayExprToTextLiteral validates transformation to text array literal for
+// ARRAY[...] expressions, quoted brace literals, and fallback wrapping.
+func Test_arrayExprToTextLiteral(t *testing.T) {
+	out := arrayExprToTextLiteral("ARRAY[1,2]::bigint[]")
+	assert.Equal(t, "{1,2}", out)
+
+	out = arrayExprToTextLiteral("'{a,b}'::text[]")
+	assert.Equal(t, "{a,b}", out)
+
+	out = arrayExprToTextLiteral("{1,2,3}")
+	assert.Equal(t, "{1,2,3}", out)
+
+	out = arrayExprToTextLiteral("42")
+	assert.Equal(t, "{42}", out)
+}
+
+// Test_buildInsertHistoryCTE_Shape validates that the INSERT history CTE includes
+// only reversible rows and contains op/table_name/pk/block_num fields.
+func Test_buildInsertHistoryCTE_Shape(t *testing.T) {
+	d := PostgresDialect{historyTableName: "history"}
+	cols := map[string]*ColumnInfo{
+		"id": NewColumnInfo("id", "INT8", int64(0)),
+	}
+	tbl := mkTestTable(t, "events", []string{"id"}, cols)
+
+	// One reversible, one irreversible (nil)
+	rb := uint64(100)
+	ops := []*Operation{
+		{opType: OperationTypeInsert, table: tbl, primaryKey: map[string]string{"id": "1"}, reversibleBlockNum: &rb},
+		{opType: OperationTypeInsert, table: tbl, primaryKey: map[string]string{"id": "2"}, reversibleBlockNum: nil},
+	}
+
+	cte, needs := d.buildInsertHistoryCTE("public", ops)
+	require.True(t, needs)
+	// Must target the quoted history table
+	assert.Contains(t, cte, `"public"."history"`)
+	// Must contain op 'I' and the table identifier as a quoted string
+	assert.Contains(t, cte, "'I'")
+	assert.Contains(t, cte, `'"public"."events"'`)
+	// Must contain pk json and block number 100
+	assert.Contains(t, cte, `'{"id":"1"}'`)
+	assert.Contains(t, cte, "100")
+	// Should not include id=2 (no reversible block)
+	assert.NotContains(t, cte, `'{"id":"2"}'`)
+}
+
+// Test_buildUpsertHistoryCTE_Shape validates that the UPSERT history CTE builds a
+// src VALUES list for reversible rows, LEFT JOINs target, and computes op/prev_value.
+func Test_buildUpsertHistoryCTE_Shape(t *testing.T) {
+	d := PostgresDialect{historyTableName: "history"}
+	cols := map[string]*ColumnInfo{
+		"id": NewColumnInfo("id", "INT8", int64(0)),
+		"v":  NewColumnInfo("v", "TEXT", ""),
+	}
+	tbl := mkTestTable(t, "kv", []string{"id"}, cols)
+
+	rb := uint64(777)
+	ops := []*Operation{
+		{opType: OperationTypeUpsert, table: tbl, primaryKey: map[string]string{"id": "10"}, data: map[string]string{"id": "10", "v": "x"}, reversibleBlockNum: &rb},
+		{opType: OperationTypeUpsert, table: tbl, primaryKey: map[string]string{"id": "11"}, data: map[string]string{"id": "11", "v": "y"}},
+	}
+
+	cte, needs := d.buildUpsertHistoryCTE("public", tbl, ops)
+	require.True(t, needs)
+	// Targets history table and uses nested WITH src(...)
+	assert.Contains(t, cte, `"public"."history"`)
+	assert.Contains(t, cte, "WITH src(")
+	assert.Contains(t, cte, "VALUES (")
+	// Contains pk json and block number, and LEFT JOIN target table
+	assert.Contains(t, cte, `'{"id":"10"}'`)
+	assert.Contains(t, cte, "777")
+	assert.Contains(t, cte, `LEFT JOIN "public"."kv" AS target ON`)
+	// Computes op via CASE WHEN target.pk IS NULL THEN 'I' ELSE 'U'
+	assert.Contains(t, cte, `CASE WHEN target."id" IS NULL THEN 'I' ELSE 'U' END AS op`)
+}
