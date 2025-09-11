@@ -51,7 +51,7 @@ fn map_output(block: Block) -> model::relations::Output {
                     repeated_double_field: vec![0.0, 1.0, 2.0, 3.0],
                     repeated_float_field: vec![0.0, 1.0, 2.0, 3.0],
                     repeated_bool_field: vec![true, false, true, false],
-                    repeated_string_field: vec!["0".to_string(), "1".to_string(), "2".to_string(), "3".to_string()],
+                    repeated_string_field: vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()],
                 },
             }),
         });
