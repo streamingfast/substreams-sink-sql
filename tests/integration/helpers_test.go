@@ -43,22 +43,11 @@ func init() {
 type PostgresSeeder = func(ctx context.Context, user, password, database, schema, dsn string, container *postgres.PostgresContainer) error
 
 type PostgresContainerConfig struct {
-	Image                  string
-	SkipSnapshotAndRestore bool
-}
-
-//go:inline
-func (c *PostgresContainerConfig) doSnapshotAndRestore() bool {
-	if c == nil {
-		return true
-	}
-
-	return !c.SkipSnapshotAndRestore
+	Image string
 }
 
 // setupRawPostgresContainer spins up a Postgres Docker container and let a seeder function seed the database.
-func setupRawPostgresContainer(t *testing.T, schema string, seedDb PostgresSeeder, config PostgresContainerConfig) (dbConnectionString string, container *postgres.PostgresContainer) {
-	t.Helper()
+func setupRawPostgresContainer(config PostgresContainerConfig) (*PostgresContainerExt, func()) {
 	ctx := context.Background()
 
 	dbName := "users"
@@ -75,43 +64,25 @@ func setupRawPostgresContainer(t *testing.T, schema string, seedDb PostgresSeede
 				WithOccurrence(2).
 				WithStartupTimeout(5*time.Second)),
 	)
-	testcontainers.CleanupContainer(t, postgresContainer)
-	require.NoError(t, err)
-
-	dbConnectionString, err = postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err)
-
-	_, _, err = postgresContainer.Exec(ctx, []string{"psql", "-U", dbUser, "-d", dbName, "-c", fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema)})
-	require.NoError(t, err)
-
-	if seedDb != nil {
-		require.NoError(t, seedDb(ctx, dbUser, dbPassword, dbName, schema, dbConnectionString, postgresContainer))
+	if err != nil {
+		panic(fmt.Errorf("setting up postgres container: %w", err))
 	}
 
-	if config.doSnapshotAndRestore() {
-		err = postgresContainer.Snapshot(ctx)
-		require.NoError(t, err)
-	}
-
-	return dbConnectionString, postgresContainer
+	return &PostgresContainerExt{
+			PostgresContainer: postgresContainer,
+			Configuration:     &config,
+			ConnectionString:  postgresContainer.MustConnectionString(ctx, "sslmode=disable"),
+		}, func() {
+			_ = testcontainers.TerminateContainer(postgresContainer)
+		}
 }
 
-const dbChangesSchemaName = "testschema"
-
-func setupDbChangesPostgresContainer(t *testing.T) (dbConnectionString string, container *postgres.PostgresContainer) {
-	dbConnectionString, container = setupRawPostgresContainer(t, dbChangesSchemaName, nil, PostgresContainerConfig{
-		Image: "postgres:16-alpine",
-	})
-
-	return dbConnectionString + "&schemaName=" + dbChangesSchemaName, container
-}
-
-func setupDbChangesTimescaleDBContainer(t *testing.T) (dbConnectionString string, container *postgres.PostgresContainer) {
-	dbConnectionString, container = setupRawPostgresContainer(t, dbChangesSchemaName, nil, PostgresContainerConfig{
-		Image: "timescale/timescaledb:latest-pg16",
-	})
-
-	return dbConnectionString + "&schemaName=" + dbChangesSchemaName, container
+type PostgresContainerExt struct {
+	*postgres.PostgresContainer
+	Configuration *PostgresContainerConfig
+	// ConnectionString should be used instead of calling ConnectionString() on the embedded PostgresContainer
+	// because this one is properly configured with sslmode=disable.
+	ConnectionString string
 }
 
 type ClickhouseSeeder = func(ctx context.Context, user, password, database, dsn string, container *clickhouse.ClickHouseContainer) error
@@ -390,8 +361,8 @@ func readRowsBy[T any](t *testing.T, db *sqlx.DB, tableAndOrSchema, orderBy stri
 	return rows
 }
 
-func readDbChangesRows[T any](t *testing.T, db *sqlx.DB, table string) []*T {
+func readDbChangesRows[T any](t *testing.T, db *sqlx.DB, schema string, table string) []*T {
 	t.Helper()
 
-	return readRowsBy[T](t, db, fmt.Sprintf(`"%s"."%s"`, dbChangesSchemaName, table), "id")
+	return readRowsBy[T](t, db, fmt.Sprintf(`"%s"."%s"`, schema, table), "id")
 }
