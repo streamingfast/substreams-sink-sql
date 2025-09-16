@@ -416,7 +416,8 @@ func TestSinker_Integration_TimescaleDB(t *testing.T) {
 		t,
 		dbConnectionString,
 		postgresContainer,
-		&PostgresContainerConfig{AvoidRestore: true},
+		&PostgresContainerConfig{SkipSnapshotAndRestore: true},
+		nil,
 		nil,
 		rawSQLInput(`
 			CREATE TABLE IF NOT EXISTS trades (
@@ -502,7 +503,7 @@ func TestSinker_Integration_BatchOrdinalSimple(t *testing.T) {
 
 	// Custom postgres config
 	postgresContainerConfig := &PostgresContainerConfig{
-		AvoidRestore: true,
+		SkipSnapshotAndRestore: true,
 	}
 
 	// Custom sinker factory options to force batching across blocks
@@ -512,7 +513,7 @@ func TestSinker_Integration_BatchOrdinalSimple(t *testing.T) {
 		return defaults
 	}
 
-	runCustomizedSinkerTestWithFactoryOptions(
+	runCustomizedSinkerTest(
 		t,
 		dbConnectionString,
 		postgresContainer,
@@ -530,7 +531,7 @@ func TestSinker_Integration_BatchOrdinalSimple(t *testing.T) {
 			dbChangesBlockData(t, "10a", finalBlock("8a"),
 				insertRowSinglePK("orders", "order1", "amount", "100"),
 			),
-			// Block 11a: Create order2  
+			// Block 11a: Create order2
 			dbChangesBlockData(t, "11a", finalBlock("8a"),
 				insertRowSinglePK("orders", "order2", "amount", "200"),
 			),
@@ -547,7 +548,7 @@ func TestSinker_Integration_BatchOrdinalSimple(t *testing.T) {
 
 			rows := readDbChangesRows[OrderRow](t, dbx, "orders")
 			require.Len(t, rows, 3)
-			
+
 			// All orders should exist regardless of ordinal system
 			require.Contains(t, rows, &OrderRow{ID: "order1", Amount: "100"})
 			require.Contains(t, rows, &OrderRow{ID: "order2", Amount: "200"})
@@ -562,7 +563,7 @@ func TestSinker_Integration_ParentChildOrderingBatched(t *testing.T) {
 
 	// Custom postgres config
 	postgresContainerConfig := &PostgresContainerConfig{
-		AvoidRestore: true,
+		SkipSnapshotAndRestore: true,
 	}
 
 	// Custom options - don't change sink options
@@ -579,7 +580,7 @@ func TestSinker_Integration_ParentChildOrderingBatched(t *testing.T) {
 		return defaults
 	}
 
-	runCustomizedSinkerTestWithFactoryOptions(
+	runCustomizedSinkerTest(
 		t,
 		dbConnectionString,
 		postgresContainer,
@@ -630,7 +631,7 @@ func TestSinker_Integration_ParentChildOrderingBatched(t *testing.T) {
 				[]*UserRow{{ID: "user1"}, {ID: "user2"}},
 				readDbChangesRows[UserRow](t, dbx, "users"),
 			)
-			
+
 			require.Equal(t,
 				[]*XferRow{{ID: "xfer1", From: "user1"}},
 				readDbChangesRows[XferRow](t, dbx, "xfer"),
@@ -705,6 +706,7 @@ func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
 		func(defaults []sink.Option) []sink.Option {
 			return append(defaults, sink.WithBlockDataBuffer(2))
 		},
+		nil,
 		tablesInput(testTables),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("8a"),
@@ -742,26 +744,10 @@ func runSinkerTest(
 	expected func(t *testing.T, dbx *sqlx.DB),
 	expectedFinalCursor string,
 ) {
-	runCustomizedSinkerTest(t, dbDSN, postgresContainer, nil, nil, setupInput, responses, expected, expectedFinalCursor)
+	runCustomizedSinkerTest(t, dbDSN, postgresContainer, nil, nil, nil, setupInput, responses, expected, expectedFinalCursor)
 }
 
 func runCustomizedSinkerTest(
-	t *testing.T,
-	dbDSN string,
-	postgresContainer *postgres.PostgresContainer,
-	postgresContainerConfig *PostgresContainerConfig,
-	customizeSinkOptions func(defaults []sink.Option) []sink.Option,
-	setupInput sinkerSetupInput,
-	responses []any,
-	expected func(t *testing.T, dbx *sqlx.DB),
-	expectedFinalCursor string,
-) {
-	runCustomizedSinkerTestWithFactoryOptions(
-		t, dbDSN, postgresContainer, postgresContainerConfig, customizeSinkOptions, nil, setupInput, responses, expected, expectedFinalCursor,
-	)
-}
-
-func runCustomizedSinkerTestWithFactoryOptions(
 	t *testing.T,
 	dbDSN string,
 	postgresContainer *postgres.PostgresContainer,
@@ -777,7 +763,7 @@ func runCustomizedSinkerTestWithFactoryOptions(
 
 	ctx := context.Background()
 
-	if postgresContainerConfig == nil || !postgresContainerConfig.AvoidRestore {
+	if postgresContainerConfig.doSnapshotAndRestore() {
 		t.Cleanup(func() {
 			require.NoError(t, postgresContainer.Restore(ctx))
 		})
@@ -840,7 +826,7 @@ func runCustomizedSinkerTestWithFactoryOptions(
 		FlushRetryCount:         0,
 		FlushRetryDelay:         0,
 	}
-	
+
 	if customizeSinkerFactoryOptions != nil {
 		options = customizeSinkerFactoryOptions(options)
 	}

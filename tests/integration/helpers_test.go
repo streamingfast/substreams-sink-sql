@@ -43,8 +43,17 @@ func init() {
 type PostgresSeeder = func(ctx context.Context, user, password, database, schema, dsn string, container *postgres.PostgresContainer) error
 
 type PostgresContainerConfig struct {
-	Image        string
-	AvoidRestore bool
+	Image                  string
+	SkipSnapshotAndRestore bool
+}
+
+//go:inline
+func (c *PostgresContainerConfig) doSnapshotAndRestore() bool {
+	if c == nil {
+		return true
+	}
+
+	return !c.SkipSnapshotAndRestore
 }
 
 // setupRawPostgresContainer spins up a Postgres Docker container and let a seeder function seed the database.
@@ -79,7 +88,7 @@ func setupRawPostgresContainer(t *testing.T, schema string, seedDb PostgresSeede
 		require.NoError(t, seedDb(ctx, dbUser, dbPassword, dbName, schema, dbConnectionString, postgresContainer))
 	}
 
-	if !config.AvoidRestore {
+	if config.doSnapshotAndRestore() {
 		err = postgresContainer.Snapshot(ctx)
 		require.NoError(t, err)
 	}
