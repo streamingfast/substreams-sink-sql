@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -120,7 +121,6 @@ func (d ClickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile
 }
 
 func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
-
 	if d.cluster != "" {
 		stmts, err := clickhouse.NewParser(schemaSql).ParseStmts()
 		if err != nil {
@@ -367,4 +367,55 @@ func convertToType(value string, valueType reflect.Type) (any, error) {
 	default:
 		return value, nil
 	}
+}
+
+func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error) {
+	// For ClickHouse, use DESCRIBE TABLE to filter out AggregateFunction columns
+	describeQuery := fmt.Sprintf("DESCRIBE TABLE %s.%s",
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	describeRows, err := db.Query(describeQuery)
+	if err != nil {
+		return nil, fmt.Errorf("describing table structure: %w", err)
+	}
+	defer describeRows.Close()
+
+	var nonAggregateColumns []string
+
+	// Parse DESCRIBE results to filter out AggregateFunction columns
+	for describeRows.Next() {
+		var name, dataType, defaultKind, defaultExpression, comment, codecExpression, ttlExpression string
+		err := describeRows.Scan(&name, &dataType, &defaultKind, &defaultExpression, &comment, &codecExpression, &ttlExpression)
+		if err != nil {
+			return nil, fmt.Errorf("scanning describe results: %w", err)
+		}
+
+		if !strings.Contains(dataType, "AggregateFunction") {
+			nonAggregateColumns = append(nonAggregateColumns, EscapeIdentifier(name))
+		}
+	}
+
+	if err := describeRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating describe results: %w", err)
+	}
+
+	if len(nonAggregateColumns) == 0 {
+		return nil, fmt.Errorf("no non-aggregate columns found in table %s.%s", schemaName, tableName)
+	}
+
+	// Now query for column types with only the non-aggregate columns
+	columnList := strings.Join(nonAggregateColumns, ", ")
+	selectQuery := fmt.Sprintf("SELECT %s FROM %s.%s WHERE 1=0",
+		columnList,
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	rows, err := db.Query(selectQuery)
+	if err != nil {
+		return nil, fmt.Errorf("querying filtered table structure: %w", err)
+	}
+	defer rows.Close()
+
+	return rows.ColumnTypes()
 }
