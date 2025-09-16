@@ -189,7 +189,7 @@ func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.Co
 		}
 
 		// Get column information for this table
-		columns, err := l.getTableColumns(schemaName, tableName)
+		columns, err := l.dialect.GetTableColumns(l.DB, schemaName, tableName)
 		if err != nil {
 			l.logger.Warn("failed to get columns for table, skipping",
 				zap.String("schema", schemaName),
@@ -208,22 +208,6 @@ func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.Co
 	}
 
 	return result, nil
-}
-
-// getTableColumns returns column information for a specific table
-func (l *Loader) getTableColumns(schemaName, tableName string) ([]*sql.ColumnType, error) {
-	// Use a simple query to get column information
-	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE 1=0",
-		EscapeIdentifier(schemaName),
-		EscapeIdentifier(tableName))
-
-	rows, err := l.DB.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("querying table structure: %w", err)
-	}
-	defer rows.Close()
-
-	return rows.ColumnTypes()
 }
 
 func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTableName string) error {

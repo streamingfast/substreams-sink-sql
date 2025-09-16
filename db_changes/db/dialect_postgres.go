@@ -585,3 +585,17 @@ func (d *PostgresDialect) normalizeValueType(value string, valueType reflect.Typ
 		return value, nil
 	}
 }
+
+func (d PostgresDialect) GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error) {
+	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE 1=0",
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("querying table structure: %w", err)
+	}
+	defer rows.Close()
+
+	return rows.ColumnTypes()
+}
