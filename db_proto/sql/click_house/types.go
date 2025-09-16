@@ -45,71 +45,112 @@ func (s DataType) String() string {
 
 func MapFieldType(fd *desc.FieldDescriptor) DataType {
 	t := fd.GetType()
+	var baseType DataType
+
 	switch t {
 	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
 		switch fd.GetMessageType().GetFullyQualifiedName() {
 		case "google.protobuf.Timestamp":
-			return TypeDateTime
+			baseType = TypeDateTime
 		default:
 			panic(fmt.Sprintf("Message type not supported: %s", fd.GetMessageType().GetFullyQualifiedName()))
 		}
 	case descriptor.FieldDescriptorProto_TYPE_ENUM:
-		return TypeInteger32
+		baseType = TypeInteger32
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:
-		return TypeBool
+		baseType = TypeBool
 	case descriptor.FieldDescriptorProto_TYPE_INT32, descriptor.FieldDescriptorProto_TYPE_SINT32, descriptor.FieldDescriptorProto_TYPE_SFIXED32:
-		return TypeInteger32
+		baseType = TypeInteger32
 	case descriptor.FieldDescriptorProto_TYPE_INT64, descriptor.FieldDescriptorProto_TYPE_SINT64, descriptor.FieldDescriptorProto_TYPE_SFIXED64:
-		return TypeInteger64
+		baseType = TypeInteger64
 	case descriptor.FieldDescriptorProto_TYPE_UINT64, descriptor.FieldDescriptorProto_TYPE_FIXED64:
-		return TypeUInt64
+		baseType = TypeUInt64
 	case descriptor.FieldDescriptorProto_TYPE_UINT32, descriptor.FieldDescriptorProto_TYPE_FIXED32:
-		return TypeUInt32
+		baseType = TypeUInt32
 	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
-		return TypeFloat32
+		baseType = TypeFloat32
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
-		return TypeFloat64
+		baseType = TypeFloat64
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		return TypeVarchar
+		baseType = TypeVarchar
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
-		return TypeVarchar
+		baseType = TypeVarchar
 	default:
 		panic(fmt.Sprintf("unsupported type: %s", t))
 	}
+
+	// If field is repeated, wrap the base type as an array
+	if fd.IsRepeated() {
+		return DataType(fmt.Sprintf("Array(%s)", baseType))
+	}
+
+	return baseType
 }
 
 func ColInputForColumn(fd *desc.FieldDescriptor) proto.ColInput {
+	var baseInput proto.ColInput
+
 	switch fd.GetType() {
 	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
 		switch fd.GetMessageType().GetFullyQualifiedName() {
 		case "google.protobuf.Timestamp":
-			return &proto.ColDateTime{}
+			baseInput = &proto.ColDateTime{}
 		default:
 			panic(fmt.Sprintf("Message type not supported: %s", fd.GetMessageType().GetFullyQualifiedName()))
 		}
 	case descriptor.FieldDescriptorProto_TYPE_ENUM:
-		return &proto.ColInt32{}
+		baseInput = &proto.ColInt32{}
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:
-		return &proto.ColBool{}
+		baseInput = &proto.ColBool{}
 	case descriptor.FieldDescriptorProto_TYPE_INT32, descriptor.FieldDescriptorProto_TYPE_SINT32, descriptor.FieldDescriptorProto_TYPE_SFIXED32:
-		return &proto.ColInt32{}
+		baseInput = &proto.ColInt32{}
 	case descriptor.FieldDescriptorProto_TYPE_INT64, descriptor.FieldDescriptorProto_TYPE_SINT64, descriptor.FieldDescriptorProto_TYPE_SFIXED64:
-		return &proto.ColInt64{}
+		baseInput = &proto.ColInt64{}
 	case descriptor.FieldDescriptorProto_TYPE_UINT64, descriptor.FieldDescriptorProto_TYPE_FIXED64:
-		return &proto.ColUInt64{}
+		baseInput = &proto.ColUInt64{}
 	case descriptor.FieldDescriptorProto_TYPE_UINT32, descriptor.FieldDescriptorProto_TYPE_FIXED32:
-		return &proto.ColUInt32{}
+		baseInput = &proto.ColUInt32{}
 	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
-		return &proto.ColFloat32{}
+		baseInput = &proto.ColFloat32{}
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
-		return &proto.ColFloat64{}
+		baseInput = &proto.ColFloat64{}
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		return &proto.ColStr{}
+		baseInput = &proto.ColStr{}
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
-		return &proto.ColBytes{}
+		baseInput = &proto.ColBytes{}
 	default:
 		panic(fmt.Sprintf("unsupported type: %s", fd.GetType()))
 	}
+
+	// If field is repeated, wrap the base input as an array
+	if fd.IsRepeated() {
+		switch base := baseInput.(type) {
+		case *proto.ColInt32:
+			return proto.NewArray(base)
+		case *proto.ColInt64:
+			return proto.NewArray(base)
+		case *proto.ColUInt32:
+			return proto.NewArray(base)
+		case *proto.ColUInt64:
+			return proto.NewArray(base)
+		case *proto.ColFloat32:
+			return proto.NewArray(base)
+		case *proto.ColFloat64:
+			return proto.NewArray(base)
+		case *proto.ColBool:
+			return proto.NewArray(base)
+		case *proto.ColStr:
+			return proto.NewArray(base)
+		case *proto.ColBytes:
+			return proto.NewArray(base)
+		case *proto.ColDateTime:
+			return proto.NewArray(base)
+		default:
+			panic(fmt.Sprintf("unsupported array base type: %T", base))
+		}
+	}
+
+	return baseInput
 }
 
 func ValueToString(value any) (s string) {

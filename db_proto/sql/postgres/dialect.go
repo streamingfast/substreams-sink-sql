@@ -130,7 +130,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 		switch {
 		case f.IsRepeated:
-			continue
+			// Arrays are now supported, continue processing
 		case f.IsMessage && !IsWellKnownType(f.FieldDescriptor):
 			childTable, found := d.TableRegistry[f.Message]
 			if !found {

@@ -37,6 +37,21 @@ fn map_output(block: Block) -> model::relations::Output {
                     bool_field: true,
                     // Add other fields if there are more in your `TypesTest` message definition
                     sfixed64_field: i64::MAX,
+
+                    repeated_int32_field: vec![0, 1, 2, 3],
+                    repeated_int64_field: vec![0, 1, 2, 3],
+                    repeated_uint32_field: vec![0, 1, 2, 3],
+                    repeated_uint64_field: vec![0, 1, 2, 3],
+                    repeated_sint32_field: vec![0, 1, 2, 3],
+                    repeated_sint64_field: vec![0, 1, 2, 3],
+                    repeated_fixed32_field: vec![0, 1, 2, 3],
+                    repeated_fixed64_field: vec![0, 1, 2, 3],
+                    repeated_sfixed32_field: vec![0, 1, 2, 3],
+                    repeated_sfixed64_field: vec![0, 1, 2, 3],
+                    repeated_double_field: vec![0.0, 1.0, 2.0, 3.0],
+                    repeated_float_field: vec![0.0, 1.0, 2.0, 3.0],
+                    repeated_bool_field: vec![true, false, true, false],
+                    repeated_string_field: vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()],
                 },
             }),
         });

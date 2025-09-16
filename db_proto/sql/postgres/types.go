@@ -42,37 +42,46 @@ func IsWellKnownType(fd *desc.FieldDescriptor) bool {
 
 func MapFieldType(fd *desc.FieldDescriptor) DataType {
 	t := fd.GetType()
+	var baseType DataType
+
 	switch t {
 	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
 		switch fd.GetMessageType().GetFullyQualifiedName() {
 		case "google.protobuf.Timestamp":
-			return TypeTimestamp
+			baseType = TypeTimestamp
 		default:
 			panic(fmt.Sprintf("Message type not supported: %s", fd.GetMessageType().GetFullyQualifiedName()))
 		}
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:
-		return TypeBool
+		baseType = TypeBool
 	case descriptor.FieldDescriptorProto_TYPE_INT32, descriptor.FieldDescriptorProto_TYPE_SINT32, descriptor.FieldDescriptorProto_TYPE_SFIXED32:
-		return TypeInteger
+		baseType = TypeInteger
 	case descriptor.FieldDescriptorProto_TYPE_INT64, descriptor.FieldDescriptorProto_TYPE_SINT64, descriptor.FieldDescriptorProto_TYPE_SFIXED64:
-		return TypeBigInt
+		baseType = TypeBigInt
 	case descriptor.FieldDescriptorProto_TYPE_UINT64, descriptor.FieldDescriptorProto_TYPE_FIXED64:
-		return TypeNumeric
+		baseType = TypeNumeric
 	case descriptor.FieldDescriptorProto_TYPE_UINT32, descriptor.FieldDescriptorProto_TYPE_FIXED32:
-		return TypeNumeric
+		baseType = TypeNumeric
 	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
-		return TypeDecimal
+		baseType = TypeDecimal
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
-		return TypeDouble
+		baseType = TypeDouble
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		return TypeVarchar
+		baseType = TypeVarchar
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
-		return TypeText
+		baseType = TypeText
 	case descriptor.FieldDescriptorProto_TYPE_ENUM:
-		return TypeText
+		baseType = TypeText
 	default:
 		panic(fmt.Sprintf("unsupported type: %s", t))
 	}
+
+	// If field is repeated, wrap the base type as an array
+	if fd.IsRepeated() {
+		return DataType(fmt.Sprintf("%s[]", baseType))
+	}
+
+	return baseType
 }
 
 func ValueToString(value any) (s string) {
@@ -86,7 +95,7 @@ func ValueToString(value any) (s string) {
 	case int:
 		s = strconv.FormatInt(int64(v), 10)
 	case uint64:
-		s = "'" + strconv.FormatUint(v, 10) + "'"
+		s = strconv.FormatUint(v, 10)
 	case uint32:
 		s = strconv.FormatUint(uint64(v), 10)
 	case uint:
@@ -103,6 +112,13 @@ func ValueToString(value any) (s string) {
 		s = "'" + v.Format(time.RFC3339) + "'"
 	case *timestamppb.Timestamp:
 		s = "'" + v.AsTime().Format(time.RFC3339) + "'"
+	// Handle array types for PostgreSQL
+	case []interface{}:
+		var elements []string
+		for _, elem := range v {
+			elements = append(elements, ValueToString(elem))
+		}
+		s = "{" + strings.Join(elements, ",") + "}"
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", v))
 	}

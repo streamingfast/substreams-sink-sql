@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Skip `AggregateFunction` columns on Clickhouse when describing the schema.
 
+## v4.6.7
+
+* Previous fix for ordering issue was not properly handling blocks batched together and was working at block level. Fix now extended to work when also inside a batch.
+
 ## v4.6.6
 
 ### `substreams-sink-sql run`

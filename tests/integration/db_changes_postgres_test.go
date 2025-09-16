@@ -497,6 +497,149 @@ func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
 	)
 }
 
+func TestSinker_Integration_BatchOrdinalSimple(t *testing.T) {
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
+
+	// Custom postgres config
+	postgresContainerConfig := &PostgresContainerConfig{
+		AvoidRestore: true,
+	}
+
+	// Custom sinker factory options to force batching across blocks
+	customizeFactoryOptions := func(defaults sinker.SinkerFactoryOptions) sinker.SinkerFactoryOptions {
+		defaults.BatchBlockFlushInterval = 10
+		defaults.BatchRowFlushInterval = 10
+		return defaults
+	}
+
+	runCustomizedSinkerTestWithFactoryOptions(
+		t,
+		dbConnectionString,
+		postgresContainer,
+		postgresContainerConfig,
+		nil,
+		customizeFactoryOptions,
+		rawSQLInput(`
+			CREATE TABLE IF NOT EXISTS %s.orders (
+				id TEXT PRIMARY KEY,
+				amount TEXT
+			);
+		`, testSchema),
+		streamMock(
+			// Block 10a: Create order1
+			dbChangesBlockData(t, "10a", finalBlock("8a"),
+				insertRowSinglePK("orders", "order1", "amount", "100"),
+			),
+			// Block 11a: Create order2  
+			dbChangesBlockData(t, "11a", finalBlock("8a"),
+				insertRowSinglePK("orders", "order2", "amount", "200"),
+			),
+			// Block 12a: Create order3 and trigger flush
+			dbChangesBlockData(t, "12a", finalBlock("12a"),
+				insertRowSinglePK("orders", "order3", "amount", "300"),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			type OrderRow struct {
+				ID     string `db:"id"`
+				Amount string `db:"amount"`
+			}
+
+			rows := readDbChangesRows[OrderRow](t, dbx, "orders")
+			require.Len(t, rows, 3)
+			
+			// All orders should exist regardless of ordinal system
+			require.Contains(t, rows, &OrderRow{ID: "order1", Amount: "100"})
+			require.Contains(t, rows, &OrderRow{ID: "order2", Amount: "200"})
+			require.Contains(t, rows, &OrderRow{ID: "order3", Amount: "300"})
+		},
+		"Block #12 (12a) - LIB #12 (12a)",
+	)
+}
+
+func TestSinker_Integration_ParentChildOrderingBatched(t *testing.T) {
+	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
+
+	// Custom postgres config
+	postgresContainerConfig := &PostgresContainerConfig{
+		AvoidRestore: true,
+	}
+
+	// Custom options - don't change sink options
+	customizeOptions := func(defaults []sink.Option) []sink.Option {
+		return defaults
+	}
+
+	// Custom sinker factory options to force batching across blocks
+	customizeFactoryOptions := func(defaults sinker.SinkerFactoryOptions) sinker.SinkerFactoryOptions {
+		// Set BatchBlockFlushInterval to 10 to ensure all blocks are batched together
+		// Also increase BatchRowFlushInterval to prevent early row-based flushing
+		defaults.BatchBlockFlushInterval = 10
+		defaults.BatchRowFlushInterval = 10
+		return defaults
+	}
+
+	runCustomizedSinkerTestWithFactoryOptions(
+		t,
+		dbConnectionString,
+		postgresContainer,
+		postgresContainerConfig,
+		customizeOptions,
+		customizeFactoryOptions,
+		rawSQLInput(`
+			CREATE TABLE IF NOT EXISTS %s.users (
+				id TEXT PRIMARY KEY
+			);
+			CREATE TABLE IF NOT EXISTS %s.xfer (
+				id TEXT PRIMARY KEY,
+				"from" TEXT,
+				CONSTRAINT fk_users
+					FOREIGN KEY("from")
+					REFERENCES %s.users(id)
+			);
+		`, testSchema, testSchema, testSchema),
+		streamMock(
+			// Block 10a: Create user1 first (batch ordinal 0)
+			dbChangesBlockData(t, "10a", finalBlock("8a"),
+				insertRowSinglePK("users", "user1"),
+			),
+			// Block 11a: Create xfer1 referencing user1 (batch ordinal 1)
+			// With batch-tied ordinals, this gets ordinal 1, ensuring proper ordering
+			dbChangesBlockData(t, "11a", finalBlock("8a"),
+				insertRowSinglePK("xfer", "xfer1", "from", "user1"),
+			),
+			// Block 12a: Trigger the flush by reaching final block
+			dbChangesBlockData(t, "12a", finalBlock("12a"),
+				insertRowSinglePK("users", "user2"),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB) {
+			type XferRow struct {
+				ID   string `db:"id"`
+				From string `db:"from"`
+			}
+
+			type UserRow struct {
+				ID string `db:"id"`
+			}
+
+			// Both rows should exist - this test might fail with incorrect ordinal ordering
+			// because user1 must be inserted before xfer1 due to foreign key constraint
+			// With block-local ordinals, both get ordinal 0, causing potential ordering issues
+			require.Equal(t,
+				[]*UserRow{{ID: "user1"}, {ID: "user2"}},
+				readDbChangesRows[UserRow](t, dbx, "users"),
+			)
+			
+			require.Equal(t,
+				[]*XferRow{{ID: "xfer1", From: "user1"}},
+				readDbChangesRows[XferRow](t, dbx, "xfer"),
+			)
+		},
+		"Block #12 (12a) - LIB #12 (12a)",
+	)
+}
+
 func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
 	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 
@@ -613,6 +756,23 @@ func runCustomizedSinkerTest(
 	expected func(t *testing.T, dbx *sqlx.DB),
 	expectedFinalCursor string,
 ) {
+	runCustomizedSinkerTestWithFactoryOptions(
+		t, dbDSN, postgresContainer, postgresContainerConfig, customizeSinkOptions, nil, setupInput, responses, expected, expectedFinalCursor,
+	)
+}
+
+func runCustomizedSinkerTestWithFactoryOptions(
+	t *testing.T,
+	dbDSN string,
+	postgresContainer *postgres.PostgresContainer,
+	postgresContainerConfig *PostgresContainerConfig,
+	customizeSinkOptions func(defaults []sink.Option) []sink.Option,
+	customizeSinkerFactoryOptions func(defaults sinker.SinkerFactoryOptions) sinker.SinkerFactoryOptions,
+	setupInput sinkerSetupInput,
+	responses []any,
+	expected func(t *testing.T, dbx *sqlx.DB),
+	expectedFinalCursor string,
+) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -679,6 +839,10 @@ func runCustomizedSinkerTest(
 		HandleReorgs:            true,
 		FlushRetryCount:         0,
 		FlushRetryDelay:         0,
+	}
+	
+	if customizeSinkerFactoryOptions != nil {
+		options = customizeSinkerFactoryOptions(options)
 	}
 
 	dbSinker, err := sinker.SinkerFactory(baseSink, options)(ctx, dbDSN, logger, tracer)

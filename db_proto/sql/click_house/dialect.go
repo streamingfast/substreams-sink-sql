@@ -114,13 +114,6 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 		fieldName := f.Name
 
-		switch {
-		case f.IsRepeated:
-			continue
-		case f.IsMessage:
-		case f.ForeignKey != nil:
-		}
-
 		fieldType := MapFieldType(f.FieldDescriptor)
 		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
 		sb.WriteString(",")
