@@ -216,3 +216,5 @@ require (
 	google.golang.org/grpc v1.72.0
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+replace github.com/jimsmart/schema => github.com/streamingfast/schema v0.0.0-20240621180609-1de2e05fe3bd
