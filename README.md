@@ -149,7 +149,31 @@ psql://<user>:<password>@<host>:<port>/<dbname>[?<options>]
 
 Where `<options>` is URL query parameters in `<key>=<value>` format, multiple options are separated by `&` signs. Supported options can be seen [on libpq official documentation](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS). The options `<user>`, `<password>`, `<host>` and `<dbname>` should **not** be passed in `<options>` as they are automatically extracted from the DSN URL.
 
-Moreover, the `schema` option key can be used to select a particular schema within the `<dbname>` database.
+##### Schema Isolation
+
+The `schemaName` option key can be used to select a particular schema within the `<dbname>` database. This is **the recommended approach for running multiple substreams to different schemas on the same PostgreSQL database**.
+
+> **Note**
+> `schemaName` is a custom option handled by `substreams-sink-sql` and is not passed to PostgreSQL. It instructs the sink to operate within the specified schema and automatically sets the correct schema context for user SQL scripts.
+
+**Example DSNs for multiple substreams:**
+```bash
+# Ethereum mainnet substreams using 'ethereum' schema
+export DSN_ETHEREUM="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable&schemaName=ethereum"
+
+# Polygon mainnet substreams using 'polygon' schema
+export DSN_POLYGON="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable&schemaName=polygon"
+
+# BSC mainnet substreams using 'bsc' schema
+export DSN_BSC="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable&schemaName=bsc"
+```
+
+Each substreams instance will:
+- Create its own isolated schema (namespace) within the same database
+- Have its own cursor and history tables within that schema
+- Execute user SQL scripts with the correct schema context automatically set
+
+This allows you to efficiently manage multiple substreams data pipelines from different networks using a single PostgreSQL database while maintaining complete data isolation between networks.
 
 #### Others
 

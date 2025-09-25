@@ -248,8 +248,11 @@ func (d PostgresDialect) GetCreateHistoryQuery(schema string, withPostgraphile b
 }
 
 func (d PostgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
-	if _, err := l.ExecContext(ctx, schemaSql); err != nil {
-		return fmt.Errorf("exec schemaName: %w", err)
+	// Prepend search_path directive to ensure user SQL runs in the correct schema context
+	fullSql := fmt.Sprintf(`SET search_path TO %s;`+"\n\n%s", EscapeIdentifier(d.schemaName), schemaSql)
+
+	if _, err := l.ExecContext(ctx, fullSql); err != nil {
+		return fmt.Errorf("exec postgres statements: %w", err)
 	}
 	return nil
 }

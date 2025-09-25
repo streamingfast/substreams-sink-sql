@@ -165,7 +165,7 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 
 			if _, err := l.ExecContext(ctx, stmt.String()); err != nil {
 				l.logger.Error("failed to execute schema statement", zap.String("statement", stmt.String()), zap.Error(err))
-				return fmt.Errorf("exec schemaName: %w", err)
+				return fmt.Errorf("exec clickhouse cluster statements: %w", err)
 			}
 		}
 	} else {
@@ -174,7 +174,7 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 				continue
 			}
 			if _, err := l.ExecContext(ctx, query); err != nil {
-				return fmt.Errorf("exec schemaName: %w", err)
+				return fmt.Errorf("exec clickhouse statements: %w", err)
 			}
 		}
 	}
