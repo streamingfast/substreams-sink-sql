@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-# v4.6.9
+## v4.6.8
+
+### Postgres & `substreams-sink-sql run`
 
 * Fixed `schemaName=<schema>` not working properly on `setup` command if the user's SQL script does not specify an specific schema itself.
-
-## v4.6.8
 
 ### Clickhouse & `substreams-sink-sql run`
 
