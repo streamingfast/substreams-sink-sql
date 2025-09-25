@@ -155,6 +155,10 @@ func (s *SQLSinker) flushWithRetry(ctx context.Context, moduleHash string, curso
 func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
+	if output.Name == "" {
+		return nil
+	}
+
 	if output.Name != s.OutputModuleName() {
 		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
 	}

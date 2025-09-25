@@ -83,6 +83,16 @@ type Holder struct {
 var holding []*Holder
 
 func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) (err error) {
+	output := data.Output
+
+	if output.Name == "" {
+		return nil
+	}
+
+	if output.Name != s.OutputModuleName() {
+		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
+	}
+
 	if (isLive != nil && *isLive) && s.useConstraints {
 		return fmt.Errorf("live mode is not supported without constraints")
 	}
@@ -99,11 +109,6 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 		s.stats.TotalDurationBetween += time.Since(s.stats.LastBlockProcessAt)
 	}
 	s.stats.BlockCount++
-
-	output := data.Output
-	if output.Name != s.OutputModuleName() {
-		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
-	}
 
 	holder := &Holder{
 		output: output,
