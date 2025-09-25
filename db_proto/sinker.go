@@ -101,7 +101,7 @@ func (s *Sinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrp
 	s.stats.BlockCount++
 
 	output := data.Output
-	if output.Name != s.OutputModuleName() {
+	if output.Name != "" && output.Name != s.OutputModuleName() {
 		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
 	}
 
