@@ -28,7 +28,7 @@ var sinkRunCmd = Command(sinkRunE,
 		AddCommonSinkerFlags(flags)
 		AddCommonDatabaseChangesFlags(flags)
 
-		flags.Int("undo-buffer-size", 0, "If non-zero, handling of reorgs in the database is disabled. Instead, a buffer is introduced to only process a blocks once it has been confirmed by that many blocks, introducing a latency but slightly reducing the load on the database when close to head.")
+		flags.Int("undo-buffer-size", 0, "If non-zero, handling of reorgs in the database is disabled. Instead, a buffer is introduced to only process blocks once they have been confirmed by that many blocks, introducing a latency but slightly reducing the load on the database when close to head. Set to 0 to enable reorg handling in the database (required for some databases like Postgres).")
 		flags.Int("batch-block-flush-interval", 1_000, "When in catch up mode, flush every N blocks or after batch-row-flush-interval, whichever comes first. Set to 0 to disable and only use batch-row-flush-interval. Ineffective if the sink is now in the live portion of the chain where only 'live-block-flush-interval' applies.")
 		flags.Int("batch-row-flush-interval", 100_000, "When in catch up mode, flush every N rows or after batch-block-flush-interval, whichever comes first. Set to 0 to disable and only use batch-block-flush-interval. Ineffective if the sink is now in the live portion of the chain where only 'live-block-flush-interval' applies.")
 		flags.Int("live-block-flush-interval", 1, "When processing in live mode, flush every N blocks.")
@@ -100,7 +100,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 
 	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 	historyTableName := sflags.MustGetString(cmd, "history-table")
-	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") != 0
+	handleReorgs := sflags.MustGetInt(cmd, "undo-buffer-size") == 0
 
 	sinkerFactory := sinker2.SinkerFactory(sink, sinker2.SinkerFactoryOptions{
 		CursorTableName:         cursorTableName,
