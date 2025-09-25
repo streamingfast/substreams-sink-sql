@@ -16,10 +16,10 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20250728160343-57342b174ace
-	github.com/streamingfast/substreams v1.15.10
+	github.com/streamingfast/substreams v1.16.7-0.20250925152521-9d7a8ef0f261
 	github.com/streamingfast/substreams-sink v0.5.3-0.20250818134825-6b25ffb8232c
 	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
@@ -151,9 +151,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.35.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
-	golang.org/x/tools v0.30.0 // indirect
+	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250414145226-207652e42e2e // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
@@ -189,12 +189,12 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.0 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20250221181559-fb0809660f91
-	github.com/streamingfast/cli v0.0.4-0.20250808120458-be173cd72106
+	github.com/streamingfast/bstream v0.0.2-0.20250903174843-9c884c3356fd
+	github.com/streamingfast/cli v0.0.4-0.20250815192146-d8a233ec3d0b
 	github.com/streamingfast/dbin v0.9.1-0.20231117225723-59790c798e2c // indirect
 	github.com/streamingfast/dgrpc v0.0.0-20250423172640-223250ed2391 // indirect
 	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
-	github.com/streamingfast/dmetrics v0.0.0-20240214191810-524a5c58fbaa
+	github.com/streamingfast/dmetrics v0.0.0-20250711072030-f023e918a175
 	github.com/streamingfast/dstore v0.1.1-0.20250609173504-95368d3441ee
 	github.com/streamingfast/opaque v0.0.0-20210811180740-0c01d37ea308 // indirect
 	github.com/streamingfast/pbgo v0.0.6-0.20240823134334-812f6a16c5cb // indirect
@@ -203,13 +203,13 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.40.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
+	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/oauth2 v0.29.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/term v0.33.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/api v0.230.0 // indirect
 	google.golang.org/appengine v1.6.8
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
