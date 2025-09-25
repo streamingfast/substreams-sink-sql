@@ -222,7 +222,23 @@ func tableName(schemaName string, tableName string) string {
 func orderByString(table *schema.Table) (string, error) {
 	info := table.PbTableInfo.ClickhouseTableOptions
 	if info == nil {
-		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+		return "", fmt.Errorf(`clickhouse table options not set for table %q
+
+ClickHouse requires table options to be configured when using 'from-proto'. Add clickhouse_table_options to your protobuf message:
+
+message %s {
+  option (schema.table) = {
+    name: "%s"
+    clickhouse_table_options: {
+      order_by_fields: [
+        { name: "your_field_name" }
+      ]
+    }
+  };
+  // your fields here...
+}
+
+For more details and examples, see: https://github.com/streamingfast/substreams-sink-sql#clickhouse-table-options`, table.Name, table.Name, table.Name)
 	}
 
 	if len(info.OrderByFields) == 0 {
@@ -247,7 +263,23 @@ func orderByString(table *schema.Table) (string, error) {
 func partitionByString(table *schema.Table) (string, error) {
 	info := table.PbTableInfo.ClickhouseTableOptions
 	if info == nil {
-		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+		return "", fmt.Errorf(`clickhouse table options not set for table %q
+
+ClickHouse requires table options to be configured when using 'from-proto'. Add clickhouse_table_options to your protobuf message:
+
+message %s {
+  option (schema.table) = {
+    name: "%s"
+    clickhouse_table_options: {
+      order_by_fields: [
+        { name: "your_field_name" }
+      ]
+    }
+  };
+  // your fields here...
+}
+
+For more details and examples, see: https://github.com/streamingfast/substreams-sink-sql#clickhouse-table-options`, table.Name, table.Name, table.Name)
 	}
 
 	var parts []string
@@ -278,7 +310,23 @@ func partitionByString(table *schema.Table) (string, error) {
 func replacingMergeTreeString(table *schema.Table) (string, error) {
 	info := table.PbTableInfo.ClickhouseTableOptions
 	if info == nil {
-		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+		return "", fmt.Errorf(`clickhouse table options not set for table %q
+
+ClickHouse requires table options to be configured when using 'from-proto'. Add clickhouse_table_options to your protobuf message:
+
+message %s {
+  option (schema.table) = {
+    name: "%s"
+    clickhouse_table_options: {
+      order_by_fields: [
+        { name: "your_field_name" }
+      ]
+    }
+  };
+  // your fields here...
+}
+
+For more details and examples, see: https://github.com/streamingfast/substreams-sink-sql#clickhouse-table-options`, table.Name, table.Name, table.Name)
 	}
 
 	out := sql2.DialectFieldVersion
