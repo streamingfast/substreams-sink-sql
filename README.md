@@ -2,21 +2,43 @@
 
 The Substreams:SQL sink helps you quickly and easily sync Substreams modules to a PostgreSQL or Clickhouse database.
 
-### Quickstart
+It supports two different Substreams output formats, each with distinct advantages:
+
+### Relational Mappings (Recommended)
+
+Tables and rows are extracted dynamically from Protobuf messages using annotations for table and relation mappings. This approach leverages Substreams' built-in relational mapping capabilities.
+
+**Pros:**
+- **Less development work** - No need to manually emit database changes in your Substreams code
+- **Automatic schema inference** - Tables and relationships are derived from your Protobuf definitions
+- **Type safety** - Protobuf annotations ensure data consistency
+- **Easier maintenance** - Schema changes are managed through Protobuf definitions
+- **Faster in most scenarios** - Due to possibility to perform bulk inserts more easily
+
+**Cons:**
+- **Less control** - Limited flexibility in how data is structured in the database
+- **Insert Only** - Does not support update/delete of rows, it's an insert-only method of ingestion
+
+### Database Changes
+
+Tables and rows are extracted from Substreams modules that directly emit database changes using [`sf.substreams.sink.database.v1.DatabaseChanges`](https://github.com/streamingfast/substreams-sink-database-changes?tab=readme-ov-file#substreams-sink-database-changes).
+
+**Pros:**
+- **Full control** - Complete flexibility over database structure and operations
+- **Custom logic** - Can implement complex business logic for data transformation
+
+**Cons:**
+- **More development work** - Requires manually implementing database change logic
+- **Error-prone** - More opportunities for bugs in manual database operations
+- **Maintenance overhead** - Schema changes require code updates
+
+## Quickstart
+
+### Prerequisites
 
 1. Install `substreams-sink-sql` from Brew with `brew install streamingfast/tap/substreams-sink-sql` or by using the pre-built binary release [available in the releases page](https://github.com/streamingfast/substreams-sink-sql/releases) (extract `substreams-sink-sql` binary into a folder and ensure this folder is referenced globally via your `PATH` environment variable).
 
-1. Compile the [Substreams](./docs/tutorial/substreams.yaml) tutorial project:
-
-   ```bash
-   cd docs/tutorial
-   cargo build --target wasm32-unknown-unknown --release
-   cd ../..
-   ```
-
-   This creates the following WASM file: `target/wasm32-unknown-unknown/release/substreams_postgresql_sink_tutorial.wasm`
-
-1. Start Docker Compose in the background:
+2. Start Docker Compose in the background:
 
    ```bash
    docker compose up -d
@@ -24,39 +46,48 @@ The Substreams:SQL sink helps you quickly and easily sync Substreams modules to 
 
    > You can wipe the database and restart from scratch by doing `docker compose down` and `rm -rf ./devel/data/postgres`.
 
-1. Run the setup command:
-
-   **Postgres**
+3. Set up environment variables for convenience:
 
    ```bash
-   export DSN="postgres://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
-   substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
+   export PG_DSN="psql://dev-node:insecure-change-me-in-prod@localhost:5432/dev-node?sslmode=disable"
+   export CLICKHOUSE_DSN="clickhouse://default:default@localhost:9000/default"
    ```
-
-   **Clickhouse**
-
-   ```bash
-   export DSN="clickhouse://default:default@localhost:9000/default"
-   substreams-sink-sql setup $DSN docs/tutorial/substreams.yaml
-   ```
-
-   This will connect to the database and create the schema, using the values from `sink.config.schema`
-
-   > **Note** For the sake of idempotence, we recommend that the schema file only contain `create (...) if not exists` statements.
-
-1. Run the sink
-
-   Now that the code is compiled and the database is set up, let launch the `sink` process.
 
    > **Note** To connect to Substreams you will need an authentication token, follow this [guide](https://substreams.streamingfast.io/reference-and-specs/authentication) to obtain one.
 
-   ```shell
-   substreams-sink-sql run $DSN docs/tutorial/substreams.yaml
-   ```
+## Quickstart Relational Mappings
+
+### Postgres
+
+```bash
+substreams-sink-sql from-proto $PG_DSN solana-spl-token@v0.1.3
+```
+
+### Clickhouse
+
+```bash
+substreams-sink-sql from-proto $CLICKHOUSE_DSN solana-spl-token@v0.1.3
+```
+
+## Quickstart Database Changes
+
+### Postgres
+
+```bash
+substreams-sink-sql setup $PG_DSN substreams-template@v0.3.1
+substreams-sink-sql run $PG_DSN substreams-template@v0.3.1
+```
+
+### Clickhouse
+
+```bash
+substreams-sink-sql setup $CLICKHOUSE_DSN substreams-template@v0.3.1
+substreams-sink-sql run $CLICKHOUSE_DSN substreams-template@v0.3.1
+```
 
 ### Sink Config
 
-Observe the "Sink Config" section of the [Substreams manifest in the tutorial](docs/tutorial/substreams.yaml#L39-L49):
+The `substreams-sink-sql` uses the "Sink Config" section of your Substreams manifest to configure the sink behavior:
 
 ```yaml
 sink:
@@ -66,11 +97,22 @@ sink:
       schema: "./schema.sql"
 ```
 
-This is used by `substreams-sink-sql` to gather all required information about how to run and configure the sink, namely the output `module`, what service is desired, `sf.substreams.sink.sql.v1.Service` here and the config that in case of Substreams:SQL contains the schema file to populate the database on `substreams-sink-sql setup` step.
+This configuration tells `substreams-sink-sql`:
+- **module**: Which output module to consume (typically `db_out`)
+- **type**: The sink service type (`sf.substreams.sink.sql.v1.Service`)
+- **config.schema**: Path to the SQL schema file used during the `setup` step
+
+The schema file should contain `CREATE TABLE IF NOT EXISTS` statements to ensure idempotent database setup.
 
 ### Network
 
-The [Substreams manifest in the tutorial](docs/tutorial/substreams.yaml#L37) defines on which network by default this is going to run.   This will connect to the `mainnet.eth.streamingfast.io:443` endpoint, because it is the default endpoint for the `mainnet` network. You can change this either by using the endpoint flag `-e another.endpoint:443` or by setting the environment variable `SUBSTREAMS_ENDPOINTS_CONFIG_MAINNET` to that endpoint. The last part of the environment variable is the name of the network in the manifest, in uppercase.
+Your Substreams manifest defines which network to connect to by default. For example, a manifest configured for `mainnet` will connect to the `mainnet.eth.streamingfast.io:443` endpoint automatically. 
+
+You can override the default endpoint in two ways:
+- **Command line flag**: Use `-e another.endpoint:443` when running the sink
+- **Environment variable**: Set `SUBSTREAMS_ENDPOINTS_CONFIG_<NETWORK>` where `<NETWORK>` is the network name from your manifest in uppercase
+
+For example, to override the mainnet endpoint: `export SUBSTREAMS_ENDPOINTS_CONFIG_MAINNET=custom.endpoint:443`
 
 ### DSN
 
@@ -120,15 +162,26 @@ Only `psql` and `clickhouse` are supported today, adding support for a new _dial
 - Update README and CHANGELOG to add information about the new dialect
 - Open a PR
 
-### Output Module
+### Output Module Requirements
 
-To be accepted by `substreams-sink-sql`, your module output's type must be a [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-sink-database-changes/blob/develop/proto/sf/substreams/sink/database/v1/database.proto#L7) message. The Rust crate [substreams-data-change](https://github.com/streamingfast/substreams-database-change) contains bindings and helpers to implement it easily. Some project implementing `db_out` module for reference:
+The `substreams-sink-sql` accepts two types of Substreams output modules:
 
-- [substreams-eth-block-meta](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) (some helpers found in [db_out.rs](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6))
+#### Database Changes Modules
 
-By convention, we name the `map` module that emits [sf.substreams.sink.database.v1.DatabaseChanges](https://github.com/streamingfast/substreams-sink-database-changes/blob/develop/proto/sf/substreams/sink/database/v1/database.proto#L7) output `db_out`.
+For the **Database Changes** approach, your module output type must be [`sf.substreams.sink.database.v1.DatabaseChanges`](https://github.com/streamingfast/substreams-sink-database-changes/blob/develop/proto/sf/substreams/sink/database/v1/database.proto#L7). 
 
-> Note that using prior versions (0.2.0, 0.1.\*) of `substreams-database-change`, you have to use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` and put the respected version of the `spkg` in your `substreams.yaml`
+**Development Resources:**
+- **Rust**: Use the [`substreams-database-change`](https://github.com/streamingfast/substreams-database-change) crate for bindings and helpers
+- **Examples**: See [`substreams-eth-block-meta`](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) and its [db_out.rs helper](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6)
+
+By convention, the module that emits `DatabaseChanges` is named `db_out`.
+
+#### Relational Mappings Modules
+
+For the **Relational Mappings** approach, your module can output any Protobuf message type. The sink automatically extracts table and row data from your Protobuf messages using annotations and field mappings.
+
+**Examples:**
+- **Solana SPL Token**: [`solana-spl-token@v0.1.3`](https://github.com/streamingfast/substreams-spl-token) - demonstrates relational mapping extraction from SPL token data
 
 ### Protobuf models
 
