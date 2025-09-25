@@ -22,7 +22,7 @@ main() {
   pg_dsn="psql://dev-node:${pg_password}@127.0.0.1:5432/substreams_example?sslmode=disable"
   
   # Use the published substreams-template package for Database Changes example
-  substreams_package="https://github.com/streamingfast/substreams-template/releases/download/v0.3.1/substreams-template-v0.3.1.spkg"
+  substreams_package="substreams-template@v0.3.1"
 
   if [[ "$clean" == "true" ]]; then
     echo "Cleaning up existing tables"

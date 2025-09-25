@@ -2,39 +2,35 @@
 
 The Substreams:SQL sink helps you quickly and easily sync Substreams modules to a PostgreSQL or Clickhouse database.
 
-## Substreams Output Formats
-
-The `substreams-sink-sql` supports two different Substreams output formats, each with distinct advantages:
+It supports two different Substreams output formats, each with distinct advantages:
 
 ### Relational Mappings (Recommended)
 
-**How it works:** Tables and rows are extracted dynamically from Protobuf messages using annotations for table and relation mappings. This approach leverages Substreams' built-in relational mapping capabilities.
+Tables and rows are extracted dynamically from Protobuf messages using annotations for table and relation mappings. This approach leverages Substreams' built-in relational mapping capabilities.
 
 **Pros:**
 - **Less development work** - No need to manually emit database changes in your Substreams code
 - **Automatic schema inference** - Tables and relationships are derived from your Protobuf definitions
 - **Type safety** - Protobuf annotations ensure data consistency
 - **Easier maintenance** - Schema changes are managed through Protobuf definitions
+- **Faster in most scenarios** - Due to possibility to perform bulk inserts more easily
 
 **Cons:**
 - **Less control** - Limited flexibility in how data is structured in the database
-- **Learning curve** - Requires understanding of Protobuf annotations and relational mappings
+- **Insert Only** - Does not support update/delete of rows, it's an insert-only method of ingestion
 
 ### Database Changes
 
-**How it works:** Tables and rows are extracted from Substreams modules that directly emit database changes using [`sf.substreams.sink.database.v1.DatabaseChanges`](https://github.com/streamingfast/substreams-sink-database-changes?tab=readme-ov-file#substreams-sink-database-changes).
+Tables and rows are extracted from Substreams modules that directly emit database changes using [`sf.substreams.sink.database.v1.DatabaseChanges`](https://github.com/streamingfast/substreams-sink-database-changes?tab=readme-ov-file#substreams-sink-database-changes).
 
 **Pros:**
 - **Full control** - Complete flexibility over database structure and operations
 - **Custom logic** - Can implement complex business logic for data transformation
-- **Performance optimization** - Can optimize database operations for specific use cases
 
 **Cons:**
 - **More development work** - Requires manually implementing database change logic
 - **Error-prone** - More opportunities for bugs in manual database operations
 - **Maintenance overhead** - Schema changes require code updates
-
-**Recommendation:** Start with **Relational Mappings** for most use cases as it requires significantly less development effort while providing robust functionality.
 
 ## Quickstart
 
@@ -63,61 +59,31 @@ The `substreams-sink-sql` supports two different Substreams output formats, each
 
 ### Postgres
 
-1. Set up the database schema:
-
-   ```bash
-   substreams-sink-sql setup $PG_DSN solana-spl-token@v0.1.3
-   ```
-
-2. Run the sink:
-
-   ```bash
-   substreams-sink-sql run $PG_DSN solana-spl-token@v0.1.3
-   ```
+```bash
+substreams-sink-sql from-proto $PG_DSN solana-spl-token@v0.1.3
+```
 
 ### Clickhouse
 
-1. Set up the database schema:
-
-   ```bash
-   substreams-sink-sql setup $CLICKHOUSE_DSN solana-spl-token@v0.1.3
-   ```
-
-2. Run the sink:
-
-   ```bash
-   substreams-sink-sql run $CLICKHOUSE_DSN solana-spl-token@v0.1.3
-   ```
+```bash
+substreams-sink-sql from-proto $CLICKHOUSE_DSN solana-spl-token@v0.1.3
+```
 
 ## Quickstart Database Changes
 
 ### Postgres
 
-1. Set up the database schema:
-
-   ```bash
-   substreams-sink-sql setup $PG_DSN https://github.com/streamingfast/substreams-template/releases/download/v0.3.1/substreams-template-v0.3.1.spkg
-   ```
-
-2. Run the sink:
-
-   ```bash
-   substreams-sink-sql run $PG_DSN https://github.com/streamingfast/substreams-template/releases/download/v0.3.1/substreams-template-v0.3.1.spkg
-   ```
+```bash
+substreams-sink-sql setup $PG_DSN substreams-template@v0.3.1
+substreams-sink-sql run $PG_DSN substreams-template@v0.3.1
+```
 
 ### Clickhouse
 
-1. Set up the database schema:
-
-   ```bash
-   substreams-sink-sql setup $CLICKHOUSE_DSN https://github.com/streamingfast/substreams-template/releases/download/v0.3.1/substreams-template-v0.3.1.spkg
-   ```
-
-2. Run the sink:
-
-   ```bash
-   substreams-sink-sql run $CLICKHOUSE_DSN https://github.com/streamingfast/substreams-template/releases/download/v0.3.1/substreams-template-v0.3.1.spkg
-   ```
+```bash
+substreams-sink-sql setup $CLICKHOUSE_DSN substreams-template@v0.3.1
+substreams-sink-sql run $CLICKHOUSE_DSN substreams-template@v0.3.1
+```
 
 ### Sink Config
 
@@ -210,15 +176,12 @@ For the **Database Changes** approach, your module output type must be [`sf.subs
 
 By convention, the module that emits `DatabaseChanges` is named `db_out`.
 
-> **Version Note**: When using older versions (0.2.0, 0.1.*) of `substreams-database-change`, use `substreams.database.v1.DatabaseChanges` in your `substreams.yaml` manifest.
-
 #### Relational Mappings Modules
 
 For the **Relational Mappings** approach, your module can output any Protobuf message type. The sink automatically extracts table and row data from your Protobuf messages using annotations and field mappings.
 
 **Examples:**
 - **Solana SPL Token**: [`solana-spl-token@v0.1.3`](https://github.com/streamingfast/substreams-spl-token) - demonstrates relational mapping extraction from SPL token data
-- **Foundational Modules**: Browse the [Substreams Foundational Modules](https://github.com/streamingfast/substreams-foundational-modules) repository for more examples
 
 ### Protobuf models
 

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package eth.block_meta.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message BlockMeta {
+  uint64 number = 1;
+  bytes hash = 2;
+  bytes parent_hash = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
