@@ -77,17 +77,21 @@ func ParseDSN(dsn string) (*DSN, error) {
 		Options:  DSNOptions(dsnURL.Query()),
 	}
 
-	schemaName := d.Options.RemoveOr("schemaName", "public")
+	schemaName := d.Options.RemoveOr("schemaName", "")
 
 	if driver == "clickhouse" {
 		// For ClickHouse, store the target database name in schema, but keep
 		// connecting to the original database to allow CREATE DATABASE commands
-		if schemaName != "public" {
+		if schemaName != "" {
 			d.schema = schemaName
 		} else {
 			d.schema = database
 		}
 	} else {
+		if schemaName == "" {
+			schemaName = "public"
+		}
+
 		// For other databases (PostgreSQL), schemaName is separate from database
 		d.schema = schemaName
 	}
@@ -101,8 +105,21 @@ func (c *DSN) Driver() string {
 
 func (c *DSN) ConnString() string {
 	if c.driver == "clickhouse" {
-		// Build ClickHouse connection string - keep original scheme
-		baseURL := fmt.Sprintf("clickhouse://%s:%s@%s:%d/%s", c.Username, c.Password, c.Host, c.Port, c.Database)
+		scheme := "clickhouse"
+		host := c.Host
+
+		if len(c.Options) > 0 && host == "localhost" {
+			// Weird handling to keep old behavior while we discuss the right way to handle that
+			// In the old code, of there was options set and the host was localhost, we were switching
+			// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
+			host = "127.0.0.1"
+			scheme = "http"
+			if c.Options.Get("secure") == "true" {
+				scheme = "https"
+			}
+		}
+
+		baseURL := fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, c.Username, c.Password, host, c.Port, c.Database)
 		if len(c.Options) > 0 {
 			baseURL += "?" + c.Options.Encode()
 		}

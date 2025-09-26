@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,15 +25,39 @@ import (
 )
 
 var sharedDbChangesPostgresContainer *PostgresContainerExt
+var sharedDbChangesClickhouseContainer *ClickhouseContainerExt
 
 func TestMain(m *testing.M) {
-	var cleanup func()
-	sharedDbChangesPostgresContainer, cleanup = setupRawPostgresContainer(PostgresContainerConfig{
-		Image: "postgres:16-alpine",
-	})
+	var pgCleanup, chCleanup func()
+
+	// Setup both containers in parallel
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Setup PostgreSQL container
+	go func() {
+		defer wg.Done()
+		sharedDbChangesPostgresContainer, pgCleanup = setupRawPostgresContainer(PostgresContainerConfig{
+			Image: "postgres:16-alpine",
+		})
+	}()
+
+	// Setup ClickHouse container
+	go func() {
+		defer wg.Done()
+		sharedDbChangesClickhouseContainer, chCleanup = setupRawClickhouseContainer(ClickhouseContainerConfig{
+			Image: "clickhouse/clickhouse-server:24.3-alpine",
+		})
+	}()
+
+	// Wait for both containers to be ready
+	wg.Wait()
 
 	exitCode := m.Run()
-	cleanup()
+
+	// Cleanup both containers
+	pgCleanup()
+	chCleanup()
 
 	os.Exit(exitCode)
 }

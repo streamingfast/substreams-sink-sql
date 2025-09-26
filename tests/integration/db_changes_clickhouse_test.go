@@ -20,17 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-var sharedDbChangesClickhouseContainer *ClickhouseContainerExt
 
-func init() {
-	var cleanup func()
-	sharedDbChangesClickhouseContainer, cleanup = setupRawClickhouseContainer(ClickhouseContainerConfig{
-		Image: "clickhouse/clickhouse-server:24.3-alpine",
-	})
-
-	// Store cleanup function for later use - in real tests this would be handled by TestMain
-	_ = cleanup
-}
 
 func TestClickhouseSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	tests := []sinkerTestCase{
@@ -71,9 +61,8 @@ func TestClickhouseSinker_Integration_AggregateFunction(t *testing.T) {
 		nil,
 		nil,
 		rawSQLInput(func(schema string) string {
-			schemaName := NewSchemaName(schema)
-			return fmt.Sprintf(`
-				CREATE TABLE IF NOT EXISTS %s.metrics (
+			return `
+				CREATE TABLE IF NOT EXISTS metrics (
 					id String,
 					value String,
 					count String,
@@ -82,7 +71,7 @@ func TestClickhouseSinker_Integration_AggregateFunction(t *testing.T) {
 					uniq_count AggregateFunction(uniq, String)
 				) ENGINE = AggregatingMergeTree()
 				ORDER BY id;
-			`, schemaName)
+			`
 		}),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("10a"),
@@ -111,15 +100,36 @@ func runClickhouseSinkerTest(
 
 	ctx := context.Background()
 
-	schemaName := NewRandomSchemaName()
-	dsnRaw := clickhouseContainer.ConnectionString + "?schemaName=" + schemaName.Unescaped
+	// Generate a random database name instead of using schemaName
+	databaseName := NewRandomSchemaName()
+
+	// First connect with original connection string to create the database
+	originalDSN := clickhouseContainer.ConnectionString
+	tempDB, connectErr := sqlx.Connect("clickhouse", originalDSN)
+	require.NoError(t, connectErr, "connecting to ClickHouse")
+
+	// Create the new database
+	_, createErr := tempDB.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", databaseName))
+	require.NoError(t, createErr, "creating database")
+	tempDB.Close()
+
+	// Parse original DSN and modify it to use the new database
+	parsedDSN, parseErr := db2.ParseDSN(originalDSN)
+	require.NoError(t, parseErr, "parsing original DSN")
+
+	// Update the database field and build new connection string
+	parsedDSN.Database = databaseName.Unescaped
+	dsnRaw := parsedDSN.ConnString()
+
+	// For backward compatibility, keep using schemaName variable name but it's now the database name
+	schemaName := databaseName
 
 	substreamsClientConfig := setupFakeSubstreamsServer(t, responses...)
 	spkg := substreamsTestPackage(pbdatabase.File_sf_substreams_sink_database_v1_database_proto, (*pbdatabase.DatabaseChanges)(nil).ProtoReflect().Descriptor())
 
 	var err error
 	spkg.SinkConfig, err = anypb.New(&pbsql.Service{
-		Schema: clickhouseSqlPreambule(schemaName.Unescaped) + setupInput.ToSQL(schemaName.Unescaped),
+		Schema: setupInput.ToSQL(schemaName.Unescaped),
 	})
 	require.NoError(t, err)
 
@@ -215,12 +225,6 @@ func runClickhouseSinkerTest(
 		actualCursor := fmt.Sprintf("Block %s - LIB %s", finalCursor.Block, finalCursor.LIB)
 		require.Equal(t, expectedFinalCursor, actualCursor)
 	}
-}
-
-// clickhouseSqlPreambule creates the ClickHouse equivalent of SQL setup for schema
-func clickhouseSqlPreambule(schema string) string {
-	schemaName := NewSchemaName(schema)
-	return fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`, schemaName) + "\n\n"
 }
 
 // EscapeClickhouseIdentifier escapes ClickHouse identifiers (kept for backward compatibility)
