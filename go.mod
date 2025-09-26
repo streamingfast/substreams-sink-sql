@@ -9,7 +9,6 @@ require (
 	github.com/bobg/go-generics/v2 v2.2.2
 	github.com/drone/envsubst v1.0.3
 	github.com/golang/protobuf v1.5.4
-	github.com/jimsmart/schema v0.2.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/spf13/cobra v1.7.0

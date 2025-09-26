@@ -183,7 +183,15 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		}
 	}
 
-	blockFlushNeeded := s.batchBlockModulo(isLive) > 0 && data.Clock.Number-s.lastAppliedBlockNum >= s.batchBlockModulo(isLive)
+	batchModulo := s.batchBlockModulo(isLive)
+	blockFlushNeeded := batchModulo > 0 && data.Clock.Number-s.lastAppliedBlockNum >= batchModulo
+
+	s.logger.Debug("flush condition evaluation",
+		zap.Uint64("batch_modulo", batchModulo),
+		zap.Uint64("current_block", data.Clock.Number),
+		zap.Uint64("last_applied_block", s.lastAppliedBlockNum),
+		zap.Uint64("block_diff", data.Clock.Number-s.lastAppliedBlockNum),
+		zap.Bool("block_flush_needed_before_timing_check", blockFlushNeeded))
 
 	if blockFlushNeeded && isLive != nil && *isLive && s.stats.AverageFlushDuration() > data.Clock.Timestamp.AsTime().Sub(s.lastAppliedBlockTime) {
 		s.logger.Debug("skipping a flush because we are LIVE and flush average duration is above time between blocks", zap.Duration("flush_duration_average", s.stats.AverageFlushDuration()), zap.Time("last_block_time", s.lastAppliedBlockTime), zap.Time("block_time", data.Clock.Timestamp.AsTime()))
@@ -191,6 +199,9 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 	}
 
 	rowFlushNeeded := s.loader.FlushNeeded()
+	s.logger.Debug("final flush decision",
+		zap.Bool("block_flush_needed", blockFlushNeeded),
+		zap.Bool("row_flush_needed", rowFlushNeeded))
 
 	if blockFlushNeeded || rowFlushNeeded {
 		s.logger.Debug("flushing to database",

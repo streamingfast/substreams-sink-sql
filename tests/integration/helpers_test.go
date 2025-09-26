@@ -37,7 +37,44 @@ var tracer logging.Tracer
 const defaultOutputModuleName = "map_output"
 
 func init() {
-	logger, tracer = logging.ApplicationLogger("test", "test")
+	logger, tracer = logging.ApplicationLogger("test", "test", logging.WithDefaultLevel(zap.ErrorLevel))
+}
+
+// SchemaName represents a database schema name with both escaped and unescaped versions
+type SchemaName struct {
+	Unescaped string // The original unescaped schema name
+	Escaped   string // The database-escaped version (ClickHouse uses backticks, PostgreSQL uses quotes)
+}
+
+// NewSchemaName creates a new SchemaName with automatic escaping for ClickHouse
+func NewSchemaName(unescaped string) SchemaName {
+	return SchemaName{
+		Unescaped: unescaped,
+		Escaped:   "`" + unescaped + "`", // ClickHouse escaping
+	}
+}
+
+// NewPostgresSchemaName creates a new SchemaName with automatic escaping for PostgreSQL
+func NewPostgresSchemaName(unescaped string) SchemaName {
+	return SchemaName{
+		Unescaped: unescaped,
+		Escaped:   `"` + unescaped + `"`, // PostgreSQL escaping
+	}
+}
+
+// NewRandomSchemaName creates a new SchemaName with a random unescaped name (ClickHouse escaping)
+func NewRandomSchemaName() SchemaName {
+	return NewSchemaName(randomSchemaName())
+}
+
+// NewRandomPostgresSchemaName creates a new SchemaName with a random unescaped name (PostgreSQL escaping)
+func NewRandomPostgresSchemaName() SchemaName {
+	return NewPostgresSchemaName(randomSchemaName())
+}
+
+// String returns the escaped version for default string representation
+func (s SchemaName) String() string {
+	return s.Escaped
 }
 
 type PostgresSeeder = func(ctx context.Context, user, password, database, schema, dsn string, container *postgres.PostgresContainer) error
@@ -85,7 +122,62 @@ type PostgresContainerExt struct {
 	ConnectionString string
 }
 
+type ClickhouseContainerConfig struct {
+	Image string
+}
+
+type ClickhouseContainerExt struct {
+	*clickhouse.ClickHouseContainer
+	Configuration    *ClickhouseContainerConfig
+	ConnectionString string
+}
+
 type ClickhouseSeeder = func(ctx context.Context, user, password, database, dsn string, container *clickhouse.ClickHouseContainer) error
+
+// setupRawClickhouseContainer spins up a ClickHouse Docker container
+func setupRawClickhouseContainer(config ClickhouseContainerConfig) (*ClickhouseContainerExt, func()) {
+	ctx := context.Background()
+	dbName := "default"
+	dbUser := "default"
+	dbPassword := "clickhouse"
+
+	clickhouseContainer, err := clickhouse.Run(ctx,
+		config.Image,
+		clickhouse.WithDatabase(dbName),
+		clickhouse.WithUsername(dbUser),
+		clickhouse.WithPassword(dbPassword),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to start ClickHouse container: %s", err))
+	}
+
+	// Get the mapped port for the native ClickHouse protocol (9000)
+	mappedPort, err := clickhouseContainer.MappedPort(ctx, "9000")
+	if err != nil {
+		panic(fmt.Sprintf("failed to get ClickHouse native port: %s", err))
+	}
+
+	host, err := clickhouseContainer.Host(ctx)
+	if err != nil {
+		panic(fmt.Sprintf("failed to get ClickHouse host: %s", err))
+	}
+
+	// Build native protocol connection string for the ClickHouse Go driver
+	// Use 127.0.0.1 instead of localhost to avoid DSN conversion to HTTP protocol
+	if host == "localhost" {
+		host = "127.0.0.1"
+	}
+	connectionString := fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s",
+		dbUser, dbPassword, host, mappedPort.Port(), dbName)
+
+	return &ClickhouseContainerExt{
+			ClickHouseContainer: clickhouseContainer,
+			Configuration:       &config,
+			ConnectionString:    connectionString,
+		}, func() {
+			_ = testcontainers.TerminateContainer(clickhouseContainer)
+		}
+}
 
 // setupClickhouseContainer spins up a ClickHouse Docker container and let a seeder function seed the database.
 func setupClickhouseContainer(t *testing.T, seedDb ClickhouseSeeder) (dbConnectionString string, container *clickhouse.ClickHouseContainer) {

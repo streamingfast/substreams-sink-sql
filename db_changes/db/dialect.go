@@ -31,4 +31,5 @@ type Dialect interface {
 	AllowPkDuplicates() bool
 	CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error
 	GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error)
+	GetPrimaryKey(db *sql.DB, schemaName, tableName string) ([]string, error)
 }

@@ -121,6 +121,14 @@ func (d ClickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile
 }
 
 func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
+	if d.schemaName != "default" {
+		useDbQuery := fmt.Sprintf("USE %s", EscapeIdentifier(d.schemaName))
+		if _, err := l.ExecContext(ctx, useDbQuery); err != nil {
+			l.logger.Error("failed to switch to database", zap.String("database", d.schemaName), zap.Error(err))
+			return fmt.Errorf("use database %s: %w", d.schemaName, err)
+		}
+	}
+
 	if d.cluster != "" {
 		stmts, err := clickhouse.NewParser(schemaSql).ParseStmts()
 		if err != nil {
@@ -169,7 +177,9 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 			}
 		}
 	} else {
-		for _, query := range strings.Split(schemaSql, ";") {
+		// Splitting statements by ';' is not perfect but should be enough for now,
+		// it will fail for example if user enter a string that contains a ;!
+		for query := range strings.SplitSeq(schemaSql, ";") {
 			if len(strings.TrimSpace(query)) == 0 {
 				continue
 			}
@@ -418,4 +428,46 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 	defer rows.Close()
 
 	return rows.ColumnTypes()
+}
+
+const clickhousePrimaryKeyQuery = `
+	SELECT name
+	FROM system.columns
+	WHERE database = %s
+		AND table = %s
+		AND is_in_primary_key
+	ORDER BY position DESC`
+
+func (d ClickhouseDialect) GetPrimaryKey(db *sql.DB, schemaName, tableName string) ([]string, error) {
+	var query string
+	var args []interface{}
+
+	if schemaName == "" {
+		query = fmt.Sprintf(clickhousePrimaryKeyQuery, "currentDatabase()", "?")
+		args = []interface{}{tableName}
+	} else {
+		query = fmt.Sprintf(clickhousePrimaryKeyQuery, "?", "?")
+		args = []interface{}{schemaName, tableName}
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying primary key: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return nil, fmt.Errorf("scanning primary key column: %w", err)
+		}
+		columns = append(columns, column)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating primary key rows: %w", err)
+	}
+
+	return columns, nil
 }

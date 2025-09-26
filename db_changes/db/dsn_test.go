@@ -26,7 +26,7 @@ func TestParseDSN(t *testing.T) {
 		{
 			name:             "with schemaName",
 			dns:              "psql://postgres:postgres@localhost/substreams-dev?enable_incremental_sort=off&sslmode=disable&schemaName=foo",
-			expectConnString: "host=localhost port=5432 dbname=substreams-dev enable_incremental_sort=off  sslmode=disable user=postgres password=postgres",
+			expectConnString: "host=localhost port=5432 dbname=substreams-dev enable_incremental_sort=off sslmode=disable user=postgres password=postgres",
 			expectSchema:     "foo",
 			expectPassword:   "postgres",
 		},
@@ -43,6 +43,13 @@ func TestParseDSN(t *testing.T) {
 			expectConnString: "clickhouse://default:@localhost:9000/default",
 			expectSchema:     "default",
 			expectPassword:   "",
+		},
+		{
+			name:             "clickhouse with schemaName",
+			dns:              "clickhouse://default:password@localhost:9000/default?schemaName=testdb",
+			expectConnString: "clickhouse://default:password@localhost:9000/default",
+			expectSchema:     "testdb",
+			expectPassword:   "password",
 		},
 	}
 	for _, test := range tests {

@@ -6,7 +6,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"github.com/jimsmart/schema"
 	"github.com/streamingfast/logging"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"go.uber.org/zap"
@@ -250,7 +249,7 @@ func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTa
 			}
 		}
 
-		key, err := schema.PrimaryKey(l.DB, schemaName, tableName)
+		key, err := l.dialect.GetPrimaryKey(l.DB, schemaName, tableName)
 		if err != nil {
 			return fmt.Errorf("get primary key: %w", err)
 		}
@@ -300,7 +299,7 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType, schemaName stri
 			return &SystemTableError{fmt.Errorf("missing column %q from cursors", k)}
 		}
 	}
-	key, err := schema.PrimaryKey(l.DB, schemaName, cursorTableName)
+	key, err := l.dialect.GetPrimaryKey(l.DB, schemaName, cursorTableName)
 	if err != nil {
 		return &SystemTableError{fmt.Errorf("failed getting primary key: %w", err)}
 	}
