@@ -31,6 +31,8 @@ const staticSqlCreateBlock = `
 	ORDER BY (number);
 `
 
+const clickhouseTableOptionsErrorMsg = "schema annotation 'clickhouse_table_options' is required in table annotation 'option (schema.table) = { name: %q, ... }' , see: https://github.com/streamingfast/substreams-sink-sql#clickhouse-table-options for configuration details"
+
 type DialectClickHouse struct {
 	*sql2.BaseDialect
 	schemaName string
@@ -222,7 +224,7 @@ func tableName(schemaName string, tableName string) string {
 func orderByString(table *schema.Table) (string, error) {
 	info := table.PbTableInfo.ClickhouseTableOptions
 	if info == nil {
-		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+		return "", fmt.Errorf(clickhouseTableOptionsErrorMsg, table.Name)
 	}
 
 	if len(info.OrderByFields) == 0 {
@@ -247,7 +249,7 @@ func orderByString(table *schema.Table) (string, error) {
 func partitionByString(table *schema.Table) (string, error) {
 	info := table.PbTableInfo.ClickhouseTableOptions
 	if info == nil {
-		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+		return "", fmt.Errorf(clickhouseTableOptionsErrorMsg, table.Name)
 	}
 
 	var parts []string
@@ -278,7 +280,7 @@ func partitionByString(table *schema.Table) (string, error) {
 func replacingMergeTreeString(table *schema.Table) (string, error) {
 	info := table.PbTableInfo.ClickhouseTableOptions
 	if info == nil {
-		return "", fmt.Errorf("clickhouse table options not set for table %q", table.Name)
+		return "", fmt.Errorf(clickhouseTableOptionsErrorMsg, table.Name)
 	}
 
 	out := sql2.DialectFieldVersion

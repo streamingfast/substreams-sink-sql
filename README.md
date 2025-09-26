@@ -207,6 +207,73 @@ For the **Relational Mappings** approach, your module can output any Protobuf me
 **Examples:**
 - **Solana SPL Token**: [`solana-spl-token@v0.1.3`](https://github.com/streamingfast/substreams-spl-token) - demonstrates relational mapping extraction from SPL token data
 
+#### ClickHouse Table Options
+
+When using the **Relational Mappings** approach with ClickHouse, you must configure `clickhouse_table_options` in your Protobuf message annotations. This is required because ClickHouse needs specific table engine parameters.
+
+**Required Configuration:**
+
+```proto
+message TokenInteraction {
+  option (schema.table) = {
+    name: "token_interactions"
+    clickhouse_table_options: {
+      order_by_fields: [
+        { name: "instruction_id" }
+      ]
+    }
+  };
+
+  string instruction_id = 1 [(schema.field) = { primary_key: true }];
+  string token_address = 2;
+  uint64 amount = 3;
+  // ... other fields
+}
+```
+
+**Available Options:**
+
+- **`order_by_fields`** (required): Defines the ORDER BY clause for the ClickHouse table. At least one field is required.
+- **`partition_fields`** (optional): Defines custom PARTITION BY fields. If not specified, defaults to partitioning by `_block_timestamp_` using `toYYYYMM()`.
+- **`replacing_fields`** (optional): Additional fields for the ReplacingMergeTree engine beyond the default `_version` field.
+- **`index_fields`** (optional): Defines secondary indexes for the table.
+
+**Advanced Example:**
+
+```proto
+message Transfer {
+  option (schema.table) = {
+    name: "transfers"
+    clickhouse_table_options: {
+      order_by_fields: [
+        { name: "block_number" },
+        { name: "transaction_hash" }
+      ]
+      partition_fields: [
+        { name: "_block_timestamp_", function: toYYYYMM }
+      ]
+      index_fields: [
+        {
+          name: "from_idx"
+          field_name: "from_address"
+          type: set
+          granularity: 1
+        }
+      ]
+    }
+  };
+
+  uint64 block_number = 1;
+  string transaction_hash = 2;
+  string from_address = 3;
+  string to_address = 4;
+  string amount = 5;
+}
+```
+
+**Common Error:**
+If you see an error like `clickhouse table options not set for table "your_table"`, it means you need to add the `clickhouse_table_options` configuration to your Protobuf message as shown above.
+
 ### Protobuf models
 
 - protobuf bindings are generated using `buf generate` at the root of this repo. See https://buf.build/docs/installation to install buf.
