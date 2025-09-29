@@ -26,7 +26,7 @@ func TestParseDSN(t *testing.T) {
 		{
 			name:             "with schemaName",
 			dns:              "psql://postgres:postgres@localhost/substreams-dev?enable_incremental_sort=off&sslmode=disable&schemaName=foo",
-			expectConnString: "host=localhost port=5432 dbname=substreams-dev enable_incremental_sort=off  sslmode=disable user=postgres password=postgres",
+			expectConnString: "host=localhost port=5432 dbname=substreams-dev enable_incremental_sort=off sslmode=disable user=postgres password=postgres",
 			expectSchema:     "foo",
 			expectPassword:   "postgres",
 		},
@@ -43,6 +43,41 @@ func TestParseDSN(t *testing.T) {
 			expectConnString: "clickhouse://default:@localhost:9000/default",
 			expectSchema:     "default",
 			expectPassword:   "",
+		},
+		{
+			name:             "clickhouse with schemaName",
+			dns:              "clickhouse://default:password@host:9000/default?schemaName=testdb",
+			expectConnString: "clickhouse://default:password@host:9000/default",
+			expectSchema:     "testdb",
+			expectPassword:   "password",
+		},
+		{
+			name:             "clickhouse DSN weird code, if option present and host is localhost, it changes the scheme to http and host to 127.0.0.1",
+			dns:              "clickhouse://default:password@localhost:9000/default?any=option",
+			expectConnString: "http://default:password@127.0.0.1:9000/default?any=option",
+			expectSchema:     "default",
+			expectPassword:   "password",
+		},
+		{
+			name:             "clickhouse DSN weird code, if option present and host is localhost and secure=true option, it changes the scheme to https and host to 127.0.0.1",
+			dns:              "clickhouse://default:password@localhost:9000/default?secure=true",
+			expectConnString: "https://default:password@127.0.0.1:9000/default?secure=true",
+			expectSchema:     "default",
+			expectPassword:   "password",
+		},
+		{
+			name:             "clickhouse DSN weird code, if option present and host is NOT localhost, nothing changes",
+			dns:              "clickhouse://default:password@host:9000/default?any=option",
+			expectConnString: "clickhouse://default:password@host:9000/default?any=option",
+			expectSchema:     "default",
+			expectPassword:   "password",
+		},
+		{
+			name:             "clickhouse DSN weird code, if option present and host is NOT localhost and secure=true option, nothing changes",
+			dns:              "clickhouse://default:password@host:9000/default?secure=true",
+			expectConnString: "clickhouse://default:password@host:9000/default?secure=true",
+			expectSchema:     "default",
+			expectPassword:   "password",
 		},
 	}
 	for _, test := range tests {

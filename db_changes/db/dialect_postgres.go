@@ -550,8 +550,11 @@ func (d PostgresDialect) GetCreateHistoryQuery(schema string, withPostgraphile b
 }
 
 func (d PostgresDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
-	if _, err := l.ExecContext(ctx, schemaSql); err != nil {
-		return fmt.Errorf("exec schemaName: %w", err)
+	// Prepend search_path directive to ensure user SQL runs in the correct schema context
+	fullSql := fmt.Sprintf(`SET search_path TO %s;`+"\n\n%s", EscapeIdentifier(d.schemaName), schemaSql)
+
+	if _, err := l.ExecContext(ctx, fullSql); err != nil {
+		return fmt.Errorf("exec postgres statements: %w", err)
 	}
 	return nil
 }
@@ -1788,4 +1791,64 @@ func (d *PostgresDialect) normalizeValueType(value string, valueType reflect.Typ
 		// In most cases, it going to just work.
 		return value, nil
 	}
+}
+
+func (d PostgresDialect) GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error) {
+	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE 1=0",
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("querying table structure: %w", err)
+	}
+	defer rows.Close()
+
+	return rows.ColumnTypes()
+}
+
+const postgresPrimaryKeyQuery = `
+	SELECT kcu.column_name
+	FROM information_schema.table_constraints tco
+	JOIN information_schema.key_column_usage kcu
+		ON kcu.constraint_name = tco.constraint_name
+		AND kcu.constraint_schema = tco.constraint_schema
+		AND kcu.table_name = tco.table_name
+	WHERE tco.constraint_type = 'PRIMARY KEY'
+		AND kcu.table_schema = %s
+		AND kcu.table_name = %s
+	ORDER BY kcu.ordinal_position`
+
+func (d PostgresDialect) GetPrimaryKey(db *sql.DB, schemaName, tableName string) ([]string, error) {
+	var query string
+	var args []any
+
+	if schemaName == "" {
+		query = fmt.Sprintf(postgresPrimaryKeyQuery, "current_schema()", "$1")
+		args = []any{tableName}
+	} else {
+		query = fmt.Sprintf(postgresPrimaryKeyQuery, "$1", "$2")
+		args = []any{schemaName, tableName}
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying primary key: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return nil, fmt.Errorf("scanning primary key column: %w", err)
+		}
+		columns = append(columns, column)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating primary key rows: %w", err)
+	}
+
+	return columns, nil
 }

@@ -2,9 +2,9 @@ package db
 
 import (
 	"fmt"
+	"iter"
 	"net/url"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -20,8 +20,10 @@ type DSN struct {
 	Username string
 	Password string
 	Database string
-	schema   string
-	Options  []string
+	Options  DSNOptions
+
+	// schema is the extracted schema from the DSN schemaName option (if present)
+	schema string
 }
 
 var driverMap = map[string]string{
@@ -64,13 +66,6 @@ func ParseDSN(dsn string) (*DSN, error) {
 	password, _ := dsnURL.User.Password()
 	database := strings.TrimPrefix(dsnURL.EscapedPath(), "/")
 
-	query := dsnURL.Query()
-	keys := make([]string, 0, len(query))
-	for key := range dsnURL.Query() {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
 	d := &DSN{
 		original: dsn,
 		driver:   driver,
@@ -79,23 +74,28 @@ func ParseDSN(dsn string) (*DSN, error) {
 		Username: username,
 		Password: password,
 		Database: database,
-		schema:   "public",
+		Options:  DSNOptions(dsnURL.Query()),
 	}
+
+	schemaName := d.Options.RemoveOr("schemaName", "")
 
 	if driver == "clickhouse" {
-		d.schema = database
-	}
-
-	options := make([]string, len(query))
-	for i, key := range keys {
-		if key == "schemaName" {
-			d.schema = query[key][0]
-			continue
+		// For ClickHouse, store the target database name in schema, but keep
+		// connecting to the original database to allow CREATE DATABASE commands
+		if schemaName != "" {
+			d.schema = schemaName
+		} else {
+			d.schema = database
+		}
+	} else {
+		if schemaName == "" {
+			schemaName = "public"
 		}
 
-		options[i] = fmt.Sprintf("%s=%s", key, strings.Join(query[key], ","))
+		// For other databases (PostgreSQL), schemaName is separate from database
+		d.schema = schemaName
 	}
-	d.Options = options
+
 	return d, nil
 }
 
@@ -105,19 +105,30 @@ func (c *DSN) Driver() string {
 
 func (c *DSN) ConnString() string {
 	if c.driver == "clickhouse" {
-		for _, option := range c.Options {
-			if c.Host == "localhost" {
-				c.Host = "127.0.0.1"
-				scheme := "http"
-				if option == "secure=true" {
-					scheme = "https"
-				}
-				return strings.Replace(c.original, "clickhouse://", scheme+"://", 1)
+		scheme := "clickhouse"
+		host := c.Host
+
+		if len(c.Options) > 0 && host == "localhost" {
+			// Weird handling to keep old behavior while we discuss the right way to handle that
+			// In the old code, of there was options set and the host was localhost, we were switching
+			// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
+			host = "127.0.0.1"
+			scheme = "http"
+			if c.Options.Get("secure") == "true" {
+				scheme = "https"
 			}
 		}
-		return c.original
+
+		baseURL := fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, c.Username, c.Password, host, c.Port, c.Database)
+		if len(c.Options) > 0 {
+			baseURL += "?" + c.Options.Encode()
+		}
+
+		return baseURL
 	}
-	out := fmt.Sprintf("host=%s port=%d dbname=%s %s", c.Host, c.Port, c.Database, strings.Join(c.Options, " "))
+	// PostgreSQL connection string uses space-separated options
+	options := c.Options.EncodeWithSeparator(" ")
+	out := fmt.Sprintf("host=%s port=%d dbname=%s %s", c.Host, c.Port, c.Database, options)
 	if c.Username != "" {
 		out = out + " user=" + c.Username
 	}
@@ -129,4 +140,56 @@ func (c *DSN) ConnString() string {
 
 func (c *DSN) Schema() string {
 	return c.schema
+}
+
+// DSNOptions is a thin wrapper around url.Values to provide helper methods and
+// better names.
+type DSNOptions url.Values
+
+// Iterate over the first value of each key, to be used in for range loops.
+func (v DSNOptions) Iter() iter.Seq2[string, string] {
+	return func(yield func(k string, v string) bool) {
+		for k, vs := range v {
+			if len(vs) > 0 {
+				if !yield(k, vs[0]) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// Encode encodes the values into “URL encoded” form ("bar=baz&foo=quux") sorted by key.
+func (v DSNOptions) Encode() string {
+	return (url.Values(v)).Encode()
+}
+
+// EncodeWithSeparator encodes the values into “URL encoded” like form ("bar=baz foo=quux") sorted by key
+// where essentially the separator is used instead of '&'.
+func (v DSNOptions) EncodeWithSeparator(sep string) string {
+	return strings.ReplaceAll((url.Values(v)).Encode(), "&", sep)
+}
+
+// Get returns the value associated with the key.
+func (v DSNOptions) Get(key string) string {
+	return (url.Values(v)).Get(key)
+}
+
+// GetOr returns the value associated with the key or defaultValue if not found.
+func (v DSNOptions) GetOr(key, defaultValue string) string {
+	if val := (url.Values(v)).Get(key); val != "" {
+		return val
+	}
+
+	return defaultValue
+}
+
+// RemoveOr removes the key from the options and returns its value or defaultValue if not found.
+func (v DSNOptions) RemoveOr(key, defaultValue string) string {
+	val := (url.Values(v)).Get(key)
+	(url.Values(v)).Del(key)
+	if val != "" {
+		return val
+	}
+	return defaultValue
 }

@@ -133,12 +133,21 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 		}
 		fv := dm.GetField(fd)
 		if v, ok := fv.([]interface{}); ok {
-			for _, c := range v {
-				fm, ok := c.(*dynamic.Message)
-				if !ok {
-					return 0, fmt.Errorf("Repeated fields with native values not supported yet in 'from-proto' mode. message %q, field %q", md.GetFullyQualifiedName(), fd.GetName())
+			// Check if this is an array of messages or native values
+			if len(v) > 0 {
+				if _, ok := v[0].(*dynamic.Message); ok {
+					// Array of messages - process as child tables
+					for _, c := range v {
+						fm, ok := c.(*dynamic.Message)
+						if !ok {
+							return 0, fmt.Errorf("Mixed array types not supported in 'from-proto' mode. message %q, field %q", md.GetFullyQualifiedName(), fd.GetName())
+						}
+						childs = append(childs, fm)
+					}
+				} else {
+					// Array of native values - add as a single field value (the array itself)
+					fieldValues = append(fieldValues, fv)
 				}
-				childs = append(childs, fm)
 			}
 		} else if fm, ok := fv.(*dynamic.Message); ok {
 			if fm == nil {
@@ -158,6 +167,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 		if table != nil {
 			err := inserter.Insert(table.Name, fieldValues)
 			if err != nil {
+				fmt.Println("field values:", fieldValues)
 				return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 			}
 			if len(childs) > 0 && d.useProtoOptions {

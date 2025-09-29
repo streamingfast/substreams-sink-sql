@@ -3,7 +3,9 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
+	"math/rand/v2"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,16 +21,48 @@ import (
 	"github.com/streamingfast/substreams/manifest"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-const testSchema = dbChangesSchemaName
+var sharedDbChangesPostgresContainer *PostgresContainerExt
+var sharedDbChangesClickhouseContainer *ClickhouseContainerExt
+
+func TestMain(m *testing.M) {
+	var pgCleanup, chCleanup func()
+
+	// Setup both containers in parallel
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Setup PostgreSQL container
+	go func() {
+		defer wg.Done()
+		sharedDbChangesPostgresContainer, pgCleanup = setupRawPostgresContainer(PostgresContainerConfig{
+			Image: "postgres:16-alpine",
+		})
+	}()
+
+	// Setup ClickHouse container
+	go func() {
+		defer wg.Done()
+		sharedDbChangesClickhouseContainer, chCleanup = setupRawClickhouseContainer(ClickhouseContainerConfig{
+			Image: "clickhouse/clickhouse-server:24.3-alpine",
+		})
+	}()
+
+	// Wait for both containers to be ready
+	wg.Wait()
+
+	exitCode := m.Run()
+
+	// Cleanup both containers
+	pgCleanup()
+	chCleanup()
+
+	os.Exit(exitCode)
+}
 
 func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
-	testTables := db2.TestSinglePrimaryKeyTables(testSchema)
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
-
 	tests := []sinkerTestCase{
 		{
 			"insert final",
@@ -147,9 +181,10 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runSinkerTest(
 				t,
-				dbConnectionString,
-				postgresContainer,
-				tablesInput(testTables),
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				tablesInput(func(schema string) map[string]*db2.TableInfo { return db2.TestSinglePrimaryKeyTables(schema) }),
 				test.responses,
 				test.expected,
 				test.expectedFinalCursor,
@@ -159,16 +194,6 @@ func TestSinker_Integration_SinglePrimaryKey(t *testing.T) {
 }
 
 func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
-	testTables := db2.TestTables(testSchema, map[string]*db2.TableInfo{
-		"xfer": mustNewTableInfo(testSchema, "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
-			"id":     db2.NewColumnInfo("id", "text", ""),
-			"number": db2.NewColumnInfo("number", "bigint", ""),
-			"from":   db2.NewColumnInfo("from", "text", ""),
-			"to":     db2.NewColumnInfo("to", "text", ""),
-		}),
-	})
-
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
 	pk := compositePK
 
 	tests := []sinkerTestCase{
@@ -301,8 +326,8 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
 				),
 			),
-			func(t *testing.T, dbx *sqlx.DB) {
-				require.Empty(t, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				require.Empty(t, readDbChangesRows[XferCompositePKRow](t, dbx, schema, "xfer"))
 			},
 			"Block #11 (11a) - LIB #11 (11a)",
 		},
@@ -319,8 +344,8 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 					deleteRowMultiplePK("xfer", pk("id", "12", "number", "34")),
 				),
 			),
-			func(t *testing.T, dbx *sqlx.DB) {
-				require.Empty(t, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				require.Empty(t, readDbChangesRows[XferCompositePKRow](t, dbx, schema, "xfer"))
 			},
 			"Block #12 (12a) - LIB #12 (12a)",
 		},
@@ -361,9 +386,19 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runSinkerTest(
 				t,
-				dbConnectionString,
-				postgresContainer,
-				tablesInput(testTables),
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				tablesInput(func(schema string) map[string]*db2.TableInfo {
+					return db2.TestTables(schema, map[string]*db2.TableInfo{
+						"xfer": mustNewTableInfo(schema, "xfer", []string{"id", "number"}, map[string]*db2.ColumnInfo{
+							"id":     db2.NewColumnInfo("id", "text", ""),
+							"number": db2.NewColumnInfo("number", "bigint", ""),
+							"from":   db2.NewColumnInfo("from", "text", ""),
+							"to":     db2.NewColumnInfo("to", "text", ""),
+						}),
+					})
+				}),
 				test.responses,
 				test.expected,
 				test.expectedFinalCursor,
@@ -373,16 +408,6 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 }
 
 func TestSinker_Integration_Bytes(t *testing.T) {
-	schema := testSchema
-	testTables := db2.TestTables(schema, map[string]*db2.TableInfo{
-		"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
-			"id":    db2.NewColumnInfo("id", "bytea", []byte{}),
-			"value": db2.NewColumnInfo("value", "bytea", []byte{}),
-		}),
-	})
-
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
-
 	type XferBytesRow struct {
 		ID    []byte `db:"id"`
 		Value []byte `db:"value"`
@@ -390,18 +415,26 @@ func TestSinker_Integration_Bytes(t *testing.T) {
 
 	runSinkerTest(
 		t,
-		dbConnectionString,
-		postgresContainer,
-		tablesInput(testTables),
+		sharedDbChangesPostgresContainer,
+		nil,
+		nil,
+		tablesInput(func(schema string) map[string]*db2.TableInfo {
+			return db2.TestTables(schema, map[string]*db2.TableInfo{
+				"xfer": mustNewTableInfo(schema, "xfer", []string{"id"}, map[string]*db2.ColumnInfo{
+					"id":    db2.NewColumnInfo("id", "bytea", []byte{}),
+					"value": db2.NewColumnInfo("value", "bytea", []byte{}),
+				}),
+			})
+		}),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("10a"),
 				insertRowSinglePK("xfer", `\x01`, "value", `\x04ab`),
 			),
 		),
-		func(t *testing.T, dbx *sqlx.DB) {
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
 			require.Equal(t,
 				[]*XferBytesRow{{ID: []byte{0x01}, Value: []byte{0x04, 0xab}}},
-				readDbChangesRows[XferBytesRow](t, dbx, "xfer"),
+				readDbChangesRows[XferBytesRow](t, dbx, schema, "xfer"),
 			)
 		},
 		"Block #10 (10a) - LIB #10 (10a)",
@@ -409,36 +442,39 @@ func TestSinker_Integration_Bytes(t *testing.T) {
 }
 
 func TestSinker_Integration_TimescaleDB(t *testing.T) {
-	dbConnectionString, postgresContainer := setupDbChangesTimescaleDBContainer(t)
+	container, cleanup := setupRawPostgresContainer(PostgresContainerConfig{Image: "timescale/timescaledb:latest-pg16"})
+	t.Cleanup(cleanup)
+
 	pk := compositePK
 
-	runCustomizedSinkerTest(
+	runSinkerTest(
 		t,
-		dbConnectionString,
-		postgresContainer,
-		&PostgresContainerConfig{AvoidRestore: true},
+		container,
 		nil,
-		rawSQLInput(`
-			CREATE TABLE IF NOT EXISTS trades (
-				id BIGSERIAL,
-				block_time TIMESTAMPTZ NOT NULL,
-				token_id BYTEA NOT NULL,
-				PRIMARY KEY (id, block_time)
-			) WITH (
-				tsdb.hypertable,
-				tsdb.partition_column='block_time',
-				tsdb.segmentby='token_id',
-				tsdb.orderby='block_time DESC'
-			);
+		nil,
+		rawSQLInput(func(schema string) string {
+			return `
+				CREATE TABLE IF NOT EXISTS trades (
+					id BIGSERIAL,
+					block_time TIMESTAMPTZ NOT NULL,
+					token_id BYTEA NOT NULL,
+					PRIMARY KEY (id, block_time)
+				) WITH (
+					tsdb.hypertable,
+					tsdb.partition_column='block_time',
+					tsdb.segmentby='token_id',
+					tsdb.orderby='block_time DESC'
+				);
 
-			CALL add_columnstore_policy('trades', after => INTERVAL '1d');
-		`),
+				CALL add_columnstore_policy('trades', after => INTERVAL '1d');
+			`
+		}),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("10a"),
 				insertRowCompositePK("trades", pk("id", "1", "block_time", "2023-10-01T00:00:00Z"), "token_id", `\x04ab`),
 			),
 		),
-		func(t *testing.T, dbx *sqlx.DB) {
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
 			type Row struct {
 				ID        []byte    `db:"id"`
 				BlockTime time.Time `db:"block_time"`
@@ -447,38 +483,40 @@ func TestSinker_Integration_TimescaleDB(t *testing.T) {
 
 			require.Equal(t, []*Row{
 				{ID: []byte{0x31}, BlockTime: blockTime(t, "2023-10-01T00:00:00Z"), TokenID: []byte{0x04, 0xab}},
-			}, readRowsBy[Row](t, dbx, `"testschema"."trades"`, "id, block_time"))
+			}, readRowsBy[Row](t, dbx, fmt.Sprintf(`"%s"."trades"`, schema), "id, block_time"))
 		},
 		"Block #10 (10a) - LIB #10 (10a)",
 	)
 }
 
 func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
-
 	runSinkerTest(
 		t,
-		dbConnectionString,
-		postgresContainer,
-		rawSQLInput(`
-			CREATE TABLE IF NOT EXISTS %s.users (
-				id TEXT PRIMARY KEY
-			);
-			CREATE TABLE IF NOT EXISTS %s.xfer (
-				id TEXT PRIMARY KEY,
-				"from" TEXT,
-				CONSTRAINT fk_users
-					FOREIGN KEY("from")
-					REFERENCES %s.users(id)
-			);
-		`, testSchema, testSchema, testSchema),
+		sharedDbChangesPostgresContainer,
+		nil,
+		nil,
+		rawSQLInput(func(schema string) string {
+			return fmt.Sprintf(`
+				CREATE TABLE IF NOT EXISTS "%s".users (
+					id TEXT PRIMARY KEY
+				);
+				CREATE TABLE IF NOT EXISTS "%s".xfer (
+					id TEXT PRIMARY KEY,
+					"from" TEXT,
+					CONSTRAINT fk_users
+						FOREIGN KEY("from")
+						REFERENCES "%s".users(id)
+				);
+			`, schema, schema, schema)
+		},
+		),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("10a"),
 				insertRowSinglePK("users", "user1"),
 				insertRowSinglePK("xfer", "xfer1", "from", "user1"),
 			),
 		),
-		func(t *testing.T, dbx *sqlx.DB) {
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
 			type XferRow struct {
 				ID   string `db:"id"`
 				From string `db:"from"`
@@ -490,35 +528,165 @@ func TestSinker_Integration_ParentChildOrdering(t *testing.T) {
 
 			require.Equal(t,
 				[]*XferRow{{ID: "xfer1", From: "user1"}},
-				readDbChangesRows[XferRow](t, dbx, "xfer"),
+				readDbChangesRows[XferRow](t, dbx, schema, "xfer"),
 			)
 		},
 		"Block #10 (10a) - LIB #10 (10a)",
 	)
 }
 
-func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
+func TestSinker_Integration_BatchOrdinalSimple(t *testing.T) {
+	// Custom sinker factory options to force batching across blocks
+	customizeFactoryOptions := func(defaults sinker.SinkerFactoryOptions) sinker.SinkerFactoryOptions {
+		defaults.BatchBlockFlushInterval = 10
+		defaults.BatchRowFlushInterval = 10
+		return defaults
+	}
 
 	runSinkerTest(
 		t,
-		dbConnectionString,
-		postgresContainer,
-		rawSQLInput(`
-			CREATE TABLE IF NOT EXISTS %[1]s.departments (
+		sharedDbChangesPostgresContainer,
+		nil,
+		customizeFactoryOptions,
+		rawSQLInput(func(schema string) string {
+			return fmt.Sprintf(`
+				CREATE TABLE IF NOT EXISTS "%s".orders (
+					id TEXT PRIMARY KEY,
+					amount TEXT
+				);
+			`, schema)
+		}),
+		streamMock(
+			// Block 10a: Create order1
+			dbChangesBlockData(t, "10a", finalBlock("8a"),
+				insertRowSinglePK("orders", "order1", "amount", "100"),
+			),
+			// Block 11a: Create order2
+			dbChangesBlockData(t, "11a", finalBlock("8a"),
+				insertRowSinglePK("orders", "order2", "amount", "200"),
+			),
+			// Block 12a: Create order3 and trigger flush
+			dbChangesBlockData(t, "12a", finalBlock("12a"),
+				insertRowSinglePK("orders", "order3", "amount", "300"),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
+			type OrderRow struct {
+				ID     string `db:"id"`
+				Amount string `db:"amount"`
+			}
+
+			rows := readDbChangesRows[OrderRow](t, dbx, schema, "orders")
+			require.Len(t, rows, 3)
+
+			// All orders should exist regardless of ordinal system
+			require.Contains(t, rows, &OrderRow{ID: "order1", Amount: "100"})
+			require.Contains(t, rows, &OrderRow{ID: "order2", Amount: "200"})
+			require.Contains(t, rows, &OrderRow{ID: "order3", Amount: "300"})
+		},
+		"Block #12 (12a) - LIB #12 (12a)",
+	)
+}
+
+func TestSinker_Integration_ParentChildOrderingBatched(t *testing.T) {
+	// Custom options - don't change sink options
+	customizeOptions := func(defaults []sink.Option) []sink.Option {
+		return defaults
+	}
+
+	// Custom sinker factory options to force batching across blocks
+	customizeFactoryOptions := func(defaults sinker.SinkerFactoryOptions) sinker.SinkerFactoryOptions {
+		// Set BatchBlockFlushInterval to 10 to ensure all blocks are batched together
+		// Also increase BatchRowFlushInterval to prevent early row-based flushing
+		defaults.BatchBlockFlushInterval = 10
+		defaults.BatchRowFlushInterval = 10
+		return defaults
+	}
+
+	runSinkerTest(
+		t,
+		sharedDbChangesPostgresContainer,
+		customizeOptions,
+		customizeFactoryOptions,
+		rawSQLInput(func(schema string) string {
+			return fmt.Sprintf(`
+			CREATE TABLE IF NOT EXISTS "%s".users (
 				id TEXT PRIMARY KEY
 			);
-			CREATE TABLE IF NOT EXISTS %[1]s.employees (
+			CREATE TABLE IF NOT EXISTS "%s".xfer (
 				id TEXT PRIMARY KEY,
-				department_id TEXT NOT NULL,
-				CONSTRAINT fk_department
-					FOREIGN KEY(department_id)
-					REFERENCES %[1]s.departments(id)
+				"from" TEXT,
+				CONSTRAINT fk_users
+					FOREIGN KEY("from")
+					REFERENCES "%s".users(id)
 			);
+		`, schema, schema, schema)
+		}),
+		streamMock(
+			// Block 10a: Create user1 first (batch ordinal 0)
+			dbChangesBlockData(t, "10a", finalBlock("8a"),
+				insertRowSinglePK("users", "user1"),
+			),
+			// Block 11a: Create xfer1 referencing user1 (batch ordinal 1)
+			// With batch-tied ordinals, this gets ordinal 1, ensuring proper ordering
+			dbChangesBlockData(t, "11a", finalBlock("8a"),
+				insertRowSinglePK("xfer", "xfer1", "from", "user1"),
+			),
+			// Block 12a: Trigger the flush by reaching final block
+			dbChangesBlockData(t, "12a", finalBlock("12a"),
+				insertRowSinglePK("users", "user2"),
+			),
+		),
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
+			type XferRow struct {
+				ID   string `db:"id"`
+				From string `db:"from"`
+			}
 
-			-- Pre-existing data, like if the sinker had stopped at that point
-			INSERT INTO %[1]s.departments (id) VALUES ('dept1');
-		`, testSchema),
+			type UserRow struct {
+				ID string `db:"id"`
+			}
+
+			// Both rows should exist - this test might fail with incorrect ordinal ordering
+			// because user1 must be inserted before xfer1 due to foreign key constraint
+			// With block-local ordinals, both get ordinal 0, causing potential ordering issues
+			require.Equal(t,
+				[]*UserRow{{ID: "user1"}, {ID: "user2"}},
+				readDbChangesRows[UserRow](t, dbx, schema, "users"),
+			)
+
+			require.Equal(t,
+				[]*XferRow{{ID: "xfer1", From: "user1"}},
+				readDbChangesRows[XferRow](t, dbx, schema, "xfer"),
+			)
+		},
+		"Block #12 (12a) - LIB #12 (12a)",
+	)
+}
+
+func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
+	runSinkerTest(
+		t,
+		sharedDbChangesPostgresContainer,
+		nil,
+		nil,
+		rawSQLInput(func(schema string) string {
+			return fmt.Sprintf(`
+				CREATE TABLE IF NOT EXISTS "%[1]s".departments (
+					id TEXT PRIMARY KEY
+				);
+				CREATE TABLE IF NOT EXISTS "%[1]s".employees (
+					id TEXT PRIMARY KEY,
+					department_id TEXT NOT NULL,
+					CONSTRAINT fk_department
+						FOREIGN KEY(department_id)
+						REFERENCES "%[1]s".departments(id)
+				);
+
+				-- Pre-existing data, like if the sinker had stopped at that point
+				INSERT INTO "%[1]s".departments (id) VALUES ('dept1');
+			`, schema)
+		}),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("10a"),
 				insertRowSinglePK("employees", "emp1", "department_id", "dept1"),
@@ -526,7 +694,7 @@ func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
 				insertRowSinglePK("employees", "emp2", "department_id", "dept2"),
 			),
 		),
-		func(t *testing.T, dbx *sqlx.DB) {
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
 			type DepartmentRow struct {
 				ID string `db:"id"`
 			}
@@ -539,30 +707,26 @@ func TestSinker_Integration_ComplexDependentTableOrdering(t *testing.T) {
 			require.Equal(t, []*DepartmentRow{
 				{ID: "dept1"},
 				{ID: "dept2"},
-			}, readDbChangesRows[DepartmentRow](t, dbx, "departments"))
+			}, readDbChangesRows[DepartmentRow](t, dbx, schema, "departments"))
 
 			require.Equal(t, []*EmployeeRow{
 				{ID: "emp1", DepartmentID: "dept1"},
 				{ID: "emp2", DepartmentID: "dept2"},
-			}, readDbChangesRows[EmployeeRow](t, dbx, "employees"))
+			}, readDbChangesRows[EmployeeRow](t, dbx, schema, "employees"))
 		},
 		"Block #10 (10a) - LIB #10 (10a)",
 	)
 }
 
 func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
-	testTables := db2.TestSinglePrimaryKeyTables(testSchema)
-	dbConnectionString, postgresContainer := setupDbChangesPostgresContainer(t)
-
-	runCustomizedSinkerTest(
+	runSinkerTest(
 		t,
-		dbConnectionString,
-		postgresContainer,
-		nil,
+		sharedDbChangesPostgresContainer,
 		func(defaults []sink.Option) []sink.Option {
 			return append(defaults, sink.WithBlockDataBuffer(2))
 		},
-		tablesInput(testTables),
+		nil,
+		tablesInput(func(schema string) map[string]*db2.TableInfo { return db2.TestSinglePrimaryKeyTables(schema) }),
 		streamMock(
 			dbChangesBlockData(t, "10a", finalBlock("8a"),
 				insertRowSinglePK("xfer", "1234", "from", "sender1", "to", "receiver1"),
@@ -574,10 +738,10 @@ func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
 				insertRowSinglePK("xfer", "9101", "from", "sender3", "to", "receiver3"),
 			),
 		),
-		func(t *testing.T, dbx *sqlx.DB) {
+		func(t *testing.T, dbx *sqlx.DB, schema string) {
 			require.Equal(t, []*XferSinglePKRow{
 				{ID: "1234", From: "sender1", To: "receiver1"},
-			}, readDbChangesRows[XferSinglePKRow](t, dbx, "xfer"))
+			}, readDbChangesRows[XferSinglePKRow](t, dbx, schema, "xfer"))
 		},
 		"Block #10 (10a) - LIB #8 (8a)",
 	)
@@ -586,49 +750,34 @@ func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
 type sinkerTestCase struct {
 	name                string
 	responses           []any
-	expected            func(t *testing.T, dbx *sqlx.DB)
+	expected            func(t *testing.T, dbx *sqlx.DB, schema string)
 	expectedFinalCursor string
 }
 
 func runSinkerTest(
 	t *testing.T,
-	dbDSN string,
-	postgresContainer *postgres.PostgresContainer,
-	setupInput sinkerSetupInput,
-	responses []any,
-	expected func(t *testing.T, dbx *sqlx.DB),
-	expectedFinalCursor string,
-) {
-	runCustomizedSinkerTest(t, dbDSN, postgresContainer, nil, nil, setupInput, responses, expected, expectedFinalCursor)
-}
-
-func runCustomizedSinkerTest(
-	t *testing.T,
-	dbDSN string,
-	postgresContainer *postgres.PostgresContainer,
-	postgresContainerConfig *PostgresContainerConfig,
+	postgresContainer *PostgresContainerExt,
 	customizeSinkOptions func(defaults []sink.Option) []sink.Option,
+	customizeSinkerFactoryOptions func(defaults sinker.SinkerFactoryOptions) sinker.SinkerFactoryOptions,
 	setupInput sinkerSetupInput,
 	responses []any,
-	expected func(t *testing.T, dbx *sqlx.DB),
+	expected func(t *testing.T, dbx *sqlx.DB, schema string),
 	expectedFinalCursor string,
 ) {
 	t.Helper()
+	t.Parallel()
 
 	ctx := context.Background()
 
-	if postgresContainerConfig == nil || !postgresContainerConfig.AvoidRestore {
-		t.Cleanup(func() {
-			require.NoError(t, postgresContainer.Restore(ctx))
-		})
-	}
+	schemaName := randomSchemaName()
+	dsnRaw := postgresContainer.ConnectionString + "&schemaName=" + schemaName
 
 	substreamsClientConfig := setupFakeSubstreamsServer(t, responses...)
 	spkg := substreamsTestPackage(pbdatabase.File_sf_substreams_sink_database_v1_database_proto, (*pbdatabase.DatabaseChanges)(nil).ProtoReflect().Descriptor())
 
 	var err error
 	spkg.SinkConfig, err = anypb.New(&pbsql.Service{
-		Schema: sqlPreambule(testSchema) + setupInput.ToSQL(),
+		Schema: sqlPreambule(schemaName) + setupInput.ToSQL(schemaName),
 	})
 	require.NoError(t, err)
 
@@ -642,7 +791,7 @@ func runCustomizedSinkerTest(
 		Postgraphile:               false,
 	}
 
-	err = sinker.SinkerSetup(ctx, dbDSN, spkg, setupOptions, logger, tracer)
+	err = sinker.SinkerSetup(ctx, dsnRaw, spkg, setupOptions, logger, tracer)
 	require.NoError(t, err)
 
 	baseSinkOptions := []sink.Option{
@@ -681,25 +830,28 @@ func runCustomizedSinkerTest(
 		FlushRetryDelay:         0,
 	}
 
-	dbSinker, err := sinker.SinkerFactory(baseSink, options)(ctx, dbDSN, logger, tracer)
+	if customizeSinkerFactoryOptions != nil {
+		options = customizeSinkerFactoryOptions(options)
+	}
+
+	dbSinker, err := sinker.SinkerFactory(baseSink, options)(ctx, dsnRaw, logger, tracer)
 	require.NoError(t, err)
 	t.Cleanup(func() { dbSinker.Close() })
 
 	dbSinker.Run(ctx)
 	require.NoError(t, dbSinker.Err())
 
-	cleanDSN := strings.Replace(dbDSN, "&schemaName=testschema", "", 1)
-	db, err := sqlx.Connect("postgres", cleanDSN)
+	db, err := sqlx.Connect("postgres", postgresContainer.ConnectionString)
 	require.NoError(t, err)
 	defer db.Close()
 
 	if expected != nil {
-		expected(t, db)
+		expected(t, db, schemaName)
 	}
 
 	// Fetch cursor directly from database instead of using GetCursor
 	var cursorStr string
-	cursorQuery := fmt.Sprintf(`SELECT cursor FROM "%s"."cursors" WHERE id = $1`, testSchema)
+	cursorQuery := fmt.Sprintf(`SELECT cursor FROM "%s"."cursors" WHERE id = $1`, schemaName)
 	err = db.GetContext(ctx, &cursorStr, cursorQuery, dbSinker.OutputModuleHash())
 	require.NoError(t, err)
 
@@ -708,6 +860,15 @@ func runCustomizedSinkerTest(
 
 	actualCursor := fmt.Sprintf("Block %s - LIB %s", finalCursor.Block, finalCursor.LIB)
 	require.Equal(t, expectedFinalCursor, actualCursor)
+}
+
+func randomSchemaName() string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 8)
+	for i := range b {
+		b[i] = letters[rand.IntN(len(letters))]
+	}
+	return "testschema" + string(b)
 }
 
 func getFields(fieldsAndValues ...string) (out []*pbdatabase.Field) {
@@ -832,27 +993,36 @@ func mustNewTableInfo(schema, name string, pkList []string, columnsByName map[st
 }
 
 type sinkerSetupInput interface {
-	ToSQL() string
+	ToSQL(schema string) string
 }
 
-type tablesInput map[string]*db2.TableInfo
-
-func (t tablesInput) ToSQL() string {
-	return db2.GenerateCreateTableSQL(t)
+func tablesInput(createTables func(schema string) map[string]*db2.TableInfo) tablesInputType {
+	return tablesInputType{generator: createTables}
 }
 
-func rawSQLInput(inFormat string, args ...any) rawSQLInputType {
-	return (rawSQLInputType)(cli.Dedent(fmt.Sprintf(inFormat, args...)))
+type tablesInputType struct {
+	generator func(schema string) map[string]*db2.TableInfo
 }
 
-type rawSQLInputType string
+func (t tablesInputType) ToSQL(schema string) string {
+	return db2.GenerateCreateTableSQL(t.generator(schema))
+}
 
-func (r rawSQLInputType) ToSQL() string {
-	return string(r)
+func rawSQLInput(generator func(schema string) string) rawSQLInputType {
+	return rawSQLInputType{generator: generator}
+}
+
+type rawSQLInputType struct {
+	generator func(schema string) string
+}
+
+func (r rawSQLInputType) ToSQL(schema string) string {
+	return cli.Dedent(r.generator(schema))
 }
 
 func sqlPreambule(schema string) string {
-	return fmt.Sprintf(`SET search_path TO %s, public;`+"\n\n", schema)
+	return fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS "%s";
+SET search_path TO "%s", public;`+"\n\n", schema, schema)
 }
 
 type XferSinglePKRow struct {
@@ -861,9 +1031,9 @@ type XferSinglePKRow struct {
 	To   string `db:"to"`
 }
 
-func equalsXferRows(expected []*XferSinglePKRow) func(t *testing.T, dbx *sqlx.DB) {
-	return func(t *testing.T, dbx *sqlx.DB) {
-		require.Equal(t, expected, readDbChangesRows[XferSinglePKRow](t, dbx, "xfer"))
+func equalsXferRows(expected []*XferSinglePKRow) func(t *testing.T, dbx *sqlx.DB, schema string) {
+	return func(t *testing.T, dbx *sqlx.DB, schema string) {
+		require.Equal(t, expected, readDbChangesRows[XferSinglePKRow](t, dbx, schema, "xfer"))
 	}
 }
 
@@ -874,8 +1044,8 @@ type XferCompositePKRow struct {
 	To     string `db:"to"`
 }
 
-func equalsXferCompositePKRows(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB) {
-	return func(t *testing.T, dbx *sqlx.DB) {
-		require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, "xfer"))
+func equalsXferCompositePKRows(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB, schema string) {
+	return func(t *testing.T, dbx *sqlx.DB, schema string) {
+		require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, schema, "xfer"))
 	}
 }

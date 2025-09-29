@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/ch-go"
@@ -88,21 +87,20 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 		DialTimeout: 30 * time.Second,
 	}
 
-	for _, option := range dsn.Options {
-		parts := strings.Split(option, "=")
-		if parts[0] == "secure" && parts[1] == "true" {
+	for key, value := range dsn.Options.Iter() {
+		if key == "secure" && value == "true" {
 			chOption.TLS = &tls.Config{}
 			continue
 		}
-		if parts[0] == "username" {
-			chOption.User = parts[1]
+		if key == "username" {
+			chOption.User = value
 			continue
 		}
-		if parts[0] == "password" {
-			chOption.Password = parts[1]
+		if key == "password" {
+			chOption.Password = value
 			continue
 		}
-		if parts[0] == "compress" && parts[1] == "true" {
+		if key == "compress" && value == "true" {
 			chOption.Compression = ch.CompressionLZ4
 			continue
 		}

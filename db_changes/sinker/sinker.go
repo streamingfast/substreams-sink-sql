@@ -155,6 +155,10 @@ func (s *SQLSinker) flushWithRetry(ctx context.Context, moduleHash string, curso
 func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
 	output := data.Output
 
+	if output.Name == "" {
+		return nil
+	}
+
 	if output.Name != s.OutputModuleName() {
 		return fmt.Errorf("received data from wrong output module, expected to received from %q but got module's output for %q", s.OutputModuleName(), output.Name)
 	}
@@ -179,7 +183,15 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		}
 	}
 
-	blockFlushNeeded := s.batchBlockModulo(isLive) > 0 && data.Clock.Number-s.lastAppliedBlockNum >= s.batchBlockModulo(isLive)
+	batchModulo := s.batchBlockModulo(isLive)
+	blockFlushNeeded := batchModulo > 0 && data.Clock.Number-s.lastAppliedBlockNum >= batchModulo
+
+	s.logger.Debug("flush condition evaluation",
+		zap.Uint64("batch_modulo", batchModulo),
+		zap.Uint64("current_block", data.Clock.Number),
+		zap.Uint64("last_applied_block", s.lastAppliedBlockNum),
+		zap.Uint64("block_diff", data.Clock.Number-s.lastAppliedBlockNum),
+		zap.Bool("block_flush_needed_before_timing_check", blockFlushNeeded))
 
 	if blockFlushNeeded && isLive != nil && *isLive && s.stats.AverageFlushDuration() > data.Clock.Timestamp.AsTime().Sub(s.lastAppliedBlockTime) {
 		s.logger.Debug("skipping a flush because we are LIVE and flush average duration is above time between blocks", zap.Duration("flush_duration_average", s.stats.AverageFlushDuration()), zap.Time("last_block_time", s.lastAppliedBlockTime), zap.Time("block_time", data.Clock.Timestamp.AsTime()))
@@ -187,6 +199,9 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 	}
 
 	rowFlushNeeded := s.loader.FlushNeeded()
+	s.logger.Debug("final flush decision",
+		zap.Bool("block_flush_needed", blockFlushNeeded),
+		zap.Bool("row_flush_needed", rowFlushNeeded))
 
 	if blockFlushNeeded || rowFlushNeeded {
 		s.logger.Debug("flushing to database",
@@ -229,7 +244,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 }
 
 func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, blockNum, finalBlockNum uint64) error {
-	for ordinal, change := range dbChanges.TableChanges {
+	for _, change := range dbChanges.TableChanges {
 		if !s.loader.HasTable(change.Table) {
 			return fmt.Errorf(
 				"your Substreams sent us a change for a table named %s we don't know about on %s (available tables: %s)",
@@ -265,22 +280,22 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 
 		switch change.Operation {
 		case pbdatabase.TableChange_OPERATION_CREATE:
-			err := s.loader.Insert(change.Table, primaryKeys, changes, uint64(ordinal), reversibleBlockNum)
+			err := s.loader.Insert(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database insert: %w", err)
 			}
 		case pbdatabase.TableChange_OPERATION_UPSERT:
-			err := s.loader.Upsert(change.Table, primaryKeys, changes, uint64(ordinal), reversibleBlockNum)
+			err := s.loader.Upsert(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database upsert: %w", err)
 			}
 		case pbdatabase.TableChange_OPERATION_UPDATE:
-			err := s.loader.Update(change.Table, primaryKeys, changes, uint64(ordinal), reversibleBlockNum)
+			err := s.loader.Update(change.Table, primaryKeys, changes, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database update: %w", err)
 			}
 		case pbdatabase.TableChange_OPERATION_DELETE:
-			err := s.loader.Delete(change.Table, primaryKeys, uint64(ordinal), reversibleBlockNum)
+			err := s.loader.Delete(change.Table, primaryKeys, reversibleBlockNum)
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)
 			}

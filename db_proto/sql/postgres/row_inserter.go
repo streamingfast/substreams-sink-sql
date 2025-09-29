@@ -104,8 +104,15 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 		if field.Name == returningField {
 			continue
 		}
-		if field.IsRepeated || field.IsExtension { //not a direct child
+		if field.IsExtension { //not a direct child
 			continue
+		}
+		if field.IsRepeated {
+			// Check if it's a repeated message (which should be skipped) or repeated scalar (which should be processed)
+			if field.IsMessage {
+				continue
+			}
+			// Allow repeated scalar fields to be processed as arrays
 		}
 		fieldCount++
 		fieldNames = append(fieldNames, field.QuotedName())
@@ -133,6 +140,13 @@ func (i *RowInserter) insert(table string, values []any, database *Database) err
 			values[i] = base64.StdEncoding.EncodeToString(v)
 		case *timestamppb.Timestamp:
 			values[i] = "'" + v.AsTime().Format(time.RFC3339) + "'"
+		case []interface{}:
+			// Handle arrays by converting to PostgreSQL array format
+			var elements []string
+			for _, elem := range v {
+				elements = append(elements, ValueToString(elem))
+			}
+			values[i] = "{" + strings.Join(elements, ",") + "}"
 		}
 	}
 

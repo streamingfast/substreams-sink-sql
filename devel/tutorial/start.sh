@@ -20,6 +20,9 @@ main() {
   sink="../substreams-sink-sql"
   pg_password=${PGPASSWORD:-"insecure-change-me-in-prod"}
   pg_dsn="psql://dev-node:${pg_password}@127.0.0.1:5432/substreams_example?sslmode=disable"
+  
+  # Use the published substreams-template package for Database Changes example
+  substreams_package="substreams-template@v0.3.1"
 
   if [[ "$clean" == "true" ]]; then
     echo "Cleaning up existing tables"
@@ -31,14 +34,13 @@ main() {
     set -e
     PGPASSWORD=${pg_password} psql -h localhost -U dev-node -d dev-node -c 'create database substreams_example;'
     set +e
-    $sink setup "$pg_dsn" ../../docs/tutorial/sink/substreams.dev.yaml
+    $sink setup "$pg_dsn" "$substreams_package"
   fi
 
   $sink run \
     "$pg_dsn" \
-    ../../docs/tutorial/sink/substreams.dev.yaml \
+    "$substreams_package" \
     "$@"
 }
 
 main "$@"
-

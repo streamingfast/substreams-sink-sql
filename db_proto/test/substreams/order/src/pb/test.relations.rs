@@ -65,6 +65,35 @@ pub struct TypesTest {
     pub bytes_field: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag="30")]
     pub timestamp_field: ::core::option::Option<::prost_types::Timestamp>,
+    /// Array fields for all supported proto types
+    #[prost(int32, repeated, tag="50")]
+    pub repeated_int32_field: ::prost::alloc::vec::Vec<i32>,
+    #[prost(int64, repeated, tag="51")]
+    pub repeated_int64_field: ::prost::alloc::vec::Vec<i64>,
+    #[prost(uint32, repeated, tag="52")]
+    pub repeated_uint32_field: ::prost::alloc::vec::Vec<u32>,
+    #[prost(uint64, repeated, tag="53")]
+    pub repeated_uint64_field: ::prost::alloc::vec::Vec<u64>,
+    #[prost(sint32, repeated, tag="54")]
+    pub repeated_sint32_field: ::prost::alloc::vec::Vec<i32>,
+    #[prost(sint64, repeated, tag="55")]
+    pub repeated_sint64_field: ::prost::alloc::vec::Vec<i64>,
+    #[prost(fixed32, repeated, tag="56")]
+    pub repeated_fixed32_field: ::prost::alloc::vec::Vec<u32>,
+    #[prost(fixed64, repeated, tag="57")]
+    pub repeated_fixed64_field: ::prost::alloc::vec::Vec<u64>,
+    #[prost(sfixed32, repeated, tag="58")]
+    pub repeated_sfixed32_field: ::prost::alloc::vec::Vec<i32>,
+    #[prost(sfixed64, repeated, tag="59")]
+    pub repeated_sfixed64_field: ::prost::alloc::vec::Vec<i64>,
+    #[prost(double, repeated, tag="60")]
+    pub repeated_double_field: ::prost::alloc::vec::Vec<f64>,
+    #[prost(float, repeated, tag="61")]
+    pub repeated_float_field: ::prost::alloc::vec::Vec<f32>,
+    #[prost(bool, repeated, tag="62")]
+    pub repeated_bool_field: ::prost::alloc::vec::Vec<bool>,
+    #[prost(string, repeated, tag="63")]
+    pub repeated_string_field: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

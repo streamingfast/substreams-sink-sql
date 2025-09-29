@@ -79,4 +79,5 @@ func (l *Loader) reset() {
 	for entriesPair := l.entries.Oldest(); entriesPair != nil; entriesPair = entriesPair.Next() {
 		l.entries.Set(entriesPair.Key, NewOrderedMap[string, *Operation]())
 	}
+	l.batchOrdinal = 0
 }

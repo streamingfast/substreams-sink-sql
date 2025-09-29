@@ -86,6 +86,7 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 			if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE { //This will be handled by table relations
 				continue
 			}
+			// Allow repeated scalar fields to be processed as array columns
 		}
 
 		if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE {

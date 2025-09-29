@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -120,6 +121,13 @@ func (d ClickhouseDialect) GetCreateHistoryQuery(schema string, withPostgraphile
 }
 
 func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, schemaSql string) error {
+	if d.schemaName != "default" {
+		useDbQuery := fmt.Sprintf("USE %s", EscapeIdentifier(d.schemaName))
+		if _, err := l.ExecContext(ctx, useDbQuery); err != nil {
+			l.logger.Error("failed to switch to database", zap.String("database", d.schemaName), zap.Error(err))
+			return fmt.Errorf("use database %s: %w", d.schemaName, err)
+		}
+	}
 
 	if d.cluster != "" {
 		stmts, err := clickhouse.NewParser(schemaSql).ParseStmts()
@@ -165,16 +173,18 @@ func (d ClickhouseDialect) ExecuteSetupScript(ctx context.Context, l *Loader, sc
 
 			if _, err := l.ExecContext(ctx, stmt.String()); err != nil {
 				l.logger.Error("failed to execute schema statement", zap.String("statement", stmt.String()), zap.Error(err))
-				return fmt.Errorf("exec schemaName: %w", err)
+				return fmt.Errorf("exec clickhouse cluster statements: %w", err)
 			}
 		}
 	} else {
-		for _, query := range strings.Split(schemaSql, ";") {
+		// Splitting statements by ';' is not perfect but should be enough for now,
+		// it will fail for example if user enter a string that contains a ;!
+		for query := range strings.SplitSeq(schemaSql, ";") {
 			if len(strings.TrimSpace(query)) == 0 {
 				continue
 			}
 			if _, err := l.ExecContext(ctx, query); err != nil {
-				return fmt.Errorf("exec schemaName: %w", err)
+				return fmt.Errorf("exec clickhouse statements: %w", err)
 			}
 		}
 	}
@@ -367,4 +377,97 @@ func convertToType(value string, valueType reflect.Type) (any, error) {
 	default:
 		return value, nil
 	}
+}
+
+func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error) {
+	// For ClickHouse, use DESCRIBE TABLE to filter out AggregateFunction columns
+	describeQuery := fmt.Sprintf("DESCRIBE TABLE %s.%s",
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	describeRows, err := db.Query(describeQuery)
+	if err != nil {
+		return nil, fmt.Errorf("describing table structure: %w", err)
+	}
+	defer describeRows.Close()
+
+	var nonAggregateColumns []string
+
+	// Parse DESCRIBE results to filter out AggregateFunction columns
+	for describeRows.Next() {
+		var name, dataType, defaultKind, defaultExpression, comment, codecExpression, ttlExpression string
+		err := describeRows.Scan(&name, &dataType, &defaultKind, &defaultExpression, &comment, &codecExpression, &ttlExpression)
+		if err != nil {
+			return nil, fmt.Errorf("scanning describe results: %w", err)
+		}
+
+		if !strings.Contains(dataType, "AggregateFunction") {
+			nonAggregateColumns = append(nonAggregateColumns, EscapeIdentifier(name))
+		}
+	}
+
+	if err := describeRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating describe results: %w", err)
+	}
+
+	if len(nonAggregateColumns) == 0 {
+		return nil, fmt.Errorf("no non-aggregate columns found in table %s.%s", schemaName, tableName)
+	}
+
+	// Now query for column types with only the non-aggregate columns
+	columnList := strings.Join(nonAggregateColumns, ", ")
+	selectQuery := fmt.Sprintf("SELECT %s FROM %s.%s WHERE 1=0",
+		columnList,
+		EscapeIdentifier(schemaName),
+		EscapeIdentifier(tableName))
+
+	rows, err := db.Query(selectQuery)
+	if err != nil {
+		return nil, fmt.Errorf("querying filtered table structure: %w", err)
+	}
+	defer rows.Close()
+
+	return rows.ColumnTypes()
+}
+
+const clickhousePrimaryKeyQuery = `
+	SELECT name
+	FROM system.columns
+	WHERE database = %s
+		AND table = %s
+		AND is_in_primary_key
+	ORDER BY position DESC`
+
+func (d ClickhouseDialect) GetPrimaryKey(db *sql.DB, schemaName, tableName string) ([]string, error) {
+	var query string
+	var args []interface{}
+
+	if schemaName == "" {
+		query = fmt.Sprintf(clickhousePrimaryKeyQuery, "currentDatabase()", "?")
+		args = []interface{}{tableName}
+	} else {
+		query = fmt.Sprintf(clickhousePrimaryKeyQuery, "?", "?")
+		args = []interface{}{schemaName, tableName}
+	}
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying primary key: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var column string
+		if err := rows.Scan(&column); err != nil {
+			return nil, fmt.Errorf("scanning primary key column: %w", err)
+		}
+		columns = append(columns, column)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating primary key rows: %w", err)
+	}
+
+	return columns, nil
 }

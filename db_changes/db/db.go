@@ -6,7 +6,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 
-	"github.com/jimsmart/schema"
 	"github.com/streamingfast/logging"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"go.uber.org/zap"
@@ -52,6 +51,7 @@ type Loader struct {
 	pgInsertBatchMode string // off|values|unnest
 	pgInsertBatchSize int    // >0 when enabled
 	pgInsertOnly      bool   // assert-only mode; if true, non-insert ops should be rejected or cause fallback
+	batchOrdinal uint64 // Counter for ordinals within the current batch, resets on flush
 }
 
 func NewLoader(
@@ -218,7 +218,7 @@ func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.Co
 		}
 
 		// Get column information for this table
-		columns, err := l.getTableColumns(schemaName, tableName)
+		columns, err := l.dialect.GetTableColumns(l.DB, schemaName, tableName)
 		if err != nil {
 			l.logger.Warn("failed to get columns for table, skipping",
 				zap.String("schema", schemaName),
@@ -403,7 +403,7 @@ func (l *Loader) LoadTables(schemaName string, cursorTableName string, historyTa
 			columnByName[f.Name()] = info
 		}
 
-		key, err := schema.PrimaryKey(l.DB, schemaName, tableName)
+		key, err := l.dialect.GetPrimaryKey(l.DB, schemaName, tableName)
 		if err != nil {
 			return fmt.Errorf("get primary key: %w", err)
 		}
@@ -453,7 +453,7 @@ func (l *Loader) validateCursorTables(columns []*sql.ColumnType, schemaName stri
 			return &SystemTableError{fmt.Errorf("missing column %q from cursors", k)}
 		}
 	}
-	key, err := schema.PrimaryKey(l.DB, schemaName, cursorTableName)
+	key, err := l.dialect.GetPrimaryKey(l.DB, schemaName, cursorTableName)
 	if err != nil {
 		return &SystemTableError{fmt.Errorf("failed getting primary key: %w", err)}
 	}
@@ -542,6 +542,13 @@ func (l *Loader) GetIdentifier() string {
 // GetIdentifier returns <database>/<schema> suitable for user presentation
 func (l *Loader) GetDSN() *DSN {
 	return l.dsn
+}
+
+// NextBatchOrdinal returns the next ordinal for the current batch and increments the counter
+func (l *Loader) NextBatchOrdinal() uint64 {
+	ordinal := l.batchOrdinal
+	l.batchOrdinal++
+	return ordinal
 }
 
 type obfuscatedString string

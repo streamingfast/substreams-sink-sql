@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	sink "github.com/streamingfast/substreams-sink"
@@ -29,4 +30,6 @@ type Dialect interface {
 	OnlyInserts() bool
 	AllowPkDuplicates() bool
 	CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error
+	GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error)
+	GetPrimaryKey(db *sql.DB, schemaName, tableName string) ([]string, error)
 }
