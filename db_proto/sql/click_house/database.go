@@ -127,8 +127,18 @@ func (d *Database) client() (*ch.Client, error) {
 	return d.cachedClient, nil
 }
 
+func (d *Database) clientNoCache(dsn *db.DSN) (*ch.Client, error) {
+	client, err := newClient(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("creating clickhouse client: %w", err)
+	}
+	return client, nil
+}
+
 func (d *Database) CreateDatabase(useConstraints bool) error {
-	client, err := d.client()
+	dsn := d.dsn.Clone()
+	dsn.Database = "default"
+	client, err := d.clientNoCache(dsn)
 	if err != nil {
 		return fmt.Errorf("creating clickhouse client: %w", err)
 	}
@@ -140,11 +150,6 @@ func (d *Database) CreateDatabase(useConstraints bool) error {
 		return fmt.Errorf("pinging clickhouse: %w", err)
 	}
 
-	client, err = d.client()
-	if err != nil {
-		return fmt.Errorf("getting clickhouse client: %w", err)
-	}
-
 	if err := client.Do(d.ctx, ch.Query{
 		Body: fmt.Sprintf(staticSqlCreatDatabase, d.schema.Name),
 	}); err != nil {
@@ -152,6 +157,11 @@ func (d *Database) CreateDatabase(useConstraints bool) error {
 	}
 
 	d.logger.Info("database created", zap.String("schema_name", d.schema.Name))
+
+	client, err = d.client()
+	if err != nil {
+		return fmt.Errorf("getting clickhouse client: %w", err)
+	}
 
 	if err := client.Do(d.ctx, ch.Query{
 		Body: fmt.Sprintf(staticSqlCreateBlock, d.schema.Name),

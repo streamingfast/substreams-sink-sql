@@ -108,7 +108,7 @@ func (c *DSN) ConnString() string {
 		scheme := "clickhouse"
 		host := c.Host
 
-		if len(c.Options) > 0 && host == "localhost" {
+		if host == "localhost" {
 			// Weird handling to keep old behavior while we discuss the right way to handle that
 			// In the old code, of there was options set and the host was localhost, we were switching
 			// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
@@ -140,6 +140,20 @@ func (c *DSN) ConnString() string {
 
 func (c *DSN) Schema() string {
 	return c.schema
+}
+
+func (c *DSN) Clone() *DSN {
+	return &DSN{
+		driver:   c.driver,
+		original: c.original,
+		Host:     c.Host,
+		Port:     c.Port,
+		Username: c.Username,
+		Password: c.Password,
+		Database: c.Database,
+		Options:  c.Options,
+		schema:   c.schema,
+	}
 }
 
 // DSNOptions is a thin wrapper around url.Values to provide helper methods and
