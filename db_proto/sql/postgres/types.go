@@ -118,7 +118,7 @@ func ValueToString(value any) (s string) {
 		for _, elem := range v {
 			elements = append(elements, ValueToString(elem))
 		}
-		s = "{" + strings.Join(elements, ",") + "}"
+		s = "array[" + strings.Join(elements, ",") + "]"
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", v))
 	}

@@ -11,3 +11,4 @@ build/
 /cursor.txt
 /replay.log
 /*_schema_hash.txt
+/db_proto/test/substreams/order/src/pb/.last_generated_hash

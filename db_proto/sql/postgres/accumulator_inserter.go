@@ -141,6 +141,7 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 			if len(insert) > 256 {
 				shortInsert = insert[:256] + "..."
 			}
+			fmt.Println("insert query:", insert)
 			return fmt.Errorf("executing insert %s: %w", shortInsert, err)
 		}
 		acc.rowValues = acc.rowValues[:0]
