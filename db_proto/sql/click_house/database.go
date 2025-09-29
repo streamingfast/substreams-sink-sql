@@ -15,9 +15,9 @@ import (
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
-	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
+	"github.com/streamingfast/substreams-sink-sql/dsn"
 	"go.uber.org/zap"
 )
 
@@ -29,7 +29,7 @@ type Database struct {
 	logger         *zap.Logger
 	dialect        *DialectClickHouse
 	cachedClient   *ch.Client
-	dsn            *db.DSN
+	dsn            *dsn.DSN
 	ctx            context.Context
 	inserter       *AccumulatorInserter
 }
@@ -37,7 +37,7 @@ type Database struct {
 func NewDatabase(
 	ctx context.Context,
 	schema *schema.Schema,
-	dsn *db.DSN,
+	dsn *dsn.DSN,
 	moduleOutputType string,
 	rootMessageDescriptor *desc.MessageDescriptor,
 	sinkInfoFolder string,
@@ -78,7 +78,7 @@ func (d *Database) Open() error {
 	return nil
 }
 
-func newClient(dsn *db.DSN) (*ch.Client, error) {
+func newClient(dsn *dsn.DSN) (*ch.Client, error) {
 	chOption := ch.Options{
 		Address:     fmt.Sprintf("%s:%d", dsn.Host, dsn.Port),
 		Database:    dsn.Database,
@@ -114,13 +114,24 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 	return client, nil
 }
 
+func (d *Database) clientNoCache(dsn *dsn.DSN) (*ch.Client, error) {
+	d.logger.Info("creating clickhouse client no cache", zap.String("connection_string", d.dsn.ConnString()))
+	client, err := newClient(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("creating clickhouse client: %w", err)
+	}
+	return client, nil
+}
+
 func (d *Database) client() (*ch.Client, error) {
 	if d.cachedClient == nil || d.cachedClient.IsClosed() {
+		d.logger.Info("creating clickhouse client", zap.String("connection_string", d.dsn.ConnString()))
 		client, err := newClient(d.dsn)
 		if err != nil {
 			return nil, fmt.Errorf("creating clickhouse client: %w", err)
 		}
 		d.cachedClient = client
+		return client, nil
 
 	}
 
@@ -128,38 +139,40 @@ func (d *Database) client() (*ch.Client, error) {
 }
 
 func (d *Database) CreateDatabase(useConstraints bool) error {
-	client, err := d.client()
+	dsn := d.dsn.Clone()
+	dsn.Database = "default"
+	client, err := d.clientNoCache(dsn)
 	if err != nil {
-		return fmt.Errorf("creating clickhouse client: %w", err)
+		return fmt.Errorf("creating clickhouse client for default database: %w", err)
 	}
 
-	d.logger.Info("creating database", zap.String("schema_name", d.schema.Name))
+	d.logger.Info("creating database", zap.String("database_name", d.dsn.Database))
 
 	err = client.Ping(d.ctx)
 	if err != nil {
 		return fmt.Errorf("pinging clickhouse: %w", err)
 	}
 
-	client, err = d.client()
-	if err != nil {
-		return fmt.Errorf("getting clickhouse client: %w", err)
-	}
-
 	if err := client.Do(d.ctx, ch.Query{
-		Body: fmt.Sprintf(staticSqlCreatDatabase, d.schema.Name),
+		Body: fmt.Sprintf(staticSqlCreatDatabase, d.dsn.Database),
 	}); err != nil {
 		return fmt.Errorf("executing create database sql: %w", err)
 	}
 
-	d.logger.Info("database created", zap.String("schema_name", d.schema.Name))
+	client, err = d.client()
+	if err != nil {
+		return fmt.Errorf("creating clickhouse client for database %q: %w", d.dsn.Database, err)
+	}
+
+	d.logger.Info("database created", zap.String("database_name", d.dsn.Database))
 
 	if err := client.Do(d.ctx, ch.Query{
-		Body: fmt.Sprintf(staticSqlCreateBlock, d.schema.Name),
+		Body: fmt.Sprintf(staticSqlCreateBlock),
 	}); err != nil {
 		return fmt.Errorf("executing create block sql: %w", err)
 	}
 
-	d.logger.Info("block table created", zap.String("schema_name", d.schema.Name))
+	d.logger.Info("block table created", zap.String("database_name", d.dsn.Database))
 
 	for _, statement := range d.dialect.CreateTableSql {
 		if err := client.Do(d.ctx, ch.Query{
@@ -167,7 +180,7 @@ func (d *Database) CreateDatabase(useConstraints bool) error {
 		}); err != nil {
 			return fmt.Errorf("executing create table sql: %w %q", err, statement)
 		}
-		d.logger.Info("table created", zap.String("table_name", statement), zap.String("schema_name", d.schema.Name))
+		d.logger.Info("table created", zap.String("table_name", statement), zap.String("database_name", d.dsn.Database))
 	}
 
 	return nil
@@ -217,26 +230,26 @@ func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time
 	return nil
 }
 
-func (d *Database) FetchSinkInfo(schemaName string) (*sql.SinkInfo, error) {
-	fileName := fmt.Sprintf("%s_schema_hash.txt", schemaName)
-	schemaFilePath := path.Join(d.sinkInfoFolder, fileName)
-	file, err := os.Open(schemaFilePath)
+func (d *Database) FetchSinkInfo(databaseName string) (*sql.SinkInfo, error) {
+	fileName := fmt.Sprintf("%s_db_hash.txt", databaseName)
+	filePath := path.Join(d.sinkInfoFolder, fileName)
+	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			d.logger.Warn("schema hash file does not exist", zap.String("file_path", schemaFilePath))
+			d.logger.Warn("database hash file does not exist", zap.String("file_path", filePath))
 			return nil, nil
 		}
-		return nil, fmt.Errorf("opening schema hash file: %w", err)
+		return nil, fmt.Errorf("opening database hash file: %w", err)
 	}
 	defer file.Close()
 
-	var schemaHash string
-	_, err = fmt.Fscanf(file, "%s", &schemaHash)
+	var hash string
+	_, err = fmt.Fscanf(file, "%s", &hash)
 	if err != nil {
 		return nil, fmt.Errorf("reading schema hash from file: %w", err)
 	}
 
-	return &sql.SinkInfo{SchemaHash: schemaHash}, nil
+	return &sql.SinkInfo{SchemaHash: hash}, nil
 }
 
 func (d *Database) StoreSinkInfo(schemaName string, schemaHash string) error {
@@ -331,10 +344,10 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 	d.logger.Info("undoing blocks", zap.String("table", "_block_"), zap.Uint64("last_valid_block_num", lastValidBlockNum))
 	start := time.Now()
 	insertDeleteBlocks := fmt.Sprintf(`
-		INSERT INTO %s._blocks_
+		INSERT INTO _blocks_
 		SELECT number, hash, timestamp, %d, true
-		FROM %s._blocks_ WHERE number > %d
-		`, d.schema.Name, version, d.schema.Name, lastValidBlockNum)
+		FROM _blocks_ WHERE number > %d
+		`, version, lastValidBlockNum)
 
 	err = client.Do(d.ctx, ch.Query{
 		Body: insertDeleteBlocks,
@@ -347,7 +360,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 	for _, table := range tables {
 		d.logger.Info("undoing blocks", zap.String("table", table.Name), zap.Uint64("last_valid_block_num", lastValidBlockNum))
 		start := time.Now()
-		tableFullName := d.dialect.FullTableName(table)
+		tableName := table.Name
 		fields := ""
 
 		if table.ChildOf != nil {
@@ -376,7 +389,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 			INSERT INTO %s
 			SELECT %s, %s, %d, true %s
 			FROM %s WHERE %s > %d
-			`, tableFullName, sql.DialectFieldBlockNumber, sql.DialectFieldBlockTimestamp, version, fields, tableFullName, sql.DialectFieldBlockNumber, lastValidBlockNum)
+			`, tableName, sql.DialectFieldBlockNumber, sql.DialectFieldBlockTimestamp, version, fields, tableName, sql.DialectFieldBlockNumber, lastValidBlockNum)
 
 		err := client.Do(d.ctx, ch.Query{
 			Body: query,

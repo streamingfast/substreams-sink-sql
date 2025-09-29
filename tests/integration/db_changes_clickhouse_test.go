@@ -13,14 +13,13 @@ import (
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
+	"github.com/streamingfast/substreams-sink-sql/dsn"
 	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
 	"github.com/streamingfast/substreams/manifest"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/anypb"
 )
-
-
 
 func TestClickhouseSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	tests := []sinkerTestCase{
@@ -114,7 +113,7 @@ func runClickhouseSinkerTest(
 	tempDB.Close()
 
 	// Parse original DSN and modify it to use the new database
-	parsedDSN, parseErr := db2.ParseDSN(originalDSN)
+	parsedDSN, parseErr := dsn.ParseDSN(originalDSN)
 	require.NoError(t, parseErr, "parsing original DSN")
 
 	// Update the database field and build new connection string
@@ -195,7 +194,7 @@ func runClickhouseSinkerTest(
 
 	if expected != nil {
 		// Parse DSN to get clean connection string without schemaName
-		parsedDSN, err := db2.ParseDSN(dsnRaw)
+		parsedDSN, err := dsn.ParseDSN(dsnRaw)
 		require.NoError(t, err)
 
 		// Connect to database and check results
@@ -208,7 +207,7 @@ func runClickhouseSinkerTest(
 
 	if expectedFinalCursor != "" {
 		// Parse DSN to get clean connection string without schemaName
-		parsedDSN, err := db2.ParseDSN(dsnRaw)
+		parsedDSN, err := dsn.ParseDSN(dsnRaw)
 		require.NoError(t, err)
 
 		// Connect to database to read cursor directly

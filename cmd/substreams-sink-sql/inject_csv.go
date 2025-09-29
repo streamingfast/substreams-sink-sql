@@ -20,6 +20,7 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/dstore"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
+	"github.com/streamingfast/substreams-sink-sql/dsn"
 	"go.uber.org/zap"
 )
 
@@ -50,7 +51,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid block range %q: %w", args[3], err)
 	}
 
-	sqlDSN, err := db2.ParseDSN(psqlDSN)
+	sqlDSN, err := dsn.ParseDSN(psqlDSN)
 	if err != nil {
 		return fmt.Errorf("invalid sql DSN %q: %w", psqlDSN, err)
 	}

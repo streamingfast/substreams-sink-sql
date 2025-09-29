@@ -12,6 +12,7 @@ import (
 	sink "github.com/streamingfast/substreams-sink"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
+	dsn2 "github.com/streamingfast/substreams-sink-sql/dsn"
 	"github.com/streamingfast/substreams/manifest"
 )
 
@@ -112,7 +113,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("new base sinker: %w", err)
 	}
 
-	dsn, err := db2.ParseDSN(dsnString)
+	dsn, err := dsn2.ParseDSN(dsnString)
 	if err != nil {
 		return fmt.Errorf("parse dsn: %w", err)
 	}

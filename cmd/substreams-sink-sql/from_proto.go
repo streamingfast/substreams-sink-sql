@@ -11,9 +11,9 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	sinksql "github.com/streamingfast/substreams-sink-sql"
-	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
+	"github.com/streamingfast/substreams-sink-sql/dsn"
 	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
 	"github.com/streamingfast/substreams-sink-sql/services"
 	"github.com/streamingfast/substreams/manifest"
@@ -99,7 +99,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		blockRange += endBlock
 	}
 
-	dsn, err := db.ParseDSN(dsnString)
+	dsn, err := dsn.ParseDSN(dsnString)
 	if err != nil {
 		return fmt.Errorf("parsing dsn: %w", err)
 	}

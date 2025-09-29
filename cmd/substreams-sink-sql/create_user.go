@@ -11,6 +11,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
+	dsn2 "github.com/streamingfast/substreams-sink-sql/dsn"
 )
 
 var createUserCmd = Command(createUserE,
@@ -48,7 +49,7 @@ func createUserE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("non-empty password is required")
 	}
 
-	dsn, err := db2.ParseDSN(dsnString)
+	dsn, err := dsn2.ParseDSN(dsnString)
 	if err != nil {
 		return fmt.Errorf("parsing dsn: %w", err)
 	}

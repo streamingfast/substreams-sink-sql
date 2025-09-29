@@ -17,7 +17,7 @@ const staticSqlCreatDatabase = `
 	CREATE DATABASE IF NOT EXISTS %s;
 `
 const staticSqlCreateBlock = `
-	CREATE TABLE IF NOT EXISTS %s._blocks_  (
+	CREATE TABLE IF NOT EXISTS _blocks_  (
 		number    UInt64,
 		hash      text,
 		timestamp timestamp,
@@ -74,7 +74,7 @@ func (d *DialectClickHouse) init() error {
 func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	var sb strings.Builder
 
-	tableName := d.FullTableName(table)
+	tableName := table.Name
 
 	sb.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", tableName))
 
