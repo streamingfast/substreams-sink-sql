@@ -10,9 +10,9 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
-	"github.com/streamingfast/substreams-sink-sql/dsn"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +28,7 @@ type Database struct {
 	useConstraints bool
 }
 
-func NewDatabase(schema *schema.Schema, dsn *dsn.DSN, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, useConstraints bool, logger *zap.Logger) (*Database, error) {
+func NewDatabase(schema *schema.Schema, dsn *db.DSN, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, useConstraints bool, logger *zap.Logger) (*Database, error) {
 	logger = logger.Named("postgres")
 
 	connectionString := dsn.ConnString()

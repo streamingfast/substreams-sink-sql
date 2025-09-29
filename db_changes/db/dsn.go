@@ -1,4 +1,4 @@
-package dsn
+package db
 
 import (
 	"fmt"
@@ -78,12 +78,23 @@ func ParseDSN(dsn string) (*DSN, error) {
 	}
 
 	schemaName := d.Options.RemoveOr("schemaName", "")
-	if schemaName == "" && driver != "clickhouse" {
-		schemaName = "public"
-	}
 
-	// For other databases (PostgreSQL), schemaName is separate from database
-	d.schema = schemaName
+	if driver == "clickhouse" {
+		// For ClickHouse, store the target database name in schema, but keep
+		// connecting to the original database to allow CREATE DATABASE commands
+		if schemaName != "" {
+			d.schema = schemaName
+		} else {
+			d.schema = database
+		}
+	} else {
+		if schemaName == "" {
+			schemaName = "public"
+		}
+
+		// For other databases (PostgreSQL), schemaName is separate from database
+		d.schema = schemaName
+	}
 
 	return d, nil
 }
@@ -97,7 +108,7 @@ func (c *DSN) ConnString() string {
 		scheme := "clickhouse"
 		host := c.Host
 
-		if host == "localhost" {
+		if len(c.Options) > 0 && host == "localhost" {
 			// Weird handling to keep old behavior while we discuss the right way to handle that
 			// In the old code, of there was options set and the host was localhost, we were switching
 			// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
@@ -129,25 +140,6 @@ func (c *DSN) ConnString() string {
 
 func (c *DSN) Schema() string {
 	return c.schema
-}
-
-func (c *DSN) Clone() *DSN {
-	opts := make(DSNOptions)
-	for k, vs := range c.Options {
-		opts[k] = append([]string(nil), vs...)
-	}
-
-	return &DSN{
-		driver:   c.driver,
-		original: c.original,
-		Host:     c.Host,
-		Port:     c.Port,
-		Username: c.Username,
-		Password: c.Password,
-		Database: c.Database,
-		Options:  opts,
-		schema:   c.schema,
-	}
 }
 
 // DSNOptions is a thin wrapper around url.Values to provide helper methods and

@@ -7,12 +7,12 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	clickhouse "github.com/streamingfast/substreams-sink-sql/db_proto/sql/click_house"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
-	"github.com/streamingfast/substreams-sink-sql/dsn"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -48,7 +48,7 @@ func SinkerFactory(
 	options SinkerFactoryOptions,
 ) SinkerFactoryFunc {
 	return func(ctx context.Context, dsnString string, schemaName string, logger *zap.Logger, tracer logging.Tracer) (*Sinker, error) {
-		dsn, err := dsn.ParseDSN(dsnString)
+		dsn, err := db.ParseDSN(dsnString)
 		if err != nil {
 			return nil, fmt.Errorf("parsing dsn: %w", err)
 		}
@@ -93,15 +93,7 @@ func SinkerFactory(
 
 		}
 
-		var sinkSchemaName string
-		if schema != nil {
-			sinkSchemaName = schema.Name
-		} else {
-			// For ClickHouse (schema-less), use the provided schemaName parameter
-			sinkSchemaName = schemaName
-		}
-
-		sinkInfo, err := database.FetchSinkInfo(sinkSchemaName)
+		sinkInfo, err := database.FetchSinkInfo(schema.Name)
 		if err != nil {
 			return nil, fmt.Errorf("fetching sink info: %w", err)
 		}
@@ -118,7 +110,7 @@ func SinkerFactory(
 				return nil, fmt.Errorf("creating database: %w", err)
 			}
 
-			err = database.StoreSinkInfo(sinkSchemaName, database.GetDialect().SchemaHash())
+			err = database.StoreSinkInfo(schemaName, database.GetDialect().SchemaHash())
 			if err != nil {
 				database.RollbackTransaction()
 				return nil, fmt.Errorf("storing sink info: %w", err)
@@ -130,15 +122,15 @@ func SinkerFactory(
 			migrationNeeded := sinkInfo.SchemaHash != database.GetDialect().SchemaHash()
 			if migrationNeeded {
 
-				tempSchemaName := sinkSchemaName + "_" + database.GetDialect().SchemaHash()
+				tempSchemaName := schema.Name + "_" + database.GetDialect().SchemaHash()
 				tempSinkInfo, err := database.FetchSinkInfo(tempSchemaName)
 				if err != nil {
 					return nil, fmt.Errorf("fetching temp schema sink info: %w", err)
 				}
 				if tempSinkInfo != nil {
-					hash, err := database.DatabaseHash(sinkSchemaName)
+					hash, err := database.DatabaseHash(schema.Name)
 					if err != nil {
-						return nil, fmt.Errorf("fetching schema %q hash: %w", sinkSchemaName, err)
+						return nil, fmt.Errorf("fetching schema %q hash: %w", schema.Name, err)
 					}
 					dbTempHash, err := database.DatabaseHash(tempSchemaName)
 					if err != nil {
@@ -146,13 +138,13 @@ func SinkerFactory(
 					}
 
 					if hash != dbTempHash {
-						return nil, fmt.Errorf("schema %s and temp schema %s have different hash", sinkSchemaName, tempSchemaName)
+						return nil, fmt.Errorf("schema %s and temp schema %s have different hash", schema.Name, tempSchemaName)
 					}
 					err = database.BeginTransaction()
 					if err != nil {
 						return nil, fmt.Errorf("begin transaction: %w", err)
 					}
-					err = database.UpdateSinkInfoHash(sinkSchemaName, tempSinkInfo.SchemaHash)
+					err = database.UpdateSinkInfoHash(schemaName, tempSinkInfo.SchemaHash)
 					if err != nil {
 						database.RollbackTransaction()
 						return nil, fmt.Errorf("updating sink info hash: %w", err)

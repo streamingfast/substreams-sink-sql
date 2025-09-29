@@ -13,7 +13,6 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
-	dsn2 "github.com/streamingfast/substreams-sink-sql/dsn"
 )
 
 var sinkToolsCmd = Group(
@@ -172,7 +171,7 @@ func toolsCreateLoader(cmd *cobra.Command) (*db2.Loader, error) {
 	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 	historyTableName := sflags.MustGetString(cmd, "history-table")
 
-	dsn, err := dsn2.ParseDSN(dsnString)
+	dsn, err := db2.ParseDSN(dsnString)
 	if err != nil {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
