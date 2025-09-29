@@ -18,6 +18,7 @@ type Column struct {
 	IsRepeated      bool
 	IsExtension     bool
 	IsMessage       bool
+	IsOptional      bool
 	Message         string
 }
 
@@ -28,6 +29,7 @@ func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
 		IsRepeated:      d.IsRepeated(),
 		IsMessage:       d.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE,
 		IsExtension:     d.IsExtension(),
+		IsOptional:      d.IsProto3Optional(),
 	}
 
 	fieldInfo := proto.FieldInfo(d)

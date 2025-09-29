@@ -51,6 +51,12 @@ message TypesTest {
   string string_field = 15;
   bytes bytes_field = 16;
 
+  optional string optional_string_set = 17;
+  optional string optional_string_not_set = 18;
+  optional int32 optional_int32_field_set = 19;
+  optional int32 optional_int32_field_not_set = 20;
+
+
   google.protobuf.Timestamp timestamp_field = 30;
 
   // Array fields for all supported proto types

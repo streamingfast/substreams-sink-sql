@@ -78,8 +78,9 @@ func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, or
 func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 	for idx, fieldDescriptor := range descriptor.GetFields() {
 
-		if fieldDescriptor.GetOneOf() != nil {
+		if fieldDescriptor.GetOneOf() != nil && !fieldDescriptor.IsProto3Optional() {
 			continue
+
 		}
 
 		if fieldDescriptor.IsRepeated() {

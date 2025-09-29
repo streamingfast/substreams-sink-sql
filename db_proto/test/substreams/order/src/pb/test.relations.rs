@@ -63,6 +63,14 @@ pub struct TypesTest {
     pub string_field: ::prost::alloc::string::String,
     #[prost(bytes="vec", tag="16")]
     pub bytes_field: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, optional, tag="17")]
+    pub optional_string_set: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag="18")]
+    pub optional_string_not_set: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(int32, optional, tag="19")]
+    pub optional_int32_field_set: ::core::option::Option<i32>,
+    #[prost(int32, optional, tag="20")]
+    pub optional_int32_field_not_set: ::core::option::Option<i32>,
     #[prost(message, optional, tag="30")]
     pub timestamp_field: ::core::option::Option<::prost_types::Timestamp>,
     /// Array fields for all supported proto types

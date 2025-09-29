@@ -84,6 +84,10 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 		return DataType(fmt.Sprintf("Array(%s)", baseType))
 	}
 
+	if fd.IsProto3Optional() {
+		return DataType(fmt.Sprintf("Nullable(%s)", baseType))
+	}
+
 	return baseType
 }
 
