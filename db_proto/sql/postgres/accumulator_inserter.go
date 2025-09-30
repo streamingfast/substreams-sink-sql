@@ -110,7 +110,7 @@ func (i *AccumulatorInserter) insert(table string, values []any, database *Datab
 		return nil
 	}
 	for _, value := range values {
-		v = append(v, ValueToString(value))
+		v = append(v, ValueToString(value, database.dialect.bytesEncoding))
 	}
 	accumulator := i.accumulators[table]
 	if accumulator == nil {

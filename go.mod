@@ -51,6 +51,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.12.0 // indirect
 	github.com/bobg/go-generics/v3 v3.5.0 // indirect
 	github.com/bobg/go-generics/v4 v4.1.2 // indirect
+	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect

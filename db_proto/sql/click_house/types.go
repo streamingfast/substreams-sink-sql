@@ -1,7 +1,6 @@
 package clickhouse
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"github.com/ClickHouse/ch-go/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -43,7 +43,7 @@ func (s DataType) String() string {
 	return string(s)
 }
 
-func MapFieldType(fd *desc.FieldDescriptor) DataType {
+func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataType {
 	t := fd.GetType()
 	var baseType DataType
 
@@ -91,7 +91,7 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 	return baseType
 }
 
-func ColInputForColumn(fd *desc.FieldDescriptor) proto.ColInput {
+func ColInputForColumn(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) proto.ColInput {
 	var baseInput proto.ColInput
 
 	switch fd.GetType() {
@@ -121,7 +121,11 @@ func ColInputForColumn(fd *desc.FieldDescriptor) proto.ColInput {
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
 		baseInput = &proto.ColStr{}
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
-		baseInput = &proto.ColBytes{}
+		if bytesEncoding.IsStringType() {
+			baseInput = &proto.ColStr{}
+		} else {
+			baseInput = &proto.ColBytes{}
+		}
 	default:
 		panic(fmt.Sprintf("unsupported type: %s", fd.GetType()))
 	}
@@ -157,7 +161,7 @@ func ColInputForColumn(fd *desc.FieldDescriptor) proto.ColInput {
 	return baseInput
 }
 
-func ValueToString(value any) (s string) {
+func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
 	switch v := value.(type) {
 	case string:
 		s = "'" + strings.ReplaceAll(strings.ReplaceAll(v, "'", "''"), "\\", "\\\\") + "'"
@@ -178,7 +182,16 @@ func ValueToString(value any) (s string) {
 	case float32:
 		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case []uint8:
-		s = "'" + base64.StdEncoding.EncodeToString(v) + "'"
+		if bytesEncoding == bytes.EncodingRaw {
+			// For raw encoding, return as hex string for SQL
+			s = "unhex('" + fmt.Sprintf("%x", v) + "')"
+		} else {
+			encoded, err := bytesEncoding.EncodeBytes(v)
+			if err != nil {
+				panic(fmt.Sprintf("failed to encode bytes: %v", err))
+			}
+			s = "'" + encoded.(string) + "'"
+		}
 	case bool:
 		s = strconv.FormatBool(v)
 	case time.Time:

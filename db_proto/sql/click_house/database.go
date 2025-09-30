@@ -15,6 +15,7 @@ import (
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
@@ -32,6 +33,7 @@ type Database struct {
 	dsn            *db.DSN
 	ctx            context.Context
 	inserter       *AccumulatorInserter
+	bytesEncoding  bytes.Encoding
 }
 
 func NewDatabase(
@@ -43,6 +45,7 @@ func NewDatabase(
 	sinkInfoFolder string,
 	cursorFilePath string,
 	useProtoOptions bool,
+	bytesEncoding bytes.Encoding,
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*Database, error) {
@@ -50,7 +53,7 @@ func NewDatabase(
 	if err != nil {
 		return nil, fmt.Errorf("creating base database: %w", err)
 	}
-	dialect, err := NewDialectClickHouse(schema, logger)
+	dialect, err := NewDialectClickHouse(schema, bytesEncoding, logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating dialect: %w", err)
 	}
@@ -64,6 +67,7 @@ func NewDatabase(
 		sinkInfoFolder: sinkInfoFolder,
 		cursorFilePath: cursorFilePath,
 		logger:         logger,
+		bytesEncoding:  bytesEncoding,
 	}
 	inserter, err := NewAccumulatorInserter(database, logger, tracer)
 	if err != nil {

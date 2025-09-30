@@ -36,6 +36,7 @@ func AddCommonDatabaseChangesFlags(flags *pflag.FlagSet) {
 	flags.String("cursors-table", "cursors", "[Operator] Name of the table to use for storing cursors")
 	flags.String("history-table", "substreams_history", "[Operator] Name of the table to use for storing block history, used to handle reorgs")
 	flags.String("clickhouse-cluster", "", "[Operator] If non-empty, a 'ON CLUSTER <cluster>' clause will be applied when setting up tables in Clickhouse. It will also replace the table engine with it's replicated counterpart (MergeTree will be replaced with ReplicatedMergeTree for example).")
+	flags.String("bytes-encoding", "raw", "[Schema] Encoding for protobuf bytes fields: raw, hex, 0xhex, base64, base58. Non-raw encodings store data as string type in database.")
 }
 
 func readBlockRangeArgument(in string) (blockRange *bstream.Range, err error) {

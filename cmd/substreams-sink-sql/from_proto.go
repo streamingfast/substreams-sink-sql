@@ -11,6 +11,7 @@ import (
 	"github.com/streamingfast/cli/sflags"
 	sink "github.com/streamingfast/substreams-sink"
 	sinksql "github.com/streamingfast/substreams-sink-sql"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/proto"
@@ -37,6 +38,7 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.Int("block-batch-size", 25, "number of blocks to process at a time")
 		flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
 		flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
+		flags.String("bytes-encoding", "raw", "Encoding for protobuf bytes fields (raw, hex, 0xhex, base64, base58)")
 	}),
 )
 
@@ -63,6 +65,12 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 
 	useConstraints := !sflags.MustGetBool(cmd, "no-constraints")
 	blockBatchSize := sflags.MustGetInt(cmd, "block-batch-size")
+
+	encodingStr := sflags.MustGetString(cmd, "bytes-encoding")
+	encoding, err := bytes.ParseEncoding(encodingStr)
+	if err != nil {
+		return fmt.Errorf("invalid bytes encoding %q: %w", encodingStr, err)
+	}
 
 	useTransactions := true
 	parallel := false
@@ -183,6 +191,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		UseTransactions: useTransactions,
 		BlockBatchSize:  blockBatchSize,
 		Parallel:        parallel,
+		Encoding:        encoding,
 		Clickhouse: db_proto.SinkerFactoryClickhouse{
 			SinkInfoFolder: sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
 			CursorFilePath: sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),

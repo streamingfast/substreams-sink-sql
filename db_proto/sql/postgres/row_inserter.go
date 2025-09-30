@@ -137,14 +137,22 @@ func (i *RowInserter) insert(table string, values []any, database *Database) err
 		case uint64:
 			values[i] = strconv.FormatUint(v, 10)
 		case []uint8:
-			values[i] = base64.StdEncoding.EncodeToString(v)
+			if database.dialect.bytesEncoding.IsStringType() {
+				encoded, err := database.dialect.bytesEncoding.EncodeBytes(v)
+				if err != nil {
+					return fmt.Errorf("failed to encode bytes: %v", err)
+				}
+				values[i] = encoded.(string)
+				continue
+			}
+			values[i] = "'" + base64.StdEncoding.EncodeToString(v) + "'"
 		case *timestamppb.Timestamp:
 			values[i] = "'" + v.AsTime().Format(time.RFC3339) + "'"
 		case []interface{}:
 			// Handle arrays by converting to PostgreSQL array format
 			var elements []string
 			for _, elem := range v {
-				elements = append(elements, ValueToString(elem))
+				elements = append(elements, ValueToString(elem, database.dialect.bytesEncoding))
 			}
 			values[i] = "{" + strings.Join(elements, ",") + "}"
 		}

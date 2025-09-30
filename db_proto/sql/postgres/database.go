@@ -10,6 +10,7 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
@@ -28,7 +29,7 @@ type Database struct {
 	useConstraints bool
 }
 
-func NewDatabase(schema *schema.Schema, dsn *db.DSN, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, useConstraints bool, logger *zap.Logger) (*Database, error) {
+func NewDatabase(schema *schema.Schema, dsn *db.DSN, moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, useConstraints bool, bytesEncoding bytes.Encoding, logger *zap.Logger) (*Database, error) {
 	logger = logger.Named("postgres")
 
 	connectionString := dsn.ConnString()
@@ -42,7 +43,7 @@ func NewDatabase(schema *schema.Schema, dsn *db.DSN, moduleOutputType string, ro
 		return nil, fmt.Errorf("database not reachable: %w", err)
 	}
 
-	dialect, err := NewDialectPostgres(schema, logger)
+	dialect, err := NewDialectPostgres(schema, bytesEncoding, logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating postgres dialect: %w", err)
 	}

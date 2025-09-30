@@ -7,6 +7,7 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	clickhouse "github.com/streamingfast/substreams-sink-sql/db_proto/sql/click_house"
@@ -25,6 +26,7 @@ type SinkerFactoryOptions struct {
 	UseTransactions bool
 	BlockBatchSize  int
 	Parallel        bool
+	Encoding        bytes.Encoding
 	Clickhouse      SinkerFactoryClickhouse
 }
 
@@ -38,6 +40,9 @@ func (o SinkerFactoryOptions) Defaults() SinkerFactoryOptions {
 		o.BlockBatchSize = 25
 	}
 	o.UseTransactions = true
+	if o.Encoding == 0 {
+		o.Encoding = bytes.EncodingRaw
+	}
 	return o
 }
 
@@ -67,7 +72,7 @@ func SinkerFactory(
 
 		switch dsn.Driver() {
 		case "postgres":
-			database, err = postgres.NewDatabase(schema, dsn, outputModuleName, rootMessageDescriptor, options.UseProtoOption, options.UseConstraints, logger)
+			database, err = postgres.NewDatabase(schema, dsn, outputModuleName, rootMessageDescriptor, options.UseProtoOption, options.UseConstraints, options.Encoding, logger)
 			if err != nil {
 				return nil, fmt.Errorf("creating postgres database: %w", err)
 			}
@@ -82,6 +87,7 @@ func SinkerFactory(
 				options.Clickhouse.SinkInfoFolder,
 				options.Clickhouse.CursorFilePath,
 				true,
+				options.Encoding,
 				logger,
 				tracer,
 			)

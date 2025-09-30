@@ -11,6 +11,7 @@ import (
 	"github.com/ClickHouse/ch-go/proto"
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/logging/zapx"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,10 +25,11 @@ type accumulator struct {
 }
 
 type AccumulatorInserter struct {
-	accumulators map[string]*accumulator
-	cursorStmt   *sql.Stmt
-	logger       *zap.Logger
-	tracer       logging.Tracer
+	accumulators  map[string]*accumulator
+	cursorStmt    *sql.Stmt
+	logger        *zap.Logger
+	tracer        logging.Tracer
+	bytesEncoding bytes.Encoding
 }
 
 func NewAccumulatorInserter(database *Database, logger *zap.Logger, tracer logging.Tracer) (*AccumulatorInserter, error) {
@@ -38,9 +40,10 @@ func NewAccumulatorInserter(database *Database, logger *zap.Logger, tracer loggi
 		return nil, fmt.Errorf("creating accumulators: %w", err)
 	}
 	return &AccumulatorInserter{
-		accumulators: accumulators,
-		logger:       logger,
-		tracer:       tracer,
+		accumulators:  accumulators,
+		logger:        logger,
+		tracer:        tracer,
+		bytesEncoding: database.bytesEncoding,
 	}, nil
 }
 
@@ -92,7 +95,7 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 			pk := table.PrimaryKey
 			primaryName = pk.Name
 
-			input[pk.Name] = ColInputForColumn(pk.FieldDescriptor)
+			input[pk.Name] = ColInputForColumn(pk.FieldDescriptor, dialect.bytesEncoding)
 			columns[4] = pk.Name
 		}
 
@@ -106,7 +109,7 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 			for _, parentField := range parentTable.Columns {
 
 				if parentField.Name == table.ChildOf.ParentTableField {
-					input[parentField.Name] = ColInputForColumn(parentField.FieldDescriptor)
+					input[parentField.Name] = ColInputForColumn(parentField.FieldDescriptor, dialect.bytesEncoding)
 					columns[offset] = parentField.Name
 					fieldFound = true
 					break
@@ -124,7 +127,7 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 				skipCount++
 				continue
 			}
-			input[column.Name] = ColInputForColumn(column.FieldDescriptor)
+			input[column.Name] = ColInputForColumn(column.FieldDescriptor, dialect.bytesEncoding)
 			columns[i+offset-skipCount] = column.Name
 		}
 
@@ -183,7 +186,16 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 		case *proto.ColFloat64:
 			input.Append(value.(float64))
 		case *proto.ColStr:
-			input.Append(value.(string))
+			if bytesValue, ok := value.([]byte); ok {
+				// Convert []byte to string using the bytes encoder
+				encoded, err := i.bytesEncoding.EncodeBytes(bytesValue)
+				if err != nil {
+					panic(fmt.Sprintf("failed to encode bytes for column %s of table %s: %v", colName, table, err))
+				}
+				input.Append(encoded.(string))
+			} else {
+				input.Append(value.(string))
+			}
 		case *proto.ColBytes:
 			input.Append(value.([]byte))
 		case *proto.ColBool:

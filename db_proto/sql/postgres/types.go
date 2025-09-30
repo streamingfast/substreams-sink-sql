@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -24,6 +25,7 @@ const (
 	TypeText      DataType = "TEXT"
 	TypeBlob      DataType = "BLOB"
 	TypeVarchar   DataType = "VARCHAR(255)"
+	TypeBytea     DataType = "BYTEA"
 	TypeTimestamp DataType = "TIMESTAMP"
 )
 
@@ -40,7 +42,7 @@ func IsWellKnownType(fd *desc.FieldDescriptor) bool {
 	}
 }
 
-func MapFieldType(fd *desc.FieldDescriptor) DataType {
+func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataType {
 	t := fd.GetType()
 	var baseType DataType
 
@@ -69,7 +71,11 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
 		baseType = TypeVarchar
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
-		baseType = TypeText
+		if bytesEncoding.IsStringType() {
+			baseType = TypeText
+		} else {
+			baseType = TypeBytea
+		}
 	case descriptor.FieldDescriptorProto_TYPE_ENUM:
 		baseType = TypeText
 	default:
@@ -84,7 +90,7 @@ func MapFieldType(fd *desc.FieldDescriptor) DataType {
 	return baseType
 }
 
-func ValueToString(value any) (s string) {
+func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
 	switch v := value.(type) {
 	case string:
 		s = "'" + strings.ReplaceAll(strings.ReplaceAll(v, "'", "''"), "\\", "\\\\") + "'"
@@ -105,7 +111,16 @@ func ValueToString(value any) (s string) {
 	case float32:
 		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
 	case []uint8:
-		s = "'" + base64.StdEncoding.EncodeToString(v) + "'"
+		if bytesEncoding == bytes.EncodingRaw {
+			// For raw encoding, use PostgreSQL bytea format
+			s = "'" + base64.StdEncoding.EncodeToString(v) + "'"
+		} else {
+			encoded, err := bytesEncoding.EncodeBytes(v)
+			if err != nil {
+				panic(fmt.Sprintf("failed to encode bytes: %v", err))
+			}
+			s = "'" + encoded.(string) + "'"
+		}
 	case bool:
 		s = strconv.FormatBool(v)
 	case time.Time:
@@ -116,7 +131,7 @@ func ValueToString(value any) (s string) {
 	case []interface{}:
 		var elements []string
 		for _, elem := range v {
-			elements = append(elements, ValueToString(elem))
+			elements = append(elements, ValueToString(elem, bytesEncoding))
 		}
 		s = "array[" + strings.Join(elements, ",") + "]"
 	default:

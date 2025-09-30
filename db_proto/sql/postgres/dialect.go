@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
@@ -33,16 +34,18 @@ const postgresStaticSql = `
 
 type DialectPostgres struct {
 	*sql2.BaseDialect
-	schemaName string
+	schemaName    string
+	bytesEncoding bytes.Encoding
 	//database   *Database
 }
 
-func NewDialectPostgres(schema *schema.Schema, logger *zap.Logger) (*DialectPostgres, error) {
+func NewDialectPostgres(schema *schema.Schema, bytesEncoding bytes.Encoding, logger *zap.Logger) (*DialectPostgres, error) {
 	logger = logger.Named("postgres dialect")
 
 	d := &DialectPostgres{
-		BaseDialect: sql2.NewBaseDialect(schema.TableRegistry, logger),
-		schemaName:  schema.Name,
+		BaseDialect:   sql2.NewBaseDialect(schema.TableRegistry, logger),
+		schemaName:    schema.Name,
+		bytesEncoding: bytesEncoding,
 	}
 
 	err := d.init()
@@ -87,7 +90,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
 		d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
-		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor)))
+		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor, d.bytesEncoding)))
 	}
 
 	if table.ChildOf != nil {
@@ -100,7 +103,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 			if parentField.Name == table.ChildOf.ParentTableField {
 
-				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor)))
+				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor, d.bytesEncoding)))
 
 				foreignKey := &sql2.ForeignKey{
 					Name:         "fk_" + table.ChildOf.ParentTable,
@@ -174,7 +177,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 			}
 			d.AddForeignKeySql(table.Name, foreignKey.String())
 		}
-		fieldType := MapFieldType(f.FieldDescriptor)
+		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding)
 		if f.IsUnique {
 			d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, f.Name, fieldQuotedName))
 		}

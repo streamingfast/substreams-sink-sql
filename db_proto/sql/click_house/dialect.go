@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/streamingfast/substreams-sink-sql/bytes"
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	pbSchmema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
@@ -35,13 +36,15 @@ const clickhouseTableOptionsErrorMsg = "schema annotation 'clickhouse_table_opti
 
 type DialectClickHouse struct {
 	*sql2.BaseDialect
-	schemaName string
+	schemaName    string
+	bytesEncoding bytes.Encoding
 }
 
-func NewDialectClickHouse(schema *schema.Schema, logger *zap.Logger) (*DialectClickHouse, error) {
+func NewDialectClickHouse(schema *schema.Schema, bytesEncoding bytes.Encoding, logger *zap.Logger) (*DialectClickHouse, error) {
 	d := &DialectClickHouse{
-		BaseDialect: sql2.NewBaseDialect(schema.TableRegistry, logger),
-		schemaName:  schema.Name,
+		BaseDialect:   sql2.NewBaseDialect(schema.TableRegistry, logger),
+		schemaName:    schema.Name,
+		bytesEncoding: bytesEncoding,
 	}
 
 	err := d.init()
@@ -87,7 +90,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	if table.PrimaryKey != nil {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
-		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor)))
+		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor, d.bytesEncoding)))
 	}
 
 	if table.ChildOf != nil {
@@ -99,7 +102,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		for _, parentField := range parentTable.Columns {
 
 			if parentField.Name == table.ChildOf.ParentTableField {
-				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor)))
+				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor, d.bytesEncoding)))
 				fieldFound = true
 				break
 			}
@@ -116,7 +119,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 		fieldName := f.Name
 
-		fieldType := MapFieldType(f.FieldDescriptor)
+		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding)
 		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
 		sb.WriteString(",")
 	}
