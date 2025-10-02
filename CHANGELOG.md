@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.8.0
+
+### From-proto mode enhancements
+
+* Added support for new numeric types in from-proto mode: `Decimal128`, `Decimal256`, `Int128`, `UInt128`, `Int256`, and `UInt256`
+  - These fields are converted from string format in both PostgreSQL and ClickHouse implementations
+  - PostgreSQL maps these types to appropriate `NUMERIC` and `DECIMAL` data types with proper precision and scale
+  - ClickHouse maps these types to their corresponding native numeric types (Int128, UInt128, Int256, UInt256, Decimal128, Decimal256)
+* Enhanced protobuf schema definitions to include string conversion types for large numeric values
+* Added string-to-numeric conversion support in PostgreSQL type mapping system
+
 ## v4.7.0
 
 * Added support for `optional` fields in from-proto mode.
