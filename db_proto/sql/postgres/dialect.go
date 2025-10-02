@@ -90,7 +90,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
 		d.AddPrimaryKeySql(table.Name, fmt.Sprintf("alter table %s add constraint %s_pk primary key (%s);", tableName, table.Name, primaryKeyFieldName))
-		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor, d.bytesEncoding)))
+		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor, d.bytesEncoding, table.Columns[pk.Index])))
 	}
 
 	if table.ChildOf != nil {
@@ -103,7 +103,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 			if parentField.Name == table.ChildOf.ParentTableField {
 
-				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor, d.bytesEncoding)))
+				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor, d.bytesEncoding, parentField)))
 
 				foreignKey := &sql2.ForeignKey{
 					Name:         "fk_" + table.ChildOf.ParentTable,
@@ -177,7 +177,7 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 			}
 			d.AddForeignKeySql(table.Name, foreignKey.String())
 		}
-		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding)
+		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding, f)
 		if f.IsUnique {
 			d.AddUniqueConstraintSql(table.Name, fmt.Sprintf("alter table %s add constraint %s_%s_unique unique (%s);", tableName, table.Name, f.Name, fieldQuotedName))
 		}

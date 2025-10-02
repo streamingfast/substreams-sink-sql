@@ -10,6 +10,8 @@ import (
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
+	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -42,7 +44,7 @@ func IsWellKnownType(fd *desc.FieldDescriptor) bool {
 	}
 }
 
-func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataType {
+func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding, column *schema.Column) DataType {
 	t := fd.GetType()
 	var baseType DataType
 
@@ -69,7 +71,28 @@ func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataTy
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
 		baseType = TypeDouble
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		baseType = TypeVarchar
+		if column.ConvertTo != nil && column.ConvertTo.Convertion != nil {
+			switch column.ConvertTo.Convertion.(type) {
+			case *v1.StringConvertion_Int128:
+				baseType = TypeNumeric
+			case *v1.StringConvertion_Uint128:
+				baseType = TypeNumeric
+			case *v1.StringConvertion_Int256:
+				baseType = TypeNumeric
+			case *v1.StringConvertion_Uint256:
+				baseType = TypeNumeric
+			case *v1.StringConvertion_Decimal128:
+				decimal128Conv := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128)
+				baseType = DataType(fmt.Sprintf("DECIMAL(38,%d)", decimal128Conv.Decimal128.Scale))
+			case *v1.StringConvertion_Decimal256:
+				decimal256Conv := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal256)
+				baseType = DataType(fmt.Sprintf("DECIMAL(76,%d)", decimal256Conv.Decimal256.Scale))
+			default:
+				baseType = TypeVarchar
+			}
+		} else {
+			baseType = TypeVarchar
+		}
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
 		if bytesEncoding.IsStringType() {
 			baseType = TypeText
