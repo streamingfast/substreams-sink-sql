@@ -90,7 +90,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	if table.PrimaryKey != nil {
 		pk := table.PrimaryKey
 		primaryKeyFieldName = pk.Name
-		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor, d.bytesEncoding)))
+		sb.WriteString(fmt.Sprintf("%s %s,", pk.Name, MapFieldType(pk.FieldDescriptor, d.bytesEncoding, table.Columns[pk.Index])))
 	}
 
 	if table.ChildOf != nil {
@@ -102,7 +102,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		for _, parentField := range parentTable.Columns {
 
 			if parentField.Name == table.ChildOf.ParentTableField {
-				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor, d.bytesEncoding)))
+				sb.WriteString(fmt.Sprintf("%s %s NOT NULL,", parentField.Name, MapFieldType(parentField.FieldDescriptor, d.bytesEncoding, parentField)))
 				fieldFound = true
 				break
 			}
@@ -119,7 +119,17 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 
 		fieldName := f.Name
 
-		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding)
+		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding, f).String()
+
+		//if f.ConvertTo != nil && f.ConvertTo.Convertion != nil {
+		//	switch t := f.ConvertTo.Convertion.(type) {
+		//	case *pbSchmema.StringConvertion_Decimal128:
+		//		fieldType = fmt.Sprintf("%s(%d)", fieldType, t.Decimal128.Scale)
+		//	case *pbSchmema.StringConvertion_Decimal256:
+		//		fieldType = fmt.Sprintf("%s(%d)", fieldType, t.Decimal256.Scale)
+		//	}
+		//}
+
 		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
 		sb.WriteString(",")
 	}

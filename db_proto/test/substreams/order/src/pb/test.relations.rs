@@ -102,6 +102,18 @@ pub struct TypesTest {
     pub repeated_bool_field: ::prost::alloc::vec::Vec<bool>,
     #[prost(string, repeated, tag="63")]
     pub repeated_string_field: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag="100")]
+    pub str_2_int128: ::prost::alloc::string::String,
+    #[prost(string, tag="101")]
+    pub str_2_uint128: ::prost::alloc::string::String,
+    #[prost(string, tag="102")]
+    pub str_2_int256: ::prost::alloc::string::String,
+    #[prost(string, tag="103")]
+    pub str_2_uint256: ::prost::alloc::string::String,
+    #[prost(string, tag="104")]
+    pub str_2_decimal128: ::prost::alloc::string::String,
+    #[prost(string, tag="105")]
+    pub str_2_decimal256: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

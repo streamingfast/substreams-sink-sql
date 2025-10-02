@@ -13,6 +13,8 @@ import (
 	"github.com/streamingfast/logging/zapx"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
+	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -20,7 +22,7 @@ import (
 type accumulator struct {
 	ordinal   int
 	tableName string
-	columns   map[int]string
+	columns   map[int]*schema.Column
 	input     map[string]proto.ColInput
 }
 
@@ -57,12 +59,12 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 	accumulators[sql2.DialectTableBlock] = &accumulator{
 		ordinal:   -1,
 		tableName: sql2.DialectTableBlock,
-		columns: map[int]string{
-			0: "number",
-			1: "hash",
-			2: "timestamp",
-			3: "version",
-			4: "deleted",
+		columns: map[int]*schema.Column{
+			0: {Name: "number"},
+			1: {Name: "hash"},
+			2: {Name: "timestamp"},
+			3: {Name: "version"},
+			4: {Name: "deleted"},
 		},
 		input: map[string]proto.ColInput{
 			"number":    &proto.ColUInt64{},
@@ -76,27 +78,27 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 	tables := dialect.GetTables()
 	for _, table := range tables {
 		input := map[string]proto.ColInput{}
-		columns := map[int]string{}
+		columns := map[int]*schema.Column{}
 
 		input[sql2.DialectFieldBlockNumber] = &proto.ColUInt64{}
-		columns[0] = sql2.DialectFieldBlockNumber
+		columns[0] = &schema.Column{Name: sql2.DialectFieldBlockNumber}
 
 		input[sql2.DialectFieldBlockTimestamp] = &proto.ColDateTime{}
-		columns[1] = sql2.DialectFieldBlockTimestamp
+		columns[1] = &schema.Column{Name: sql2.DialectFieldBlockTimestamp}
 
 		input[sql2.DialectFieldVersion] = &proto.ColInt64{}
-		columns[2] = sql2.DialectFieldVersion
+		columns[2] = &schema.Column{Name: sql2.DialectFieldVersion}
 
 		input[sql2.DialectFieldDeleted] = &proto.ColBool{}
-		columns[3] = sql2.DialectFieldDeleted
+		columns[3] = &schema.Column{Name: sql2.DialectFieldDeleted}
 
 		primaryName := ""
 		if table.PrimaryKey != nil {
 			pk := table.PrimaryKey
 			primaryName = pk.Name
 
-			input[pk.Name] = ColInputForColumn(pk.FieldDescriptor, dialect.bytesEncoding)
-			columns[4] = pk.Name
+			input[pk.Name] = ColInputForColumn(pk.FieldDescriptor, dialect.bytesEncoding, table.Columns[pk.Index])
+			columns[4] = &schema.Column{Name: pk.Name}
 		}
 
 		offset := len(columns)
@@ -109,8 +111,8 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 			for _, parentField := range parentTable.Columns {
 
 				if parentField.Name == table.ChildOf.ParentTableField {
-					input[parentField.Name] = ColInputForColumn(parentField.FieldDescriptor, dialect.bytesEncoding)
-					columns[offset] = parentField.Name
+					input[parentField.Name] = ColInputForColumn(parentField.FieldDescriptor, dialect.bytesEncoding, parentField)
+					columns[offset] = parentField
 					fieldFound = true
 					break
 				}
@@ -127,8 +129,8 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 				skipCount++
 				continue
 			}
-			input[column.Name] = ColInputForColumn(column.FieldDescriptor, dialect.bytesEncoding)
-			columns[i+offset-skipCount] = column.Name
+			input[column.Name] = ColInputForColumn(column.FieldDescriptor, dialect.bytesEncoding, column)
+			columns[i+offset-skipCount] = column
 		}
 
 		accumulators[table.Name] = &accumulator{
@@ -149,16 +151,16 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 	}
 	i.logger.Debug("inserting", zap.String("table", table), zap.Int("values", len(values)))
 	for idx, value := range values {
-		colName, found := accumulator.columns[idx]
+		column, found := accumulator.columns[idx]
 		if !found {
-			return fmt.Errorf("column %q not found for table %q at idx %d", colName, table, idx)
+			return fmt.Errorf("column not found for table %q at idx %d", table, idx)
 		}
-		input := accumulator.input[colName]
+		input := accumulator.input[column.Name]
 
 		if i.tracer.Enabled() {
 			i.logger.Debug("inserting column value",
 				zap.String("table", table),
-				zap.String("column", colName),
+				zap.String("column", column.Name),
 				zapx.Type("column_type", input),
 				zapx.Type("value_type", value),
 			)
@@ -171,7 +173,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			} else if t, ok := value.(time.Time); ok {
 				input.Append(t)
 			} else {
-				panic(fmt.Sprintf("unknown time base input type %T for column %s of table %s", input, colName, table))
+				panic(fmt.Sprintf("unknown time base input type %T for column %s of table %s", input, column.Name, table))
 			}
 		case *proto.ColInt32:
 			input.Append(value.(int32))
@@ -185,12 +187,50 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			input.Append(value.(float32))
 		case *proto.ColFloat64:
 			input.Append(value.(float64))
+		case *ColScaledDecimal128:
+			scale := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128).Decimal128.Scale
+			v, err := StringToDecimal128(value.(string), scale)
+			if err != nil {
+				panic(fmt.Sprintf("failed to convert string to decimal128 for column %s of table %s: %v", column.Name, table, err))
+			}
+			input.Append(v)
+		case *ColScaledDecimal256:
+			scale := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal256).Decimal256.Scale
+			v, err := StringToDecimal256(value.(string), scale)
+			if err != nil {
+				panic(fmt.Sprintf("failed to convert string to decimal256 for column %s of table %s: %v", column.Name, table, err))
+			}
+			input.Append(v)
+		case *proto.ColInt128:
+			v, err := StringToInt128(value.(string))
+			if err != nil {
+				panic(fmt.Sprintf("failed to convert string to int128 for column %s of table %s: %v", column.Name, table, err))
+			}
+			input.Append(v)
+		case *proto.ColUInt128:
+			v, err := StringToUInt128(value.(string))
+			if err != nil {
+				panic(fmt.Sprintf("failed to convert string to uint128 for column %s of table %s: %v", column.Name, table, err))
+			}
+			input.Append(v)
+		case *proto.ColInt256:
+			v, err := StringToInt256(value.(string))
+			if err != nil {
+				panic(fmt.Sprintf("failed to convert string to int256 for column %s of table %s: %v", column.Name, table, err))
+			}
+			input.Append(v)
+		case *proto.ColUInt256:
+			v, err := StringToUInt256(value.(string))
+			if err != nil {
+				panic(fmt.Sprintf("failed to convert string to uint256 for column %s of table %s: %v", column.Name, table, err))
+			}
+			input.Append(v)
 		case *proto.ColStr:
 			if bytesValue, ok := value.([]byte); ok {
 				// Convert []byte to string using the bytes encoder
 				encoded, err := i.bytesEncoding.EncodeBytes(bytesValue)
 				if err != nil {
-					panic(fmt.Sprintf("failed to encode bytes for column %s of table %s: %v", colName, table, err))
+					panic(fmt.Sprintf("failed to encode bytes for column %s of table %s: %v", column.Name, table, err))
 				}
 				input.Append(encoded.(string))
 			} else {
@@ -209,7 +249,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(int32Arr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[int64]:
 			if arr, ok := value.([]interface{}); ok {
@@ -219,7 +259,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(int64Arr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[uint32]:
 			if arr, ok := value.([]interface{}); ok {
@@ -229,7 +269,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(uint32Arr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[uint64]:
 			if arr, ok := value.([]interface{}); ok {
@@ -239,7 +279,57 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(uint64Arr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
+			}
+		case *proto.ColArr[*proto.Int128]:
+			if arr, ok := value.([]interface{}); ok {
+				int128Arr := make([]*proto.Int128, len(arr))
+				for i, v := range arr {
+					v, err := StringToInt128(v.(string))
+					if err != nil {
+						panic(fmt.Sprintf("failed to convert array of string to int128 for column %s of table %s: %v", column.Name, table, err))
+					}
+					int128Arr[i] = &v
+				}
+				input.Append(int128Arr)
+			} else {
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
+			}
+		case *proto.ColArr[*proto.UInt128]:
+			if arr, ok := value.([]interface{}); ok {
+				uint128Arr := make([]*proto.UInt128, len(arr))
+				for i, v := range arr {
+					v, err := StringToUInt128(v.(string))
+					if err != nil {
+						panic(fmt.Sprintf("failed to convert array of string to uint128 for column %s of table %s: %v", column.Name, table, err))
+					}
+					uint128Arr[i] = &v
+				}
+				input.Append(uint128Arr)
+			}
+		case *proto.ColArr[*proto.Int256]:
+			if arr, ok := value.([]interface{}); ok {
+				int256Arr := make([]*proto.Int256, len(arr))
+				for i, v := range arr {
+					v, err := StringToInt256(v.(string))
+					if err != nil {
+						panic(fmt.Sprintf("failed to convert array of string to int256 for column %s of table %s: %v", column.Name, table, err))
+					}
+					int256Arr[i] = &v
+				}
+				input.Append(int256Arr)
+			}
+		case *proto.ColArr[*proto.UInt256]:
+			if arr, ok := value.([]interface{}); ok {
+				uint256Arr := make([]*proto.UInt256, len(arr))
+				for i, v := range arr {
+					v, err := StringToUInt256(v.(string))
+					if err != nil {
+						panic(fmt.Sprintf("failed to convert array of string to uint256 for column %s of table %s: %v", column.Name, table, err))
+					}
+					uint256Arr[i] = &v
+				}
+				input.Append(uint256Arr)
 			}
 		case *proto.ColArr[float32]:
 			if arr, ok := value.([]interface{}); ok {
@@ -249,7 +339,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(float32Arr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[float64]:
 			if arr, ok := value.([]interface{}); ok {
@@ -259,7 +349,33 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(float64Arr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
+			}
+		case *proto.ColArr[*proto.Decimal128]:
+			scale := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128).Decimal128.Scale
+			if arr, ok := value.([]interface{}); ok {
+				decimal128Arr := make([]*proto.Decimal128, len(arr))
+				for i, v := range arr {
+					v, err := StringToDecimal128(v.(string), scale)
+					if err != nil {
+						panic(fmt.Sprintf("failed to convert array of string to decimal128 for column %s of table %s: %v", column.Name, table, err))
+					}
+					decimal128Arr[i] = &v
+				}
+				input.Append(decimal128Arr)
+			}
+		case *proto.ColArr[*proto.Decimal256]:
+			scale := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128).Decimal128.Scale
+			if arr, ok := value.([]interface{}); ok {
+				decimal256Arr := make([]*proto.Decimal256, len(arr))
+				for i, v := range arr {
+					v, err := StringToDecimal256(v.(string), scale)
+					if err != nil {
+						panic(fmt.Sprintf("failed to convert array of string to decimal256 for column %s of table %s: %v", column.Name, table, err))
+					}
+					decimal256Arr[i] = &v
+				}
+				input.Append(decimal256Arr)
 			}
 		case *proto.ColArr[bool]:
 			if arr, ok := value.([]interface{}); ok {
@@ -269,7 +385,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(boolArr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[string]:
 			if arr, ok := value.([]interface{}); ok {
@@ -279,7 +395,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(stringArr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[[]byte]:
 			if arr, ok := value.([]interface{}); ok {
@@ -289,7 +405,7 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 				}
 				input.Append(bytesArr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		case *proto.ColArr[time.Time]:
 			if arr, ok := value.([]interface{}); ok {
@@ -300,15 +416,15 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 					} else if t, ok := v.(time.Time); ok {
 						timeArr[i] = t
 					} else {
-						panic(fmt.Sprintf("unknown time type %T in array for column %s of table %s", v, colName, table))
+						panic(fmt.Sprintf("unknown time type %T in array for column %s of table %s", v, column.Name, table))
 					}
 				}
 				input.Append(timeArr)
 			} else {
-				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", colName, table, value))
+				panic(fmt.Sprintf("expected []interface{} for array column %s of table %s, got %T", column.Name, table, value))
 			}
 		default:
-			panic(fmt.Sprintf("unknown input type %T for column %s of table %s", input, colName, table))
+			panic(fmt.Sprintf("unknown input type %T for column %s of table %s", input, column.Name, table))
 		}
 	}
 
@@ -339,20 +455,20 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 	for _, acc := range accumulators {
 		qStart := time.Now()
 
-		input := proto.Input{}
+		inputs := proto.Input{}
 		for n, i := range acc.input {
 			if n == "block_number" {
 				rowCount += i.Rows()
 			}
-			input = append(input, proto.InputColumn{
+			inputs = append(inputs, proto.InputColumn{
 				Name: n,
 				Data: i,
 			})
 		}
 
 		if err := client.Do(database.ctx, ch.Query{
-			Body:  input.Into(acc.tableName), // helper that generates INSERT INTO query with all columns
-			Input: input,
+			Body:  inputs.Into(acc.tableName), // helper that generates INSERT INTO query with all columns
+			Input: inputs,
 		}); err != nil {
 			return fmt.Errorf("clickhouse accumulator inserter: executing query on %q: %w", acc.debugTableAndColumns(), err)
 		}
@@ -380,8 +496,26 @@ func (acc *accumulator) debugTableAndColumns() string {
 		if idx > 0 {
 			b.WriteString(", ")
 		}
-		b.WriteString(col)
+		b.WriteString(col.Name)
 	}
 	b.WriteString(")")
 	return b.String()
+}
+
+type ColScaledDecimal256 struct {
+	*proto.ColDecimal256
+	scale uint8 // Your desired scale (0-9 for Decimal32)
+}
+
+func (c *ColScaledDecimal256) Type() proto.ColumnType {
+	return proto.ColumnType(fmt.Sprintf("Decimal256(%d)", c.scale))
+}
+
+type ColScaledDecimal128 struct {
+	*proto.ColDecimal128
+	scale uint8 // Your desired scale (0-9 for Decimal32)
+}
+
+func (c *ColScaledDecimal128) Type() proto.ColumnType {
+	return proto.ColumnType(fmt.Sprintf("Decimal128(%d)", c.scale))
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
+	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 )
 
@@ -20,6 +21,7 @@ type Column struct {
 	IsMessage       bool
 	IsOptional      bool
 	Message         string
+	ConvertTo       *v1.StringConvertion
 }
 
 func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
@@ -46,6 +48,7 @@ func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
 		}
 		out.IsPrimaryKey = fieldInfo.PrimaryKey
 		out.IsUnique = fieldInfo.Unique
+		out.ConvertTo = fieldInfo.ConvertTo
 	}
 
 	if out.IsMessage {

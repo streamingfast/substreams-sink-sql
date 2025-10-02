@@ -389,7 +389,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		query := fmt.Sprintf(`
 			INSERT INTO %s
 			SELECT %s, %s, %d, true %s
-			FROM %s WHERE %s > %d
+			FROM %s WHERE %s > %d AND _deleted_ != 1
 			`, tableFullName, sql.DialectFieldBlockNumber, sql.DialectFieldBlockTimestamp, version, fields, tableFullName, sql.DialectFieldBlockNumber, lastValidBlockNum)
 
 		err := client.Do(d.ctx, ch.Query{

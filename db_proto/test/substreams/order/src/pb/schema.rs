@@ -11,6 +11,59 @@ pub struct Table {
     pub clickhouse_table_options: ::core::option::Option<ClickhouseTableOptions>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Int128 {
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UInt128 {
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Int256 {
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct UInt256 {
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Decimal128 {
+    #[prost(int32, tag="1")]
+    pub scale: i32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct Decimal256 {
+    #[prost(int32, tag="1")]
+    pub scale: i32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct StringConvertion {
+    #[prost(oneof="string_convertion::Convertion", tags="2, 3, 4, 6, 50, 51")]
+    pub convertion: ::core::option::Option<string_convertion::Convertion>,
+}
+/// Nested message and enum types in `StringConvertion`.
+pub mod string_convertion {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
+    pub enum Convertion {
+        #[prost(message, tag="2")]
+        Int128(super::Int128),
+        #[prost(message, tag="3")]
+        Uint128(super::UInt128),
+        #[prost(message, tag="4")]
+        Int256(super::Int256),
+        #[prost(message, tag="6")]
+        Uint256(super::UInt256),
+        #[prost(message, tag="50")]
+        Decimal128(super::Decimal128),
+        #[prost(message, tag="51")]
+        Decimal256(super::Decimal256),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Column {
     #[prost(string, optional, tag="1")]
@@ -21,6 +74,8 @@ pub struct Column {
     pub unique: bool,
     #[prost(bool, tag="4")]
     pub primary_key: bool,
+    #[prost(message, optional, tag="5")]
+    pub convert_to: ::core::option::Option<StringConvertion>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

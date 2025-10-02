@@ -56,6 +56,13 @@ fn map_output(block: Block) -> model::relations::Output {
                     repeated_float_field: vec![0.0, 1.0, 2.0, 3.0],
                     repeated_bool_field: vec![true, false, true, false],
                     repeated_string_field: vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()],
+
+                    str_2_int128: "170141183460469231731687303715884105727".to_string(),
+                    str_2_uint128: "340282366920938463463374607431768211455".to_string(),
+                    str_2_int256: "57896044618658097711785492504343953926634992332820282019728792003956564819967".to_string(),
+                    str_2_uint256: "115792089237316195423570985008687907853269984665640564039457584007913129639935".to_string(),
+                    str_2_decimal128: "17014118346046923173168.9988".to_string(),
+                    str_2_decimal256: "17014118346046923173168.9988".to_string(),
                 },
             }),
         });

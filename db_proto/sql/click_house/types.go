@@ -2,15 +2,13 @@ package clickhouse
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/ClickHouse/ch-go/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
+	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 )
 
 type DataType string
@@ -33,6 +31,9 @@ const (
 	TypeFloat32 DataType = "Float32"
 	TypeFloat64 DataType = "Float64"
 
+	TypeDecimal128 = "Decimal128"
+	TypeDecimal256 = "Decimal256"
+
 	TypeBool    DataType = "Bool"
 	TypeVarchar DataType = "VARCHAR"
 
@@ -43,7 +44,7 @@ func (s DataType) String() string {
 	return string(s)
 }
 
-func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataType {
+func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding, column *schema.Column) DataType {
 	t := fd.GetType()
 	var baseType DataType
 
@@ -72,7 +73,29 @@ func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataTy
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
 		baseType = TypeFloat64
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		baseType = TypeVarchar
+		if column.ConvertTo != nil && column.ConvertTo.Convertion != nil {
+			switch column.ConvertTo.Convertion.(type) {
+			case *v1.StringConvertion_Int128:
+				baseType = TypeInteger128
+			case *v1.StringConvertion_Uint128:
+				baseType = TypeUInt128
+			case *v1.StringConvertion_Int256:
+				baseType = TypeInteger256
+			case *v1.StringConvertion_Uint256:
+				baseType = TypeUInt256
+			case *v1.StringConvertion_Decimal128:
+				decimal128Conv := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128)
+				baseType = DataType(fmt.Sprintf("Decimal128(%d)", decimal128Conv.Decimal128.Scale))
+			case *v1.StringConvertion_Decimal256:
+				decimal256Conv := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal256)
+				baseType = DataType(fmt.Sprintf("Decimal256(%d)", decimal256Conv.Decimal256.Scale))
+			default:
+				panic(fmt.Sprintf("unsupported type: %s", t))
+			}
+		} else {
+			baseType = TypeVarchar
+		}
+
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
 		baseType = TypeVarchar
 	default:
@@ -84,14 +107,14 @@ func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) DataTy
 		return DataType(fmt.Sprintf("Array(%s)", baseType))
 	}
 
-	if fd.IsProto3Optional() {
-		return DataType(fmt.Sprintf("Nullable(%s)", baseType))
-	}
+	//if fd.IsProto3Optional() {
+	//	return DataType(fmt.Sprintf("Nullable(%s)", baseType))
+	//}
 
 	return baseType
 }
 
-func ColInputForColumn(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) proto.ColInput {
+func ColInputForColumn(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding, column *schema.Column) proto.ColInput {
 	var baseInput proto.ColInput
 
 	switch fd.GetType() {
@@ -119,7 +142,36 @@ func ColInputForColumn(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) p
 	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
 		baseInput = &proto.ColFloat64{}
 	case descriptor.FieldDescriptorProto_TYPE_STRING:
-		baseInput = &proto.ColStr{}
+		if column.ConvertTo != nil && column.ConvertTo.Convertion != nil {
+			switch column.ConvertTo.Convertion.(type) {
+			case *v1.StringConvertion_Int128:
+				baseInput = &proto.ColInt128{}
+			case *v1.StringConvertion_Uint128:
+				baseInput = &proto.ColUInt128{}
+			case *v1.StringConvertion_Int256:
+				baseInput = &proto.ColInt256{}
+			case *v1.StringConvertion_Uint256:
+				baseInput = &proto.ColUInt256{}
+			case *v1.StringConvertion_Decimal128:
+				innerCol := &proto.ColDecimal128{}
+				scale := (column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128)).Decimal128.Scale
+				baseInput = &ColScaledDecimal128{
+					ColDecimal128: innerCol,
+					scale:         uint8(scale),
+				}
+			case *v1.StringConvertion_Decimal256:
+				innerCol := &proto.ColDecimal256{}
+				scale := (column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal256)).Decimal256.Scale
+				baseInput = &ColScaledDecimal256{
+					ColDecimal256: innerCol,
+					scale:         uint8(scale),
+				}
+			default:
+				panic(fmt.Sprintf("unsupported type: %s", fd.GetType()))
+			}
+		} else {
+			baseInput = &proto.ColStr{}
+		}
 	case descriptor.FieldDescriptorProto_TYPE_BYTES:
 		if bytesEncoding.IsStringType() {
 			baseInput = &proto.ColStr{}
@@ -159,47 +211,4 @@ func ColInputForColumn(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding) p
 	}
 
 	return baseInput
-}
-
-func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
-	switch v := value.(type) {
-	case string:
-		s = "'" + strings.ReplaceAll(strings.ReplaceAll(v, "'", "''"), "\\", "\\\\") + "'"
-	case int64:
-		s = strconv.FormatInt(v, 10)
-	case int32:
-		s = strconv.FormatInt(int64(v), 10)
-	case int:
-		s = strconv.FormatInt(int64(v), 10)
-	case uint64:
-		s = strconv.FormatUint(v, 10)
-	case uint32:
-		s = strconv.FormatUint(uint64(v), 10)
-	case uint:
-		s = strconv.FormatUint(uint64(v), 10)
-	case float64:
-		s = strconv.FormatFloat(v, 'f', -1, 64)
-	case float32:
-		s = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case []uint8:
-		if bytesEncoding == bytes.EncodingRaw {
-			// For raw encoding, return as hex string for SQL
-			s = "unhex('" + fmt.Sprintf("%x", v) + "')"
-		} else {
-			encoded, err := bytesEncoding.EncodeBytes(v)
-			if err != nil {
-				panic(fmt.Sprintf("failed to encode bytes: %v", err))
-			}
-			s = "'" + encoded.(string) + "'"
-		}
-	case bool:
-		s = strconv.FormatBool(v)
-	case time.Time:
-		s = "'" + v.Format(time.DateTime) + "'"
-	case *timestamppb.Timestamp:
-		s = "'" + v.AsTime().Format(time.DateTime) + "'"
-	default:
-		panic(fmt.Sprintf("unsupported type: %T", v))
-	}
-	return
 }

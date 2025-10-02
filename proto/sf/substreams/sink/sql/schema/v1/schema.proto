@@ -20,11 +20,61 @@ message Table {
   optional ClickhouseTableOptions clickhouse_table_options = 200;
 }
 
+message Int128 {
+}
+
+message UInt128 {
+}
+
+message Int256 {
+}
+
+message UInt256 {
+}
+
+message Decimal128{
+  int32 scale = 1;
+}
+
+message Decimal256{
+  int32 scale = 1;
+}
+
+message StringConvertion {
+  oneof convertion {
+
+    Int128 int128 = 2;
+    UInt128 uint128 = 3;
+    Int256 int256 = 4;
+    UInt256 uint256 = 6;
+
+    Decimal128 decimal128 = 50;
+    Decimal256 decimal256 = 51;
+  }
+}
+
+
 message Column {
   optional string name = 1;
   optional string foreign_key = 2;
   bool unique = 3;
   bool primary_key = 4;
+
+//  enum StringConvertion {
+//    unset = 0;
+//
+//    int128 = 1;
+//    uint128 = 2;
+//
+//    int256 = 3;
+//    uint256 = 4;
+//
+//    decimal128 = 5;
+//    decimal256 = 6;
+//  }
+
+  StringConvertion convertTo = 5;
+
 }
 
 message ClickhouseTableOptions {
