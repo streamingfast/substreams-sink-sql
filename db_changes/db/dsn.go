@@ -113,10 +113,6 @@ func (c *DSN) ConnString() string {
 			// In the old code, of there was options set and the host was localhost, we were switching
 			// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
 			host = "127.0.0.1"
-			scheme = "http"
-			if c.Options.Get("secure") == "true" {
-				scheme = "https"
-			}
 		}
 
 		baseURL := fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, c.Username, c.Password, host, c.Port, c.Database)

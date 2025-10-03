@@ -173,6 +173,16 @@ func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.Co
 		ORDER BY table_schema, table_name
 	`
 
+	if l.dsn.Driver() == "clickhouse" {
+		query = `
+			SELECT database AS table_schema, name AS table_name
+			FROM system.tables
+			WHERE database = ?
+				AND engine NOT IN ('View', 'MaterializedView', 'Buffer')
+			ORDER BY table_schema, table_name
+		`
+	}
+
 	rows, err := l.DB.Query(query, schemaName)
 	if err != nil {
 		return nil, fmt.Errorf("querying tables: %w", err)
