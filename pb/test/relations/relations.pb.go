@@ -679,7 +679,8 @@ type OrderExtension struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
+	Description             string  `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
+	OptionalStr_2Uint256    *string `protobuf:"bytes,106,opt,name=optional_str_2_uint256,json=optionalStr2Uint256,proto3,oneof" json:"optional_str_2_uint256,omitempty"`
 }
 
 func (x *OrderExtension) Reset() {
@@ -717,6 +718,13 @@ func (*OrderExtension) Descriptor() ([]byte, []int) {
 func (x *OrderExtension) GetDescription() string {
 	if x != nil {
 		return x.Description
+	}
+	return ""
+}
+
+func (x *OrderExtension) GetOptionalStr_2Uint256() string {
+	if x != nil && x.OptionalStr_2Uint256 != nil {
+		return *x.OptionalStr_2Uint256
 	}
 	return ""
 }

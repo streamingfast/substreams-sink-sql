@@ -188,43 +188,79 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 		case *proto.ColFloat64:
 			input.Append(value.(float64))
 		case *ColScaledDecimal128:
+			stringValue := value.(string)
 			scale := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal128).Decimal128.Scale
-			v, err := StringToDecimal128(value.(string), scale)
-			if err != nil {
-				panic(fmt.Sprintf("failed to convert string to decimal128 for column %s of table %s: %v", column.Name, table, err))
+			// Handle optional fields with empty strings by using zero value
+			if column.IsOptional && stringValue == "" {
+				input.Append(proto.Decimal128{})
+			} else {
+				v, err := StringToDecimal128(stringValue, scale)
+				if err != nil {
+					panic(fmt.Sprintf("failed to convert string to decimal128 for column %s of table %s: %v", column.Name, table, err))
+				}
+				input.Append(v)
 			}
-			input.Append(v)
 		case *ColScaledDecimal256:
+			stringValue := value.(string)
 			scale := column.ConvertTo.Convertion.(*v1.StringConvertion_Decimal256).Decimal256.Scale
-			v, err := StringToDecimal256(value.(string), scale)
-			if err != nil {
-				panic(fmt.Sprintf("failed to convert string to decimal256 for column %s of table %s: %v", column.Name, table, err))
+			// Handle optional fields with empty strings by using zero value
+			if column.IsOptional && stringValue == "" {
+				input.Append(proto.Decimal256{})
+			} else {
+				v, err := StringToDecimal256(stringValue, scale)
+				if err != nil {
+					panic(fmt.Sprintf("failed to convert string to decimal256 for column %s of table %s: %v", column.Name, table, err))
+				}
+				input.Append(v)
 			}
-			input.Append(v)
 		case *proto.ColInt128:
-			v, err := StringToInt128(value.(string))
-			if err != nil {
-				panic(fmt.Sprintf("failed to convert string to int128 for column %s of table %s: %v", column.Name, table, err))
+			stringValue := value.(string)
+			// Handle optional fields with empty strings by using zero value
+			if column.IsOptional && stringValue == "" {
+				input.Append(proto.Int128{})
+			} else {
+				v, err := StringToInt128(stringValue)
+				if err != nil {
+					panic(fmt.Sprintf("failed to convert string to int128 for column %s of table %s: %v", column.Name, table, err))
+				}
+				input.Append(v)
 			}
-			input.Append(v)
 		case *proto.ColUInt128:
-			v, err := StringToUInt128(value.(string))
-			if err != nil {
-				panic(fmt.Sprintf("failed to convert string to uint128 for column %s of table %s: %v", column.Name, table, err))
+			stringValue := value.(string)
+			// Handle optional fields with empty strings by using zero value
+			if column.IsOptional && stringValue == "" {
+				input.Append(proto.UInt128{})
+			} else {
+				v, err := StringToUInt128(stringValue)
+				if err != nil {
+					panic(fmt.Sprintf("failed to convert string to uint128 for column %s of table %s: %v", column.Name, table, err))
+				}
+				input.Append(v)
 			}
-			input.Append(v)
 		case *proto.ColInt256:
-			v, err := StringToInt256(value.(string))
-			if err != nil {
-				panic(fmt.Sprintf("failed to convert string to int256 for column %s of table %s: %v", column.Name, table, err))
+			stringValue := value.(string)
+			// Handle optional fields with empty strings by using zero value
+			if column.IsOptional && stringValue == "" {
+				input.Append(proto.Int256{})
+			} else {
+				v, err := StringToInt256(stringValue)
+				if err != nil {
+					panic(fmt.Sprintf("failed to convert string to int256 for column %s of table %s: %v", column.Name, table, err))
+				}
+				input.Append(v)
 			}
-			input.Append(v)
 		case *proto.ColUInt256:
-			v, err := StringToUInt256(value.(string))
-			if err != nil {
-				panic(fmt.Sprintf("failed to convert string to uint256 for column %s of table %s: %v", column.Name, table, err))
+			stringValue := value.(string)
+			// Handle optional fields with empty strings by using zero value
+			if column.IsOptional && stringValue == "" {
+				input.Append(proto.UInt256{})
+			} else {
+				v, err := StringToUInt256(stringValue)
+				if err != nil {
+					panic(fmt.Sprintf("failed to convert string to uint256 for column %s of table %s: %v", column.Name, table, err))
+				}
+				input.Append(v)
 			}
-			input.Append(v)
 		case *proto.ColStr:
 			if bytesValue, ok := value.([]byte); ok {
 				// Convert []byte to string using the bytes encoder
@@ -285,11 +321,18 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			if arr, ok := value.([]interface{}); ok {
 				int128Arr := make([]*proto.Int128, len(arr))
 				for i, v := range arr {
-					v, err := StringToInt128(v.(string))
-					if err != nil {
-						panic(fmt.Sprintf("failed to convert array of string to int128 for column %s of table %s: %v", column.Name, table, err))
+					stringValue := v.(string)
+					// Handle empty strings in array elements by using zero value
+					if stringValue == "" {
+						zeroValue := proto.Int128{}
+						int128Arr[i] = &zeroValue
+					} else {
+						v, err := StringToInt128(stringValue)
+						if err != nil {
+							panic(fmt.Sprintf("failed to convert array of string to int128 for column %s of table %s: %v", column.Name, table, err))
+						}
+						int128Arr[i] = &v
 					}
-					int128Arr[i] = &v
 				}
 				input.Append(int128Arr)
 			} else {
@@ -299,11 +342,18 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			if arr, ok := value.([]interface{}); ok {
 				uint128Arr := make([]*proto.UInt128, len(arr))
 				for i, v := range arr {
-					v, err := StringToUInt128(v.(string))
-					if err != nil {
-						panic(fmt.Sprintf("failed to convert array of string to uint128 for column %s of table %s: %v", column.Name, table, err))
+					stringValue := v.(string)
+					// Handle empty strings in array elements by using zero value
+					if stringValue == "" {
+						zeroValue := proto.UInt128{}
+						uint128Arr[i] = &zeroValue
+					} else {
+						v, err := StringToUInt128(stringValue)
+						if err != nil {
+							panic(fmt.Sprintf("failed to convert array of string to uint128 for column %s of table %s: %v", column.Name, table, err))
+						}
+						uint128Arr[i] = &v
 					}
-					uint128Arr[i] = &v
 				}
 				input.Append(uint128Arr)
 			}
@@ -311,11 +361,18 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			if arr, ok := value.([]interface{}); ok {
 				int256Arr := make([]*proto.Int256, len(arr))
 				for i, v := range arr {
-					v, err := StringToInt256(v.(string))
-					if err != nil {
-						panic(fmt.Sprintf("failed to convert array of string to int256 for column %s of table %s: %v", column.Name, table, err))
+					stringValue := v.(string)
+					// Handle empty strings in array elements by using zero value
+					if stringValue == "" {
+						zeroValue := proto.Int256{}
+						int256Arr[i] = &zeroValue
+					} else {
+						v, err := StringToInt256(stringValue)
+						if err != nil {
+							panic(fmt.Sprintf("failed to convert array of string to int256 for column %s of table %s: %v", column.Name, table, err))
+						}
+						int256Arr[i] = &v
 					}
-					int256Arr[i] = &v
 				}
 				input.Append(int256Arr)
 			}
@@ -323,11 +380,18 @@ func (i *AccumulatorInserter) insert(table string, values []any) error {
 			if arr, ok := value.([]interface{}); ok {
 				uint256Arr := make([]*proto.UInt256, len(arr))
 				for i, v := range arr {
-					v, err := StringToUInt256(v.(string))
-					if err != nil {
-						panic(fmt.Sprintf("failed to convert array of string to uint256 for column %s of table %s: %v", column.Name, table, err))
+					stringValue := v.(string)
+					// Handle empty strings in array elements by using zero value
+					if stringValue == "" {
+						zeroValue := proto.UInt256{}
+						uint256Arr[i] = &zeroValue
+					} else {
+						v, err := StringToUInt256(stringValue)
+						if err != nil {
+							panic(fmt.Sprintf("failed to convert array of string to uint256 for column %s of table %s: %v", column.Name, table, err))
+						}
+						uint256Arr[i] = &v
 					}
-					uint256Arr[i] = &v
 				}
 				input.Append(uint256Arr)
 			}

@@ -84,6 +84,9 @@ message TypesTest {
   string str_2_decimal128 = 104 [(schema.field) = { convertTo: { decimal128{ scale: 4 }}}];
   string str_2_decimal256 = 105 [(schema.field) = { convertTo: { decimal256{ scale: 4 }}}];
 
+  // Optional uint256 field to test empty string handling
+  optional string optional_str_2_uint256 = 106 [(schema.field) = { convertTo: { uint256{}} }];
+
 }
 
 message Customer {
