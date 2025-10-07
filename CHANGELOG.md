@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.9.0
+
+### From-proto ClickHouse improvements
+
+* Removed `ClickhouseReplacingField` and associated functionality
+  - Removed `ClickhouseReplacingField` usage from protobuf schema and generated files
+  - Adjusted `ClickhouseTableOptions` to exclude `replacing_fields`
+  - Updated ClickHouse dialect to streamline `ReplacingMergeTree` logic and add `allow_experimental_replacing_merge_with_cleanup` setting
+  - Cleaned up dependencies and unused code related to `ClickhouseReplacingField`
+
 ## v4.8.0
 
 ### From-proto mode enhancements
