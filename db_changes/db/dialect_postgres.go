@@ -399,11 +399,18 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 			updates[i] = fmt.Sprintf("%s=EXCLUDED.%s", columns[i], columns[i])
 		}
 
+		// Escape primary key column names to preserve case sensitivity (e.g., camelCase)
+		escapedPKColumns := make([]string, 0, len(o.primaryKey))
+		for pkColumn := range o.primaryKey {
+			escapedPKColumns = append(escapedPKColumns, EscapeIdentifier(pkColumn))
+		}
+		sort.Strings(escapedPKColumns) // Sort for deterministic output
+
 		insertQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s;",
 			o.table.identifier,
 			strings.Join(columns, ","),
 			strings.Join(values, ","),
-			strings.Join(maps.Keys(o.primaryKey), ","),
+			strings.Join(escapedPKColumns, ","),
 			strings.Join(updates, ", "),
 		)
 
