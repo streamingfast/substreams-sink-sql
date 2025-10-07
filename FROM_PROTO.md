@@ -2,6 +2,8 @@
 
 The `from-proto` command allows you to run a Substreams SQL sink directly from a protocol buffer definition without needing to set up separate schema files. This command automatically generates the SQL schema from your protobuf definitions and runs the sink in a single step.
 
+> **💡 See it in action**: Check out the [ClickHouse Showcase](https://github.com/streamingfast/substreams-sink-clickhouse-showcase) for a complete working example with USDC transfers, including advanced features like materialized views and partitioning strategies.
+
 ## Overview
 
 The `from-proto` command streamlines the process of running a SQL sink by:
@@ -72,13 +74,20 @@ message Transaction {
   option (schema.table) = {
     name: "transactions"
     clickhouse_table_options: {
-      order_by_fields: [{name: "tx_hash"}]
+      order_by_fields: [{name: "tx_hash"}, {name: "_block_number_"}]
+      partition_fields: [{name: "_block_timestamp_", function: toYYYYMM}]
+      index_fields: [{
+        field_name: "user_id"
+        name: "user_idx"
+        type: bloom_filter
+        granularity: 4
+      }]
     }
   };
 
   string tx_hash = 1 [(schema.field) = { primary_key: true }];
   string user_id = 2 [(schema.field) = { foreign_key: "users on id"}];
-  uint64 amount = 3;
+  string amount = 3 [(schema.field) = { convertTo: { uint256{} } }]; // Large token amounts
   google.protobuf.Timestamp timestamp = 4;
 }
 ```
@@ -214,6 +223,15 @@ string user_id = 2 [(schema.field) = { foreign_key: "users on id"}];
 
 // Unique constraint
 string email = 3 [(schema.field) = { unique: true }];
+
+// Custom column name
+string user_address = 4 [(schema.field) = { name: "wallet_address" }];
+
+// String-to-numeric conversion for large values
+string token_amount = 5 [(schema.field) = { convertTo: { uint256{} } }];
+
+// Decimal conversion with specific scale
+string price = 6 [(schema.field) = { convertTo: { decimal128{ scale: 18 } } }];
 ```
 
 ### Child Tables
@@ -236,6 +254,8 @@ message OrderItem {
 
 The `from-proto` command automatically maps protobuf types to SQL types:
 
+### Basic Types
+
 | Protobuf Type | PostgreSQL Type | ClickHouse Type |
 |---------------|-----------------|-----------------|
 | `string` | `VARCHAR(255)` | `String` |
@@ -249,6 +269,38 @@ The `from-proto` command automatically maps protobuf types to SQL types:
 | `bytes` | `TEXT` | `String` |
 | `google.protobuf.Timestamp` | `TIMESTAMP` | `DateTime` |
 | `repeated <type>` | `<type>[]` | `Array(<type>)` |
+
+### Extended Numeric Types (v4.8.0+)
+
+For handling large numeric values that exceed standard integer ranges, you can use string-to-numeric conversion:
+
+| String Conversion Type | PostgreSQL Type | ClickHouse Type | Use Case |
+|------------------------|-----------------|-----------------|----------|
+| `Int128` | `NUMERIC(39,0)` | `Int128` | 128-bit signed integers |
+| `UInt128` | `NUMERIC(39,0)` | `UInt128` | 128-bit unsigned integers |
+| `Int256` | `NUMERIC(78,0)` | `Int256` | 256-bit signed integers |
+| `UInt256` | `NUMERIC(78,0)` | `UInt256` | 256-bit unsigned integers |
+| `Decimal128` | `NUMERIC(38,scale)` | `Decimal128(precision,scale)` | 128-bit decimals |
+| `Decimal256` | `NUMERIC(76,scale)` | `Decimal256(precision,scale)` | 256-bit decimals |
+
+#### Using String-to-Numeric Conversion
+
+When your protobuf contains string fields that represent large numeric values, you can specify conversion:
+
+```proto
+message Transfer {
+  // Convert string amount to UInt256 for precise arithmetic
+  string amount = 1 [(schema.field) = { convertTo: { uint256{} } }];
+  
+  // Convert string balance to Decimal128 with 18 decimal places
+  string balance = 2 [(schema.field) = { convertTo: { decimal128{ scale: 18 } } }];
+}
+```
+
+This is particularly useful for:
+- **Cryptocurrency amounts**: Token values that exceed uint64 range
+- **Financial calculations**: High-precision decimal arithmetic
+- **Large identifiers**: 256-bit hashes or IDs stored as strings
 
 ## Advanced Usage
 
@@ -282,6 +334,89 @@ substreams-sink-sql from-proto $DSN substreams.yaml \
   --clickhouse-cursor-file-path ./cursor.txt
 ```
 
+## ClickHouse Advanced Features
+
+### ReplacingMergeTree Engine (v4.9.0+)
+
+The sink automatically uses ClickHouse's `ReplacingMergeTree` engine with enhanced cleanup capabilities:
+
+```sql
+ENGINE = ReplacingMergeTree(_version_, _deleted_)
+SETTINGS allow_experimental_replacing_merge_with_cleanup = 1
+```
+
+This provides:
+- **Automatic deduplication** based on the `_version_` column
+- **Soft deletes** using the `_deleted_` column for handling chain reorgs
+- **Experimental cleanup** for better storage efficiency
+
+### Partitioning and Ordering Strategies
+
+Configure optimal data organization for query performance:
+
+```proto
+message Transfer {
+  option (schema.table) = {
+    name: "transfers"
+    clickhouse_table_options: {
+      // Order by transaction hash and block for efficient range queries
+      order_by_fields: [
+        {name: "trx_hash"}, 
+        {name: "_block_number_"}, 
+        {name: "from"}, 
+        {name: "to"}
+      ]
+      // Partition by month for efficient time-based queries
+      partition_fields: [{name: "_block_timestamp_", function: toYYYYMM}]
+      // Add indexes for specific query patterns
+      index_fields: [{
+        field_name: "from"
+        name: "from_idx"
+        type: bloom_filter
+        granularity: 4
+      }]
+    }
+  };
+}
+```
+
+### Materialized Views for Aggregations
+
+Create efficient pre-aggregated views that handle chain reorgs correctly:
+
+```sql
+CREATE MATERIALIZED VIEW transfers.monthly_transfers
+    ENGINE = SummingMergeTree()
+    PARTITION BY month
+    ORDER BY month
+AS
+SELECT
+    toYYYYMM(_block_timestamp_) AS month,
+    sum(if(_deleted_, -toInt256(amount), toInt256(amount))) AS volume,
+    sum(if(_deleted_, -1, 1)) AS transfer_count
+FROM transfers.transfers
+GROUP BY month;
+```
+
+The key pattern is using `if(_deleted_, -value, value)` to handle reorg corrections automatically.
+
+### Querying Best Practices
+
+For current state queries, filter out deleted records:
+```sql
+SELECT * FROM transfers.transfers 
+WHERE _deleted_ = 0
+```
+
+For aggregations with reorg safety, use the additive pattern:
+```sql
+SELECT 
+    sum(if(_deleted_, -amount, amount)) AS net_volume
+FROM transfers.transfers
+```
+
+> **📚 Deep Dive**: See the [ClickHouse Showcase Deep Dive](https://github.com/streamingfast/substreams-sink-clickhouse-showcase/blob/main/DEEP_DIVE.md) for detailed explanations of protobuf-to-schema mapping and materialized view patterns.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -290,6 +425,8 @@ substreams-sink-sql from-proto $DSN substreams.yaml \
 2. **Schema annotation errors**: Verify you're importing `sf/substreams/sink/sql/schema/v1/schema.proto`
 3. **Database connection issues**: Check your DSN format and database accessibility
 4. **Module output type errors**: Ensure your Substreams module outputs the expected proto message
+5. **String conversion errors**: Verify that string fields marked for numeric conversion contain valid numeric values
+6. **ClickHouse partition errors**: Ensure partition functions match your data types (e.g., `toYYYYMM` for timestamps)
 
 ### Debug Tips
 
@@ -300,11 +437,20 @@ substreams-sink-sql from-proto $DSN substreams.yaml \
 
 ## Examples
 
-See the [test project](db_proto/test/substreams/order/) for a complete working example that demonstrates:
-- Complex proto definitions with relationships
-- ClickHouse-specific optimizations
-- Various data types and constraints
-- Child table relationships
+### Complete Working Examples
+
+1. **[ClickHouse Showcase](https://github.com/streamingfast/substreams-sink-clickhouse-showcase)** - Production-ready USDC transfers example featuring:
+   - Real-world protobuf definitions with ClickHouse optimizations
+   - String-to-UInt256 conversion for token amounts
+   - Monthly partitioning and efficient ordering
+   - Materialized views for aggregations
+   - Docker setup for easy testing
+
+2. **[Test Project](db_proto/test/substreams/order/)** - Comprehensive test suite demonstrating:
+   - Complex proto definitions with relationships
+   - Various data types and constraints
+   - Child table relationships
+   - PostgreSQL and ClickHouse compatibility
 
 ## Migration from Traditional Setup
 
@@ -322,3 +468,20 @@ substreams-sink-sql from-proto $DSN substreams.yaml
 ```
 
 The `from-proto` command combines both steps and automatically generates the schema from your protobuf definitions instead of requiring a separate SQL schema file.
+
+## Version Compatibility and Recent Changes
+
+### v4.9.0 (Latest)
+- **ClickHouse Improvements**: Removed deprecated `ClickhouseReplacingField` functionality
+- **Enhanced ReplacingMergeTree**: Streamlined logic with `allow_experimental_replacing_merge_with_cleanup` setting
+- **Better Performance**: Optimized table engine configuration for production workloads
+
+### v4.8.0
+- **Extended Numeric Types**: Added support for `Int128`, `UInt128`, `Int256`, `UInt256`, `Decimal128`, and `Decimal256`
+- **String-to-Numeric Conversion**: Convert string fields to native numeric types for better performance
+- **Enhanced Type Mapping**: Improved PostgreSQL and ClickHouse type mapping system
+
+### Migration Notes
+- **From v4.7.x to v4.8.0+**: No breaking changes, new numeric types are opt-in via field annotations
+- **From v4.8.x to v4.9.0**: ClickHouse users may see improved performance due to ReplacingMergeTree optimizations
+- **Existing deployments**: Continue to work without changes, new features available for new schema definitions
