@@ -48,13 +48,13 @@ postgres://[username[:password]@]host[:port]/database[?param1=value1&param2=valu
 postgres://localhost:5432/postgres
 
 # With authentication
-postgres://user:password@localhost:5432/mydb
+postgres://username:password@localhost:5432/mydb
 
 # With SSL disabled and custom schema
 postgres://localhost:5432/postgres?sslmode=disable&schemaName=orders
 
 # Production example with SSL
-postgres://user:password@prod-db.example.com:5432/analytics?sslmode=require
+postgres://username:password@hostname:5432/analytics?sslmode=require
 ```
 
 **Common PostgreSQL Parameters:**
@@ -75,10 +75,10 @@ clickhouse://[username[:password]@]host[:port]/database[?param1=value1&param2=va
 clickhouse://127.0.0.1:9000/order?secure=false
 
 # With authentication
-clickhouse://user:password@localhost:9000/analytics
+clickhouse://username:password@localhost:9000/analytics
 
 # Secure connection
-clickhouse://user:password@clickhouse.example.com:9440/mydb?secure=true
+clickhouse://username:password@hostname:9440/mydb?secure=true
 
 # With custom settings
 clickhouse://localhost:9000/analytics?secure=false&compress=true&debug=true
@@ -97,7 +97,7 @@ For security, avoid hardcoding credentials in commands. Use environment variable
 
 ```bash
 # Set DSN as environment variable
-export DSN="postgres://user:password@localhost:5432/mydb?sslmode=disable"
+export DSN="postgres://username:password@localhost:5432/mydb?sslmode=disable"
 
 # Use in command
 substreams-sink-sql from-proto $DSN substreams.yaml
