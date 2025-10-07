@@ -1116,6 +1116,8 @@ type XferCamelCasePKRow struct {
 
 func equalsXferCamelCasePKRows(expected []*XferCamelCasePKRow) func(t *testing.T, dbx *sqlx.DB, schema string) {
 	return func(t *testing.T, dbx *sqlx.DB, schema string) {
-		require.Equal(t, expected, readDbChangesRows[XferCamelCasePKRow](t, dbx, schema, "xfer"))
+		// Use custom ordering since this table doesn't have an "id" column
+		actual := readRowsBy[XferCamelCasePKRow](t, dbx, fmt.Sprintf(`"%s"."%s"`, schema, "xfer"), `"userAddress", "tokenId"`)
+		require.Equal(t, expected, actual)
 	}
 }
