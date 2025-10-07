@@ -47,14 +47,14 @@ postgres://[username[:password]@]host[:port]/database[?param1=value1&param2=valu
 # Basic connection
 postgres://localhost:5432/postgres
 
-# With authentication
-postgres://username:password@localhost:5432/mydb
+# With authentication (replace with actual credentials)
+postgres://[username]:[password]@localhost:5432/mydb
 
 # With SSL disabled and custom schema
 postgres://localhost:5432/postgres?sslmode=disable&schemaName=orders
 
-# Production example with SSL
-postgres://username:password@hostname:5432/analytics?sslmode=require
+# Production example with SSL (replace placeholders)
+postgres://[username]:[password]@[hostname]:5432/analytics?sslmode=require
 ```
 
 **Common PostgreSQL Parameters:**
@@ -74,11 +74,11 @@ clickhouse://[username[:password]@]host[:port]/database[?param1=value1&param2=va
 # Basic connection (default user, no password)
 clickhouse://127.0.0.1:9000/order?secure=false
 
-# With authentication
-clickhouse://username:password@localhost:9000/analytics
+# With authentication (replace with actual credentials)
+clickhouse://[username]:[password]@localhost:9000/analytics
 
-# Secure connection
-clickhouse://username:password@hostname:9440/mydb?secure=true
+# Secure connection (replace placeholders)
+clickhouse://[username]:[password]@[hostname]:9440/mydb?secure=true
 
 # With custom settings
 clickhouse://localhost:9000/analytics?secure=false&compress=true&debug=true
@@ -96,8 +96,8 @@ clickhouse://localhost:9000/analytics?secure=false&compress=true&debug=true
 For security, avoid hardcoding credentials in commands. Use environment variables:
 
 ```bash
-# Set DSN as environment variable
-export DSN="postgres://username:password@localhost:5432/mydb?sslmode=disable"
+# Set DSN as environment variable (replace with actual credentials)
+export DSN="postgres://[username]:[password]@localhost:5432/mydb?sslmode=disable"
 
 # Use in command
 substreams-sink-sql from-proto $DSN substreams.yaml
