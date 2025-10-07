@@ -20,7 +20,7 @@ substreams-sink-sql from-proto <dsn> <manifest> [output-module]
 
 ### Arguments
 
-- `<dsn>`: Database connection string (Data Source Name)
+- `<dsn>`: Database connection string (Data Source Name) - see [DSN Format](#dsn-format) section below
 - `<manifest>`: Path to your Substreams manifest file (substreams.yaml)
 - `[output-module]`: Optional. Name of the output module to stream from (defaults to auto-detection)
 
@@ -31,6 +31,98 @@ substreams-sink-sql from-proto <dsn> <manifest> [output-module]
 - `-t, --stop-block`: Stop block to end stream at (default: 0, meaning no limit)
 - `--no-constraints`: Skip adding database constraints (useful for fast initial imports)
 - `--block-batch-size`: Number of blocks to process at a time (default: 25)
+
+## DSN Format
+
+The Data Source Name (DSN) specifies how to connect to your database. The format varies by database type:
+
+### PostgreSQL DSN Format
+
+```
+postgres://[username[:password]@]host[:port]/database[?param1=value1&param2=value2]
+```
+
+**Examples:**
+```bash
+# Basic connection
+postgres://localhost:5432/postgres
+
+# With authentication
+postgres://user:password@localhost:5432/mydb
+
+# With SSL disabled and custom schema
+postgres://localhost:5432/postgres?sslmode=disable&schemaName=orders
+
+# Production example with SSL
+postgres://user:password@prod-db.example.com:5432/analytics?sslmode=require
+```
+
+**Common PostgreSQL Parameters:**
+- `sslmode`: SSL connection mode (`disable`, `require`, `verify-ca`, `verify-full`)
+- `schemaName`: Target schema name (defaults to `public`)
+- `connect_timeout`: Connection timeout in seconds
+- `application_name`: Application name for connection tracking
+
+### ClickHouse DSN Format
+
+```
+clickhouse://[username[:password]@]host[:port]/database[?param1=value1&param2=value2]
+```
+
+**Examples:**
+```bash
+# Basic connection (default user, no password)
+clickhouse://127.0.0.1:9000/order?secure=false
+
+# With authentication
+clickhouse://user:password@localhost:9000/analytics
+
+# Secure connection
+clickhouse://user:password@clickhouse.example.com:9440/mydb?secure=true
+
+# With custom settings
+clickhouse://localhost:9000/analytics?secure=false&compress=true&debug=true
+```
+
+**Common ClickHouse Parameters:**
+- `secure`: Use TLS encryption (`true` or `false`)
+- `compress`: Enable compression (`true` or `false`)
+- `debug`: Enable debug logging (`true` or `false`)
+- `dial_timeout`: Connection timeout
+- `max_execution_time`: Query execution timeout
+
+### Environment Variable Usage
+
+For security, avoid hardcoding credentials in commands. Use environment variables:
+
+```bash
+# Set DSN as environment variable
+export DSN="postgres://user:password@localhost:5432/mydb?sslmode=disable"
+
+# Use in command
+substreams-sink-sql from-proto $DSN substreams.yaml
+```
+
+### Database Setup Examples
+
+**PostgreSQL with Docker:**
+```bash
+docker run --name postgres \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=analytics \
+  -p 5432:5432 -d postgres:13
+
+export DSN="postgres://postgres:password@localhost:5432/analytics?sslmode=disable"
+```
+
+**ClickHouse with Docker:**
+```bash
+docker run --name clickhouse \
+  -p 9000:9000 -p 8123:8123 \
+  -d clickhouse/clickhouse-server
+
+export DSN="clickhouse://127.0.0.1:9000/default?secure=false"
+```
 
 ## Step-by-Step Workflow
 
@@ -184,7 +276,7 @@ substreams-sink-sql from-proto $DSN substreams.yaml
 
 **ClickHouse:**
 ```bash
-export DSN="clickhouse://default:@localhost:9000/default"
+export DSN="clickhouse://127.0.0.1:9000/default?secure=false"
 substreams-sink-sql from-proto $DSN substreams.yaml
 ```
 
@@ -423,7 +515,7 @@ FROM transfers.transfers
 
 1. **Proto import errors**: Ensure all required proto files are in your import paths
 2. **Schema annotation errors**: Verify you're importing `sf/substreams/sink/sql/schema/v1/schema.proto`
-3. **Database connection issues**: Check your DSN format and database accessibility
+3. **Database connection issues**: Check your DSN format and database accessibility (see [DSN Format](#dsn-format) section)
 4. **Module output type errors**: Ensure your Substreams module outputs the expected proto message
 5. **String conversion errors**: Verify that string fields marked for numeric conversion contain valid numeric values
 6. **ClickHouse partition errors**: Ensure partition functions match your data types (e.g., `toYYYYMM` for timestamps)
