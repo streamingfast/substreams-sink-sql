@@ -124,106 +124,109 @@ docker run --name clickhouse \
 export DSN="clickhouse://127.0.0.1:9000/default?secure=false"
 ```
 
-## Step-by-Step Workflow
+## Substreams to Database Step-by-Step Workflow
 
-### Step 1: Create Your Protocol Buffer Definition
+### Step 1: Initialize Your Substreams Project
 
-Create a `.proto` file that defines your data structure with SQL schema annotations:
+Start by creating a new Substreams project:
+
+```bash
+# Create a new Substreams project
+substreams init
+
+# Follow the interactive prompts to configure your project
+# This will create the basic project structure with:
+# - substreams.yaml (manifest file)
+# - proto/ directory for protocol buffer definitions
+# - src/ directory for your Rust code
+# - Cargo.toml for Rust dependencies
+```
+
+### Step 2: Create Your Protocol Buffer Definition
+
+Create a `.proto` file that defines your data structure with SQL schema annotations. Here's an example based on the [USDC transfers showcase](https://github.com/streamingfast/substreams-sink-clickhouse-showcase):
 
 ```proto
 syntax = "proto3";
 import "google/protobuf/timestamp.proto";
 import "sf/substreams/sink/sql/schema/v1/schema.proto";
 
-package myproject;
+package transfers;
 
 message Output {
-  repeated Entity entities = 1;
+  repeated Transfer transfers = 1;
 }
 
-message Entity {
-  oneof entity {
-    User user = 1;
-    Transaction transaction = 2;
-  }
-}
-
-message User {
+message Transfer {
   option (schema.table) = {
-    name: "users"
+    name: "transfers"
     clickhouse_table_options: {
-      order_by_fields: [{name: "id"}]
-    }
-  };
-
-  string id = 1 [(schema.field) = { primary_key: true }];
-  string name = 2;
-  string email = 3;
-  google.protobuf.Timestamp created_at = 4;
-}
-
-message Transaction {
-  option (schema.table) = {
-    name: "transactions"
-    clickhouse_table_options: {
-      order_by_fields: [{name: "tx_hash"}, {name: "_block_number_"}]
+      order_by_fields: [{name: "tx_hash"}, {name: "log_index"}]
       partition_fields: [{name: "_block_timestamp_", function: toYYYYMM}]
       index_fields: [{
-        field_name: "user_id"
-        name: "user_idx"
+        field_name: "from_addr"
+        name: "from_idx"
+        type: bloom_filter
+        granularity: 4
+      }, {
+        field_name: "to_addr"
+        name: "to_idx"
         type: bloom_filter
         granularity: 4
       }]
     }
   };
 
-  string tx_hash = 1 [(schema.field) = { primary_key: true }];
-  string user_id = 2 [(schema.field) = { foreign_key: "users on id"}];
-  string amount = 3 [(schema.field) = { convertTo: { uint256{} } }]; // Large token amounts
-  google.protobuf.Timestamp timestamp = 4;
+  string tx_hash = 1;
+  uint32 log_index = 2;
+  string from_addr = 3;
+  string to_addr = 4;
+  string amount = 5 [(schema.field) = { convertTo: { uint256{} } }]; // Large token amounts as string
+  string contract_addr = 6;
+  google.protobuf.Timestamp timestamp = 7;
 }
 ```
 
-### Step 2: Create Your Substreams Manifest
+### Step 3: Create Your Substreams Manifest
 
 Create a `substreams.yaml` file that references your protobuf:
 
 ```yaml
 specVersion: v0.1.0
 package:
-  name: 'myproject'
+  name: 'usdc-transfers'
   version: v0.1.0
   doc: |
-    My Substreams project with SQL sink
+    USDC transfers extraction for SQL sink
 
 protobuf:
   files:
-    - myproject.proto
+    - transfers.proto
   importPaths:
     - ./proto
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: ./target/wasm32-unknown-unknown/release/myproject.wasm
+    file: ./target/wasm32-unknown-unknown/release/usdc_transfers.wasm
 
 modules:
-  - name: map_events
+  - name: map_transfer
     kind: map
     inputs:
       - source: sf.ethereum.type.v2.Block
     output:
-      type: proto:myproject.Output
+      type: proto:transfers.Output
 
 network: mainnet
 
 sink:
-  module: map_events
+  module: map_transfer
   type: sf.substreams.sink.sql.v1.Service
   config: {}
 ```
 
-### Step 3: Implement Your Substreams Module
+### Step 4: Implement Your Substreams Module
 
 Create your Rust module that outputs data matching your proto definition:
 
@@ -232,22 +235,41 @@ use substreams::prelude::*;
 use substreams_ethereum::pb::eth;
 
 #[substreams::handlers::map]
-fn map_events(block: eth::v2::Block) -> Result<myproject::Output, substreams::errors::Error> {
-    let mut output = myproject::Output::default();
+fn map_transfer(block: eth::v2::Block) -> Result<transfers::Output, substreams::errors::Error> {
+    let mut output = transfers::Output::default();
     
-    // Process block data and populate entities
-    // ... your business logic here ...
+    // Process block data and extract USDC transfers
+    for transaction in block.transaction_traces {
+        for log in transaction.receipt.unwrap().logs {
+            // Check if this is a USDC transfer event
+            if is_usdc_transfer(&log) {
+                let transfer = extract_transfer_data(&log, &transaction);
+                output.transfers.push(transfer);
+            }
+        }
+    }
     
     Ok(output)
 }
+
+// Helper functions would be implemented here
+fn is_usdc_transfer(log: &eth::v2::Log) -> bool {
+    // Implementation to check if log is USDC transfer
+    // ...
+}
+
+fn extract_transfer_data(log: &eth::v2::Log, tx: &eth::v2::TransactionTrace) -> transfers::Transfer {
+    // Implementation to extract transfer data from log
+    // ...
+}
 ```
 
-### Step 4: Compile Your Substreams
+### Step 4: Build Your Substreams
 
-Build your WASM binary:
+Build your Substreams with:
 
 ```bash
-cargo build --target wasm32-unknown-unknown --release
+substreams build
 ```
 
 ### Step 5: Set Up Your Database
@@ -544,22 +566,6 @@ FROM transfers.transfers
    - Child table relationships
    - PostgreSQL and ClickHouse compatibility
 
-## Migration from Traditional Setup
-
-If you're migrating from the traditional `setup` + `run` workflow:
-
-**Old way:**
-```bash
-substreams-sink-sql setup $DSN substreams.yaml
-substreams-sink-sql run $DSN substreams.yaml
-```
-
-**New way with from-proto:**
-```bash
-substreams-sink-sql from-proto $DSN substreams.yaml
-```
-
-The `from-proto` command combines both steps and automatically generates the schema from your protobuf definitions instead of requiring a separate SQL schema file.
 
 ## Version Compatibility and Recent Changes
 
