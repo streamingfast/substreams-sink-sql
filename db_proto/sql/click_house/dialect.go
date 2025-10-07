@@ -26,10 +26,12 @@ const staticSqlCreateBlock = `
 		deleted bool
 
 	)
-	ENGINE = ReplacingMergeTree(version)
+	ENGINE = ReplacingMergeTree(version, deleted)
 	PARTITION BY (toYYYYMM(timestamp))
 	PRIMARY KEY (number)
-	ORDER BY (number);
+	ORDER BY (number)
+	SETTINGS
+	    allow_experimental_replacing_merge_with_cleanup = 1;
 `
 
 const clickhouseTableOptionsErrorMsg = "schema annotation 'clickhouse_table_options' is required in table annotation 'option (schema.table) = { name: %q, ... }' , see: https://github.com/streamingfast/substreams-sink-sql#clickhouse-table-options for configuration details"
@@ -140,10 +142,7 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 	sb = strings.Builder{}
 	sb.WriteString(temp)
 
-	replacingMergeTree, err := replacingMergeTreeString(table)
-	if err != nil {
-		return fmt.Errorf("getting 'replacing merge tree' string: %w", err)
-	}
+	replacingMergeTree := "ReplacingMergeTree(_version_, _deleted_)"
 
 	primaryKey := ""
 	if primaryKeyFieldName != "" {
@@ -166,7 +165,10 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		return fmt.Errorf("getting 'index' string: %w", err)
 	}
 
-	sb.WriteString(fmt.Sprintf(" %s) ENGINE = %s %s %s %s;", indexes, replacingMergeTree, primaryKey, partitionBy, orderBy))
+	sb.WriteString(fmt.Sprintf(" %s) ENGINE = %s %s %s %s", indexes, replacingMergeTree, primaryKey, partitionBy, orderBy))
+	sb.WriteString(" SETTINGS\n")
+	sb.WriteString(" allow_experimental_replacing_merge_with_cleanup = 1")
+	sb.WriteString(";")
 
 	d.AddCreateTableSql(table.Name, sb.String())
 
@@ -288,20 +290,6 @@ func partitionByString(table *schema.Table) (string, error) {
 	}
 
 	return fmt.Sprintf("PARTITION BY (%s)", strings.Join(parts, ", ")), nil
-}
-
-func replacingMergeTreeString(table *schema.Table) (string, error) {
-	info := table.PbTableInfo.ClickhouseTableOptions
-	if info == nil {
-		return "", fmt.Errorf(clickhouseTableOptionsErrorMsg, table.Name)
-	}
-
-	out := sql2.DialectFieldVersion
-	for _, field := range info.ReplacingFields {
-		out += ", " + field.Name
-	}
-
-	return fmt.Sprintf("ReplacingMergeTree(%s)", out), nil
 }
 
 func wrapWithClickhouseFunction(fieldName string, function pbSchmema.Function) string {

@@ -356,6 +356,14 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 	if err != nil {
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 	}
+
+	//err = client.Do(d.ctx, ch.Query{
+	//	Body: fmt.Sprintf("OPTIMIZE TABLE %s._blocks_ FINAL CLEANUP;", d.schema.Name),
+	//})
+	//if err != nil {
+	//	return fmt.Errorf("optimizing table: %w", err)
+	//}
+
 	d.logger.Info("undo completed", zap.String("table", "_block_"), zap.Duration("duration", time.Since(start)))
 
 	for _, table := range tables {
@@ -398,6 +406,11 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		if err != nil {
 			return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 		}
+
+		//optimizationStart := time.Now()
+		//err = client.Do(d.ctx, ch.Query{
+		//	Body: fmt.Sprintf("OPTIMIZE TABLE %s FINAL CLEANUP;", tableFullName),
+		//})
 
 		d.logger.Info("undo completed", zap.String("table", table.Name), zap.Duration("duration", time.Since(start)))
 	}

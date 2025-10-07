@@ -60,7 +60,7 @@ func (s *Sinker) Run(ctx context.Context) error {
 			return fmt.Errorf("handle blocks undo from %s: %w", cursor.Block(), err)
 		}
 	}
-
+	//panic("Testing 12 12")
 	s.logger.Info("fetched cursor", zap.Stringer("block", cursor.Block()))
 
 	s.stats.LastBlockProcessAt = time.Now()
@@ -213,6 +213,10 @@ func (s *Sinker) processHolder(h *Holder, stats *stats.Stats) (err error) {
 	if err != nil {
 		return fmt.Errorf("unmarshaling message: %w", err)
 	}
+
+	//protoscopeOutput := protoscope.Write(h.data.Output.GetMapOutput().GetValue(), protoscope.WriterOptions{})
+	//fmt.Printf("Proto Scope: %s\n", protoscopeOutput)
+
 	stats.UnmarshallingDuration.Add(time.Since(unmarshalStartAt))
 
 	err = processMessage(dm, s.db, h.data.Clock.Number, h.data.Clock.Id, h.data.Clock.Timestamp.AsTime(), stats)

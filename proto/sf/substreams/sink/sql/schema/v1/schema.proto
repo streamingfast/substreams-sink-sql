@@ -80,7 +80,7 @@ message Column {
 message ClickhouseTableOptions {
     repeated ClickhouseOrderByField order_by_fields = 1;
     repeated ClickhousePartitionByField partition_fields = 2;
-    repeated ClickhouseReplacingField replacing_fields = 3;
+//    repeated ClickhouseReplacingField replacing_fields = 3;
     repeated ClickhouseIndexField index_fields = 4;
 }
 
@@ -95,9 +95,9 @@ message ClickhouseOrderByField {
   Function function = 3;
 }
 
-message ClickhouseReplacingField {
-  string name = 1;
-}
+//message ClickhouseReplacingField {
+//  string name = 1;
+//}
 
 message ClickhouseIndexField {
   string name = 1;

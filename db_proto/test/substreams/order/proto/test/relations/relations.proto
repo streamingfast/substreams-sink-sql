@@ -53,7 +53,7 @@ message TypesTest {
 
   optional string optional_string_set = 17;
   optional string optional_string_not_set = 18;
-  optional int32 optional_int32_field_set = 19;   
+  optional int32 optional_int32_field_set = 19;
   optional int32 optional_int32_field_not_set = 20;
 
 
