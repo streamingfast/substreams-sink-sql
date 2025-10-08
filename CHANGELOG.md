@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.9.1
+
+### DatabaseChanges mode improvements
+
+* Fixed bug where some unescape column where not correctly preserving cases in some situations like handling of upsert primary key(s).
+
+### From-proto mode improvements
+
+* Fixed conversion of `Decimal128`, `Decimal256`, `Int128`, `UInt128`, `Int256`, and `UInt256` if they are defined as `optional` in the Protobuf.
+
 ## v4.9.0
 
 ### From-proto ClickHouse improvements
