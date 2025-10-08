@@ -69,6 +69,17 @@ func TestDbProtoClickhouseIntegration(t *testing.T) {
 				{rowMeta(t, 1, "2025-01-01"), "o2", "c2"},
 			}),
 		},
+		{
+			"order with optional uint256 empty string",
+			streamMock(
+				relationsBlockData(t, "1a", "2025-01-01",
+					entityOrderWithOptionalUint256("o1", "c1", orderExtensionWithOptionalUint256("o1 desc", ""), orderItem("i1", 2)),
+				),
+			),
+			equalsOrderRows([]*OrderRow{
+				{rowMeta(t, 1, "2025-01-01"), "o1", "c1"},
+			}),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -205,6 +216,29 @@ func orderItem(itemId string, quantity int64) *pbrelations.OrderItem {
 func orderExtension(description string) *pbrelations.OrderExtension {
 	return &pbrelations.OrderExtension{
 		Description: description,
+	}
+}
+
+func orderExtensionWithOptionalUint256(description string, optionalUint256 string) *pbrelations.OrderExtension {
+	ext := &pbrelations.OrderExtension{
+		Description: description,
+	}
+	if optionalUint256 != "" {
+		ext.OptionalStr_2Uint256 = &optionalUint256
+	}
+	return ext
+}
+
+func entityOrderWithOptionalUint256(orderId, customerRefId string, extension *pbrelations.OrderExtension, items ...*pbrelations.OrderItem) *pbrelations.Entity {
+	return &pbrelations.Entity{
+		Entity: &pbrelations.Entity_Order{
+			Order: &pbrelations.Order{
+				OrderId:       orderId,
+				CustomerRefId: customerRefId,
+				Extension:     extension,
+				Items:         items,
+			},
+		},
 	}
 }
 
