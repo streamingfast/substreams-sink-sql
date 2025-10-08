@@ -407,6 +407,63 @@ func TestSinker_Integration_CompositePrimaryKey(t *testing.T) {
 	}
 }
 
+func TestSinker_Integration_CompositePrimaryKey_CamelCase(t *testing.T) {
+	pk := compositePK
+
+	tests := []sinkerTestCase{
+		{
+			"upsert final with camelCase composite primary key",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowMultiplePK("xfer", pk("userAddress", "0x123", "tokenId", "456"), "from", "sender1", "to", "receiver1"),
+				),
+			),
+			equalsXferCamelCasePKRows([]*XferCamelCasePKRow{
+				{UserAddress: "0x123", TokenId: "456", From: "sender1", To: "receiver1"},
+			}),
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"upsert, first insert, second update, final with camelCase composite primary key",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("8a"),
+					upsertRowMultiplePK("xfer", pk("userAddress", "0x123", "tokenId", "456"), "from", "sender1", "to", "receiver1"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowMultiplePK("xfer", pk("userAddress", "0x123", "tokenId", "456"), "to", "receiver2"),
+				),
+			),
+			equalsXferCamelCasePKRows([]*XferCamelCasePKRow{
+				{UserAddress: "0x123", TokenId: "456", From: "sender1", To: "receiver2"},
+			}),
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runSinkerTest(
+				t,
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				tablesInput(func(schema string) map[string]*db2.TableInfo {
+					return db2.TestTables(schema, map[string]*db2.TableInfo{
+						"xfer": mustNewTableInfo(schema, "xfer", []string{"userAddress", "tokenId"}, map[string]*db2.ColumnInfo{
+							"userAddress": db2.NewColumnInfo("userAddress", "text", ""),
+							"tokenId":     db2.NewColumnInfo("tokenId", "text", ""),
+							"from":        db2.NewColumnInfo("from", "text", ""),
+							"to":          db2.NewColumnInfo("to", "text", ""),
+						}),
+					})
+				}),
+				test.responses,
+				test.expected,
+				test.expectedFinalCursor,
+			)
+		})
+	}
+}
+
 func TestSinker_Integration_Bytes(t *testing.T) {
 	type XferBytesRow struct {
 		ID    []byte `db:"id"`
@@ -1047,5 +1104,20 @@ type XferCompositePKRow struct {
 func equalsXferCompositePKRows(expected []*XferCompositePKRow) func(t *testing.T, dbx *sqlx.DB, schema string) {
 	return func(t *testing.T, dbx *sqlx.DB, schema string) {
 		require.Equal(t, expected, readDbChangesRows[XferCompositePKRow](t, dbx, schema, "xfer"))
+	}
+}
+
+type XferCamelCasePKRow struct {
+	UserAddress string `db:"userAddress"`
+	TokenId     string `db:"tokenId"`
+	From        string `db:"from"`
+	To          string `db:"to"`
+}
+
+func equalsXferCamelCasePKRows(expected []*XferCamelCasePKRow) func(t *testing.T, dbx *sqlx.DB, schema string) {
+	return func(t *testing.T, dbx *sqlx.DB, schema string) {
+		// Use custom ordering since this table doesn't have an "id" column
+		actual := readRowsBy[XferCamelCasePKRow](t, dbx, fmt.Sprintf(`"%s"."%s"`, schema, "xfer"), `"userAddress", "tokenId"`)
+		require.Equal(t, expected, actual)
 	}
 }
