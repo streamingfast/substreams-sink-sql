@@ -30,6 +30,7 @@ var driverMap = map[string]string{
 	"psql":       "postgres",
 	"postgres":   "postgres",
 	"clickhouse": "clickhouse",
+	"parquet":    "parquet",
 }
 
 func ParseDSN(dsn string) (*DSN, error) {
@@ -64,7 +65,7 @@ func ParseDSN(dsn string) (*DSN, error) {
 
 	username := dsnURL.User.Username()
 	password, _ := dsnURL.User.Password()
-	database := strings.TrimPrefix(dsnURL.EscapedPath(), "/")
+	database := dsnURL.EscapedPath()
 
 	d := &DSN{
 		original: dsn,
@@ -108,16 +109,16 @@ func (c *DSN) ConnString() string {
 		scheme := "clickhouse"
 		host := c.Host
 
-		if host == "localhost" {
-			// Weird handling to keep old behavior while we discuss the right way to handle that
-			// In the old code, of there was options set and the host was localhost, we were switching
-			// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
-			host = "127.0.0.1"
-			scheme = "http"
-			if c.Options.Get("secure") == "true" {
-				scheme = "https"
-			}
-		}
+		//if host == "localhost" {
+		//	// Weird handling to keep old behavior while we discuss the right way to handle that
+		//	// In the old code, of there was options set and the host was localhost, we were switching
+		//	// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
+		//	host = "127.0.0.1"
+		//	scheme = "http"
+		//	if c.Options.Get("secure") == "true" {
+		//		scheme = "https"
+		//	}
+		//}
 
 		baseURL := fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, c.Username, c.Password, host, c.Port, c.Database)
 		if len(c.Options) > 0 {
