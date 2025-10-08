@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	descriptor2 "github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/jhump/protoreflect/desc"
 	pbSchmema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type PrimaryKey struct {
 	Name            string
-	FieldDescriptor *desc.FieldDescriptor
+	FieldDescriptor protoreflect.FieldDescriptor
 	Index           int
 }
 
@@ -41,15 +40,15 @@ type Table struct {
 	PbTableInfo *pbSchmema.Table
 }
 
-func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int) (*Table, error) {
+func NewTable(descriptor protoreflect.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int) (*Table, error) {
 	table := &Table{
-		Name:        descriptor.GetName(),
+		Name:        string(descriptor.Name()),
 		Ordinal:     ordinal,
 		PbTableInfo: tableInfo,
 	}
 	table.Name = tableInfo.Name
 
-	typeName := descriptor.GetName()
+	typeName := string(descriptor.Name())
 	isTimestamp := typeName == ".google.protobuf.Timestamp" || typeName == "Timestamp"
 	if isTimestamp {
 		return nil, nil
@@ -65,7 +64,7 @@ func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, or
 
 	err := table.processColumns(descriptor)
 	if err != nil {
-		return nil, fmt.Errorf("error processing fields for table %q: %w", descriptor.GetName(), err)
+		return nil, fmt.Errorf("error processing fields for table %q: %w", string(descriptor.Name()), err)
 	}
 
 	if len(table.Columns) == 0 {
@@ -75,23 +74,24 @@ func NewTable(descriptor *desc.MessageDescriptor, tableInfo *pbSchmema.Table, or
 	return table, nil
 }
 
-func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
-	for idx, fieldDescriptor := range descriptor.GetFields() {
+func (t *Table) processColumns(descriptor protoreflect.MessageDescriptor) error {
+	fields := descriptor.Fields()
+	for idx := 0; idx < fields.Len(); idx++ {
+		fieldDescriptor := fields.Get(idx)
 
-		if fieldDescriptor.GetOneOf() != nil && !fieldDescriptor.IsProto3Optional() {
+		if fieldDescriptor.ContainingOneof() != nil && !fieldDescriptor.HasOptionalKeyword() {
 			continue
-
 		}
 
-		if fieldDescriptor.IsRepeated() {
-			if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE { //This will be handled by table relations
+		if fieldDescriptor.IsList() {
+			if fieldDescriptor.Kind() == protoreflect.MessageKind { //This will be handled by table relations
 				continue
 			}
 			// Allow repeated scalar fields to be processed as array columns
 		}
 
-		if fieldDescriptor.GetType() == descriptor2.FieldDescriptorProto_TYPE_MESSAGE {
-			typeName := fieldDescriptor.GetMessageType().GetName()
+		if fieldDescriptor.Kind() == protoreflect.MessageKind {
+			typeName := string(fieldDescriptor.Message().Name())
 			isTimestamp := typeName == ".google.protobuf.Timestamp" || typeName == "Timestamp"
 			if !isTimestamp {
 				continue
@@ -100,7 +100,7 @@ func (t *Table) processColumns(descriptor *desc.MessageDescriptor) error {
 
 		column, err := NewColumn(fieldDescriptor)
 		if err != nil {
-			return fmt.Errorf("error processing column %q: %w", fieldDescriptor.GetName(), err)
+			return fmt.Errorf("error processing column %q: %w", string(fieldDescriptor.Name()), err)
 		}
 
 		if column.IsPrimaryKey {

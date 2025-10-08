@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
 	pbSchema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Database interface {
@@ -20,7 +21,7 @@ type Database interface {
 	StoreSinkInfo(schemaName string, schemaHash string) error
 
 	CreateDatabase(useConstraints bool) error
-	WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent) (time.Duration, error)
+	WalkMessageDescriptorAndInsert(dm *dynamicpb.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent) (time.Duration, error)
 	InsertBlock(blockNum uint64, hash string, timestamp time.Time) error
 
 	HandleBlocksUndo(lastValidBlockNumber uint64) error
@@ -45,11 +46,11 @@ type BaseDatabase struct {
 	logger                *zap.Logger
 	mapOutputType         string
 	insertStatements      map[string]*sql.Stmt
-	RootMessageDescriptor *desc.MessageDescriptor
+	RootMessageDescriptor protoreflect.MessageDescriptor
 	useProtoOptions       bool
 }
 
-func NewBaseDatabase(moduleOutputType string, rootMessageDescriptor *desc.MessageDescriptor, useProtoOptions bool, logger *zap.Logger) (database *BaseDatabase, err error) {
+func NewBaseDatabase(moduleOutputType string, rootMessageDescriptor protoreflect.MessageDescriptor, useProtoOptions bool, logger *zap.Logger) (database *BaseDatabase, err error) {
 	logger = logger.Named("database")
 
 	return &BaseDatabase{
@@ -75,7 +76,7 @@ type Parent struct {
 	id    interface{}
 }
 
-func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent, dialect Dialect, inserter Inserter) (time.Duration, error) {
+func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.Message, blockNum uint64, blockTimestamp time.Time, parent *Parent, dialect Dialect, inserter Inserter) (time.Duration, error) {
 	if dm == nil {
 		return 0, fmt.Errorf("received a nil message")
 	}
@@ -95,26 +96,27 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 		primaryKeyOffset += 1
 	}
 
-	md := dm.GetMessageDescriptor()
+	md := dm.Descriptor()
 	tableInfo := proto.TableInfo(md)
 
 	if tableInfo == nil && !d.useProtoOptions {
 		tableInfo = &pbSchema.Table{
-			Name: md.GetName(),
+			Name: string(md.Name()),
 		}
 	}
 
-	d.logger.Debug("Walking message descriptor", zap.String("message_descriptor_name", md.GetName()), zap.Any("table_info", tableInfo))
+	d.logger.Debug("Walking message descriptor", zap.String("message_descriptor_name", string(md.Name())), zap.Any("table_info", tableInfo))
 	primaryKey := ""
 	if tableInfo != nil {
 		if table := dialect.GetTable(tableInfo.Name); table != nil {
 			if table.PrimaryKey != nil {
 				primaryKey = table.PrimaryKey.Name
-				pkValue := dm.GetFieldByName(primaryKey)
-				if pkValue == nil {
+				pkField := md.Fields().ByName(protoreflect.Name(primaryKey))
+				if pkField == nil {
 					return 0, fmt.Errorf("missing primary key field %q for table %q", primaryKey, tableInfo.Name)
 				}
-				fieldValues = append(fieldValues, pkValue)
+				pkValue := dm.Get(pkField)
+				fieldValues = append(fieldValues, pkValue.Interface())
 			}
 		}
 	}
@@ -125,37 +127,50 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 		fieldValues = append(fieldValues, parent.id)
 	}
 
-	var childs []*dynamic.Message
+	var childs []*dynamicpb.Message
 
-	for _, fd := range dm.GetKnownFields() {
-		if fd.GetName() == primaryKey {
+	fields := md.Fields()
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		if string(fd.Name()) == primaryKey {
 			continue
 		}
-		fv := dm.GetField(fd)
-		if v, ok := fv.([]interface{}); ok {
+		fv := dm.Get(fd)
+
+		if fd.IsList() {
 			// Check if this is an array of messages or native values
-			if len(v) > 0 {
-				if _, ok := v[0].(*dynamic.Message); ok {
+			list := fv.List()
+			if list.Len() > 0 {
+				if fd.Kind() == protoreflect.MessageKind {
 					// Array of messages - process as child tables
-					for _, c := range v {
-						fm, ok := c.(*dynamic.Message)
-						if !ok {
-							return 0, fmt.Errorf("Mixed array types not supported in 'from-proto' mode. message %q, field %q", md.GetFullyQualifiedName(), fd.GetName())
-						}
+					for j := 0; j < list.Len(); j++ {
+						fm := list.Get(j).Message().Interface().(*dynamicpb.Message)
 						childs = append(childs, fm)
 					}
 				} else {
 					// Array of native values - add as a single field value (the array itself)
-					fieldValues = append(fieldValues, fv)
+					var values []interface{}
+					for j := 0; j < list.Len(); j++ {
+						values = append(values, list.Get(j).Interface())
+					}
+					fieldValues = append(fieldValues, values)
 				}
 			}
-		} else if fm, ok := fv.(*dynamic.Message); ok {
-			if fm == nil {
-				continue //un-use oneOf field
+		} else if fd.Kind() == protoreflect.MessageKind {
+			if fv.Message().IsValid() {
+				fm := fv.Message().Interface().(*dynamicpb.Message)
+				if fm.Descriptor().FullName() == "google.protobuf.Timestamp" {
+					// Convert fv to *timestamppb.Timestamp
+					timestamp := &timestamppb.Timestamp{}
+					timestamp.Seconds = fm.Get(fm.Descriptor().Fields().ByName("seconds")).Int()
+					timestamp.Nanos = int32(fm.Get(fm.Descriptor().Fields().ByName("nanos")).Int())
+					fieldValues = append(fieldValues, timestamp)
+					continue
+				}
+				childs = append(childs, fm) //need to be handled after current message inserted
 			}
-			childs = append(childs, fm) //need to be handled after current message inserted
 		} else {
-			fieldValues = append(fieldValues, fv)
+			fieldValues = append(fieldValues, fv.Interface())
 		}
 	}
 
@@ -176,7 +191,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 				}
 				id := fieldValues[table.PrimaryKey.Index+primaryKeyOffset]
 				p = &Parent{
-					field: strings.ToLower(md.GetName()),
+					field: strings.ToLower(string(md.Name())),
 					id:    id,
 				}
 			}
@@ -187,7 +202,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamic.Mes
 	for _, fm := range childs {
 		sqlDuration, err := d.WalkMessageDescriptorAndInsertWithDialect(fm, blockNum, blockTimestamp, p, dialect, inserter)
 		if err != nil {
-			return 0, fmt.Errorf("processing child %q: %w", fm.GetMessageDescriptor().GetFullyQualifiedName(), err)
+			return 0, fmt.Errorf("processing child %q: %w", string(fm.Descriptor().FullName()), err)
 		}
 		totalSqlDuration += sqlDuration
 	}

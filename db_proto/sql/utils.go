@@ -4,20 +4,19 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/jhump/protoreflect/desc"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-func fieldName(f *desc.FieldDescriptor) string {
+func fieldName(f protoreflect.FieldDescriptor) string {
 	fieldNameSuffix := ""
-	if f.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE {
+	if f.Kind() == protoreflect.MessageKind {
 		fieldNameSuffix = "_id"
 	}
 
-	return fmt.Sprintf("%s%s", strings.ToLower(f.GetName()), fieldNameSuffix)
+	return fmt.Sprintf("%s%s", strings.ToLower(string(f.Name())), fieldNameSuffix)
 }
 
-func fieldQuotedName(f *desc.FieldDescriptor) string {
+func fieldQuotedName(f protoreflect.FieldDescriptor) string {
 	return Quoted(fieldName(f))
 }
 

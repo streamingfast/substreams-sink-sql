@@ -1,52 +1,38 @@
 package proto
 
 import (
-	"errors"
 	"fmt"
 
-	proto "github.com/golang/protobuf/proto"
-	"github.com/jhump/protoreflect/desc"
 	schema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
-	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-func TableInfo(d *desc.MessageDescriptor) *schema.Table {
-	msgOptions := d.GetOptions().(*descriptorpb.MessageOptions)
+func TableInfo(d protoreflect.MessageDescriptor) *schema.Table {
+	msgOptions := d.Options()
 
-	ext, err := proto.GetExtension(msgOptions, schema.E_Table)
-
-	if errors.Is(err, proto.ErrMissingExtension) {
-		return nil
-	} else if err != nil {
-		return nil
-	} else {
+	if proto.HasExtension(msgOptions, schema.E_Table) {
+		ext := proto.GetExtension(msgOptions, schema.E_Table)
 		table, ok := ext.(*schema.Table)
 		if ok {
 			if table.Name == "" {
-				panic(fmt.Sprintf("table name is required for message %q", d.GetName()))
+				panic(fmt.Sprintf("table name is required for message %q", string(d.Name())))
 			}
 			return table
-		} else {
-			return nil
 		}
 	}
+	return nil
 }
 
-func FieldInfo(d *desc.FieldDescriptor) *schema.Column {
-	options := d.GetOptions().(*descriptorpb.FieldOptions)
+func FieldInfo(d protoreflect.FieldDescriptor) *schema.Column {
+	options := d.Options()
 
-	ext, err := proto.GetExtension(options, schema.E_Field)
-
-	if errors.Is(err, proto.ErrMissingExtension) {
-		return nil
-	} else if err != nil {
-		return nil
-	} else {
+	if proto.HasExtension(options, schema.E_Field) {
+		ext := proto.GetExtension(options, schema.E_Field)
 		f, ok := ext.(*schema.Column)
 		if ok {
 			return f
-		} else {
-			return nil
 		}
 	}
+	return nil
 }

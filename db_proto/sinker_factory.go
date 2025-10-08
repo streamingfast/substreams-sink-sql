@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
@@ -56,11 +55,6 @@ func SinkerFactory(
 		dsn, err := db.ParseDSN(dsnString)
 		if err != nil {
 			return nil, fmt.Errorf("parsing dsn: %w", err)
-		}
-
-		rootMessageDescriptor, err := desc.WrapMessage(rootMessageDescriptor)
-		if err != nil {
-			return nil, fmt.Errorf("wrapping message descriptor: %w", err)
 		}
 
 		schema, err := schema2.NewSchema(schemaName, rootMessageDescriptor, options.UseProtoOption, logger)

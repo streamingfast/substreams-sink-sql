@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/jhump/protoreflect/desc"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -35,8 +34,11 @@ func (s DataType) String() string {
 	return string(s)
 }
 
-func IsWellKnownType(fd *desc.FieldDescriptor) bool {
-	switch fd.GetMessageType().GetFullyQualifiedName() {
+func IsWellKnownType(fd protoreflect.FieldDescriptor) bool {
+	if fd.Kind() != protoreflect.MessageKind {
+		return false
+	}
+	switch string(fd.Message().FullName()) {
 	case "google.protobuf.Timestamp":
 		return true
 	default:
@@ -44,33 +46,33 @@ func IsWellKnownType(fd *desc.FieldDescriptor) bool {
 	}
 }
 
-func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding, column *schema.Column) DataType {
-	t := fd.GetType()
+func MapFieldType(fd protoreflect.FieldDescriptor, bytesEncoding bytes.Encoding, column *schema.Column) DataType {
+	kind := fd.Kind()
 	var baseType DataType
 
-	switch t {
-	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
-		switch fd.GetMessageType().GetFullyQualifiedName() {
+	switch kind {
+	case protoreflect.MessageKind:
+		switch string(fd.Message().FullName()) {
 		case "google.protobuf.Timestamp":
 			baseType = TypeTimestamp
 		default:
-			panic(fmt.Sprintf("Message type not supported: %s", fd.GetMessageType().GetFullyQualifiedName()))
+			panic(fmt.Sprintf("Message type not supported: %s", string(fd.Message().FullName())))
 		}
-	case descriptor.FieldDescriptorProto_TYPE_BOOL:
+	case protoreflect.BoolKind:
 		baseType = TypeBool
-	case descriptor.FieldDescriptorProto_TYPE_INT32, descriptor.FieldDescriptorProto_TYPE_SINT32, descriptor.FieldDescriptorProto_TYPE_SFIXED32:
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 		baseType = TypeInteger
-	case descriptor.FieldDescriptorProto_TYPE_INT64, descriptor.FieldDescriptorProto_TYPE_SINT64, descriptor.FieldDescriptorProto_TYPE_SFIXED64:
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		baseType = TypeBigInt
-	case descriptor.FieldDescriptorProto_TYPE_UINT64, descriptor.FieldDescriptorProto_TYPE_FIXED64:
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		baseType = TypeNumeric
-	case descriptor.FieldDescriptorProto_TYPE_UINT32, descriptor.FieldDescriptorProto_TYPE_FIXED32:
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
 		baseType = TypeNumeric
-	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
+	case protoreflect.FloatKind:
 		baseType = TypeDecimal
-	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
+	case protoreflect.DoubleKind:
 		baseType = TypeDouble
-	case descriptor.FieldDescriptorProto_TYPE_STRING:
+	case protoreflect.StringKind:
 		if column.ConvertTo != nil && column.ConvertTo.Convertion != nil {
 			switch column.ConvertTo.Convertion.(type) {
 			case *v1.StringConvertion_Int128:
@@ -93,20 +95,20 @@ func MapFieldType(fd *desc.FieldDescriptor, bytesEncoding bytes.Encoding, column
 		} else {
 			baseType = TypeVarchar
 		}
-	case descriptor.FieldDescriptorProto_TYPE_BYTES:
+	case protoreflect.BytesKind:
 		if bytesEncoding.IsStringType() {
 			baseType = TypeText
 		} else {
 			baseType = TypeBytea
 		}
-	case descriptor.FieldDescriptorProto_TYPE_ENUM:
+	case protoreflect.EnumKind:
 		baseType = TypeText
 	default:
-		panic(fmt.Sprintf("unsupported type: %s", t))
+		panic(fmt.Sprintf("unsupported type: %s", kind))
 	}
 
 	// If field is repeated, wrap the base type as an array
-	if fd.IsRepeated() {
+	if fd.IsList() {
 		return DataType(fmt.Sprintf("%s[]", baseType))
 	}
 

@@ -4,16 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/jhump/protoreflect/desc"
 	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"github.com/streamingfast/substreams-sink-sql/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type Column struct {
 	Name            string
 	ForeignKey      *ForeignKey
-	FieldDescriptor *desc.FieldDescriptor
+	FieldDescriptor protoreflect.FieldDescriptor
 	IsPrimaryKey    bool
 	IsUnique        bool
 	IsRepeated      bool
@@ -24,14 +23,14 @@ type Column struct {
 	ConvertTo       *v1.StringConvertion
 }
 
-func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
+func NewColumn(d protoreflect.FieldDescriptor) (*Column, error) {
 	out := &Column{
-		Name:            d.GetName(),
+		Name:            string(d.Name()),
 		FieldDescriptor: d,
-		IsRepeated:      d.IsRepeated(),
-		IsMessage:       d.GetType() == descriptor.FieldDescriptorProto_TYPE_MESSAGE,
+		IsRepeated:      d.IsList(),
+		IsMessage:       d.Kind() == protoreflect.MessageKind,
 		IsExtension:     d.IsExtension(),
-		IsOptional:      d.IsProto3Optional(),
+		IsOptional:      d.HasOptionalKeyword(),
 	}
 
 	fieldInfo := proto.FieldInfo(d)
@@ -52,7 +51,7 @@ func NewColumn(d *desc.FieldDescriptor) (*Column, error) {
 	}
 
 	if out.IsMessage {
-		out.Message = d.GetMessageType().GetName()
+		out.Message = string(d.Message().Name())
 	}
 	return out, nil
 }

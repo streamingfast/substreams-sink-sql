@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/ClickHouse/ch-go"
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/dynamic"
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
@@ -20,6 +18,8 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 type Database struct {
@@ -41,7 +41,7 @@ func NewDatabase(
 	schema *schema.Schema,
 	dsn *db.DSN,
 	moduleOutputType string,
-	rootMessageDescriptor *desc.MessageDescriptor,
+	rootMessageDescriptor protoreflect.MessageDescriptor,
 	sinkInfoFolder string,
 	cursorFilePath string,
 	useProtoOptions bool,
@@ -191,7 +191,7 @@ func (d *Database) Insert(table string, values []any) error {
 	return d.inserter.insert(table, values)
 }
 
-func (d *Database) WalkMessageDescriptorAndInsert(dm *dynamic.Message, blockNum uint64, blockTimestamp time.Time, parent *sql.Parent) (time.Duration, error) {
+func (d *Database) WalkMessageDescriptorAndInsert(dm *dynamicpb.Message, blockNum uint64, blockTimestamp time.Time, parent *sql.Parent) (time.Duration, error) {
 	return d.BaseDatabase.WalkMessageDescriptorAndInsertWithDialect(dm, blockNum, blockTimestamp, parent, d.dialect, d)
 }
 

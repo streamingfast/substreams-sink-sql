@@ -6,14 +6,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/dynamic"
 	sink "github.com/streamingfast/substreams-sink"
 	sql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/stats"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"go.uber.org/zap"
 	"google.golang.org/appengine"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 type Sinker struct {
@@ -24,14 +25,14 @@ type Sinker struct {
 	blockBatchSize        uint64
 	stats                 *stats.Stats
 	logger                *zap.Logger
-	rootMessageDescriptor *desc.MessageDescriptor
+	rootMessageDescriptor protoreflect.MessageDescriptor
 	useConstraints        bool
 	flushLock             sync.Mutex
 	lastAppliedBlockNum   uint64
 	lastAppliedBlockTime  time.Time
 }
 
-func NewSinker(rootMessageDescriptor *desc.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, useConstraints bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
+func NewSinker(rootMessageDescriptor protoreflect.MessageDescriptor, sink *sink.Sinker, db sql.Database, useTransaction bool, useConstraints bool, blockBatchSize int, parallel bool, stats *stats.Stats, logger *zap.Logger) *Sinker {
 	return &Sinker{
 		db:                    db,
 		rootMessageDescriptor: rootMessageDescriptor,
@@ -208,8 +209,8 @@ func (s *Sinker) processHolder(h *Holder, stats *stats.Stats) (err error) {
 
 	unmarshalStartAt := time.Now()
 	md := s.rootMessageDescriptor
-	dm := dynamic.NewMessage(md)
-	err = dm.Unmarshal(h.data.Output.GetMapOutput().GetValue())
+	dm := dynamicpb.NewMessage(md)
+	err = proto.Unmarshal(h.data.Output.GetMapOutput().GetValue(), dm)
 	if err != nil {
 		return fmt.Errorf("unmarshaling message: %w", err)
 	}
@@ -226,7 +227,7 @@ func (s *Sinker) processHolder(h *Holder, stats *stats.Stats) (err error) {
 
 	return nil
 }
-func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64, blockHash string, blockTimestamp time.Time, stats *stats.Stats) error {
+func processMessage(dm *dynamicpb.Message, database sql.Database, blockNum uint64, blockHash string, blockTimestamp time.Time, stats *stats.Stats) error {
 	startInsertBlock := time.Now()
 	err := database.InsertBlock(blockNum, blockHash, blockTimestamp)
 	if err != nil {
@@ -236,7 +237,7 @@ func processMessage(dm *dynamic.Message, database sql.Database, blockNum uint64,
 
 	sqlDuration, err := database.WalkMessageDescriptorAndInsert(dm, blockNum, blockTimestamp, nil)
 	if err != nil {
-		return fmt.Errorf("processing message %q: %w", dm.GetMessageDescriptor().GetFullyQualifiedName(), err)
+		return fmt.Errorf("processing message %q: %w", string(dm.Descriptor().FullName()), err)
 	}
 
 	stats.EntitiesInsertDuration.Add(sqlDuration)
