@@ -66,6 +66,9 @@ func ParseDSN(dsn string) (*DSN, error) {
 	username := dsnURL.User.Username()
 	password, _ := dsnURL.User.Password()
 	database := dsnURL.EscapedPath()
+	if database != "parquet" {
+		database = strings.TrimPrefix(database, "/")
+	}
 
 	d := &DSN{
 		original: dsn,

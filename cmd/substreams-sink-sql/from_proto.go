@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jhump/protoreflect/desc"
+	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/streamingfast/cli"
@@ -39,6 +40,7 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.String("clickhouse-sink-info-folder", "", "folder where to store the clickhouse sink info")
 		flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
 		flags.String("bytes-encoding", "raw", "Encoding for protobuf bytes fields (raw, hex, 0xhex, base64, base58)")
+		flags.String("proto-file-override", "", "Override protobuf file to use instead of extracting from substreams package")
 	}),
 )
 
@@ -134,6 +136,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("running service: %w", err)
 	}
 
+	var fileDescriptor *desc.FileDescriptor
+
+	// Use original logic to extract from substreams package
 	protoFiles := map[string]*descriptorpb.FileDescriptorProto{}
 	for _, file := range spkg.ProtoFiles {
 		protoFiles[file.GetName()] = file
@@ -144,9 +149,36 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving dependencies: %w", err)
 	}
 
-	fileDescriptor, err := proto.FileDescriptorForOutputType(spkg, err, deps, outputType)
-	if err != nil {
-		return fmt.Errorf("finding file descriptor for output type %q: %w", outputType, err)
+	// Check if proto-file-override flag is provided
+	protoFileOverride := sflags.MustGetString(cmd, "proto-file-override")
+	if protoFileOverride != "" {
+		// Load file descriptor from the override proto file
+		// Include dependencies from the substreams package to resolve imports
+		parser := protoparse.Parser{
+			ImportPaths:           []string{},
+			IncludeSourceCodeInfo: true,
+			LookupImport: func(filename string) (*desc.FileDescriptor, error) {
+				if fd, exists := deps[filename]; exists {
+					return fd, nil
+				}
+				return nil, fmt.Errorf("import %q not found", filename)
+			},
+		}
+
+		fds, err := parser.ParseFiles(protoFileOverride)
+		if err != nil {
+			return fmt.Errorf("parsing proto file override %q: %w", protoFileOverride, err)
+		}
+		if len(fds) == 0 {
+			return fmt.Errorf("no file descriptors found in proto file override %q", protoFileOverride)
+		}
+		fileDescriptor = fds[0]
+	} else {
+
+		fileDescriptor, err = proto.FileDescriptorForOutputType(spkg, err, deps, outputType)
+		if err != nil {
+			return fmt.Errorf("finding file descriptor for output type %q: %w", outputType, err)
+		}
 	}
 
 	useProtoOption := false

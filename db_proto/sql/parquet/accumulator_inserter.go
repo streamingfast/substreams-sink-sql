@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type accumulator struct {
@@ -181,7 +183,7 @@ func (a *AccumulatorInserter) flush(db *Database) error {
 		filePath := filepath.Join(tablePath, filename)
 
 		// Write parquet file
-		if err := a.writeParquetFile(filePath, rows, db); err != nil {
+		if err := a.writeParquetFile(tableName, filePath, rows, db); err != nil {
 			return fmt.Errorf("writing parquet file for table %q: %w", tableName, err)
 		}
 
@@ -197,7 +199,7 @@ func (a *AccumulatorInserter) flush(db *Database) error {
 	return nil
 }
 
-func (a *AccumulatorInserter) writeParquetFile(filePath string, rows []map[string]any, _ *Database) error {
+func (a *AccumulatorInserter) writeParquetFile(tableName string, filePath string, rows []map[string]any, db *Database) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -209,50 +211,253 @@ func (a *AccumulatorInserter) writeParquetFile(filePath string, rows []map[strin
 	}
 	defer file.Close()
 
-	// Create schema from the first row
-	schema, err := a.createSchemaFromMap(rows[0])
+	// Extract table name from file path to get the right accumulator
+	accumulator := a.accumulators[tableName]
+	if accumulator == nil {
+		return fmt.Errorf("accumulator not found for table %q", tableName)
+	}
+
+	// Create schema from db_proto schema definitions
+	schema, err := a.createSchemaFromAccumulator(accumulator)
 	if err != nil {
-		return fmt.Errorf("creating schema: %w", err)
+		return fmt.Errorf("creating schema from accumulator: %w", err)
 	}
 
 	// Create writer with schema
 	writer := parquet.NewWriter(file, schema)
+	defer writer.Close()
 
-	// Convert maps to Rows
-	parquetRows := make([]parquet.Row, len(rows))
-	for i, rowMap := range rows {
-		row, err := a.mapToParquetRow(rowMap, schema)
-		if err != nil {
-			return fmt.Errorf("converting row %d: %w", i, err)
+	// Write rows using RowBuilder pattern
+	for _, rowMap := range rows {
+		builder := parquet.NewRowBuilder(schema)
+
+		if err := a.buildRowFromMap(builder, rowMap, accumulator, schema); err != nil {
+			return fmt.Errorf("building row: %w", err)
 		}
-		parquetRows[i] = row
-	}
 
-	// Write rows
-	if _, err := writer.WriteRows(parquetRows); err != nil {
-		return fmt.Errorf("writing rows: %w", err)
-	}
-
-	// Close writer
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("closing writer: %w", err)
+		parquetRow := builder.Row()
+		if _, err := writer.WriteRows([]parquet.Row{parquetRow}); err != nil {
+			return fmt.Errorf("writing row: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func (a *AccumulatorInserter) createSchemaFromMap(row map[string]any) (*parquet.Schema, error) {
+// getTableNameFromFilePath extracts table name from file path
+func (a *AccumulatorInserter) getTableNameFromFilePath(filePath string) string {
+	filename := filepath.Base(filePath)
+	// Remove extension and timestamp suffix
+	// Expected format: tablename_timestamp.parquet
+	parts := strings.Split(filename, "_")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return filename
+}
+
+// createSchemaFromAccumulator builds parquet schema from db_proto schema definitions
+func (a *AccumulatorInserter) createSchemaFromAccumulator(acc *accumulator) (*parquet.Schema, error) {
 	group := make(parquet.Group)
 
-	for columnName, value := range row {
-		node, err := a.valueToNode(value)
-		if err != nil {
-			return nil, fmt.Errorf("creating node for %q: %w", columnName, err)
+	// Build schema based on column order and types
+	for i := 0; i < len(acc.columns); i++ {
+		column, found := acc.columns[i]
+		if !found {
+			continue
 		}
-		group[columnName] = node
+
+		node, err := a.columnToParquetNode(column)
+		if err != nil {
+			return nil, fmt.Errorf("creating node for column %q: %w", column.Name, err)
+		}
+		group[column.Name] = node
 	}
 
-	return parquet.NewSchema("row", group), nil
+	return parquet.NewSchema(acc.tableName, group), nil
+}
+
+// columnToParquetNode converts db_proto column definition to parquet node
+func (a *AccumulatorInserter) columnToParquetNode(column *schema.Column) (parquet.Node, error) {
+	if column.FieldDescriptor != nil {
+		// Use protobuf field descriptor to determine type
+		fieldDesc := column.FieldDescriptor
+
+		if fieldDesc.IsList() {
+			// Handle repeated fields
+			elementNode, err := a.protoKindToParquetNode(fieldDesc.Kind())
+			if err != nil {
+				return nil, err
+			}
+			return parquet.Repeated(elementNode), nil
+		}
+
+		return a.protoKindToParquetNode(fieldDesc.Kind())
+	}
+
+	// For system columns without field descriptors, use appropriate types based on column name
+	switch column.Name {
+	case sql2.DialectFieldBlockNumber:
+		return parquet.Int(64), nil // Block number is typically int64
+	case sql2.DialectFieldBlockTimestamp:
+		return parquet.Timestamp(parquet.Millisecond), nil // Timestamp
+	case sql2.DialectFieldVersion:
+		return parquet.Int(64), nil // Version is typically int64
+	case sql2.DialectFieldDeleted:
+		return parquet.Leaf(parquet.BooleanType), nil // Deleted is boolean
+	default:
+		return parquet.String(), nil // Default to string for unknown system columns
+	}
+}
+
+// protoKindToParquetNode maps protobuf kinds to parquet nodes
+func (a *AccumulatorInserter) protoKindToParquetNode(kind protoreflect.Kind) (parquet.Node, error) {
+	switch kind {
+	case protoreflect.BoolKind:
+		return parquet.Leaf(parquet.BooleanType), nil
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		return parquet.Int(32), nil
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		return parquet.Int(64), nil
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		return parquet.Uint(32), nil
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		return parquet.Uint(64), nil
+	case protoreflect.FloatKind:
+		return parquet.Leaf(parquet.FloatType), nil
+	case protoreflect.DoubleKind:
+		return parquet.Leaf(parquet.DoubleType), nil
+	case protoreflect.StringKind:
+		return parquet.String(), nil
+	case protoreflect.BytesKind:
+		return parquet.Leaf(parquet.ByteArrayType), nil
+	case protoreflect.MessageKind:
+		return parquet.Timestamp(parquet.Millisecond), nil // Assume timestamp for message types
+	default:
+		return parquet.String(), nil // Default to string for unknown types
+	}
+}
+
+// buildRowFromMap builds a parquet row using RowBuilder pattern following the example
+func (a *AccumulatorInserter) buildRowFromMap(builder *parquet.RowBuilder, rowMap map[string]any, acc *accumulator, schema *parquet.Schema) error {
+	// Iterate through schema fields in order, similar to the provided example
+	for fieldIndex, field := range schema.Fields() {
+		columnName := field.Name()
+		value, exists := rowMap[columnName]
+
+		if !exists {
+			// Skip missing fields - RowBuilder handles this
+			continue
+		}
+
+		// Find the corresponding column definition
+		var foundColumn interface{}
+		for _, col := range acc.columns {
+			if col.Name == columnName {
+				foundColumn = col
+				break
+			}
+		}
+
+		// Handle different value types similar to the example
+		if err := a.addValueToBuilder(builder, fieldIndex, value, foundColumn, field); err != nil {
+			return fmt.Errorf("adding value for field %q: %w", columnName, err)
+		}
+	}
+
+	return nil
+}
+
+func (a *AccumulatorInserter) addValueToBuilder(builder *parquet.RowBuilder, fieldIndex int, value any, column interface{}, field parquet.Field) error {
+	if value == nil {
+		// Skip null values - RowBuilder handles missing fields
+		return nil
+	}
+
+	// Handle repeated fields specially - check if column is repeated
+	isRepeated := false
+	if column != nil {
+		if col, ok := column.(*schema.Column); ok {
+			isRepeated = col.IsRepeated
+		}
+	}
+
+	if isRepeated {
+		switch v := value.(type) {
+		case []int32:
+			for _, elem := range v {
+				builder.Add(fieldIndex, parquet.ValueOf(elem))
+			}
+			builder.Next(fieldIndex)
+		case []int64:
+			for _, elem := range v {
+				builder.Add(fieldIndex, parquet.ValueOf(elem))
+			}
+			builder.Next(fieldIndex)
+		case []string:
+			for _, elem := range v {
+				builder.Add(fieldIndex, parquet.ValueOf(elem))
+			}
+			builder.Next(fieldIndex)
+		case []any:
+			for _, elem := range v {
+				builder.Add(fieldIndex, parquet.ValueOf(elem))
+			}
+			builder.Next(fieldIndex)
+		default:
+			// Convert single value to parquet value
+			pValue, err := a.anyToParquetValueNew(value)
+			if err != nil {
+				return err
+			}
+			builder.Add(fieldIndex, pValue)
+		}
+	} else {
+		// Handle single values
+		pValue, err := a.anyToParquetValueNew(value)
+		if err != nil {
+			return err
+		}
+		builder.Add(fieldIndex, pValue)
+	}
+
+	return nil
+}
+
+// anyToParquetValueNew converts any value to parquet.Value with proper array handling
+func (a *AccumulatorInserter) anyToParquetValueNew(val any) (parquet.Value, error) {
+	if val == nil {
+		return parquet.NullValue(), nil
+	}
+
+	// Unwrap interface{} to get concrete value
+	if valRef := reflect.ValueOf(val); valRef.Kind() == reflect.Interface && !valRef.IsNil() {
+		val = valRef.Elem().Interface()
+	}
+
+	switch v := val.(type) {
+	case bool:
+		return parquet.BooleanValue(v), nil
+	case int32:
+		return parquet.Int32Value(v), nil
+	case int:
+		return parquet.Int64Value(int64(v)), nil
+	case int64:
+		return parquet.Int64Value(v), nil
+	case float32:
+		return parquet.FloatValue(v), nil
+	case float64:
+		return parquet.DoubleValue(v), nil
+	case string:
+		return parquet.ValueOf(v), nil
+	case []byte:
+		return parquet.ByteArrayValue(v), nil
+	case time.Time:
+		return parquet.ValueOf(v), nil
+	default:
+		// Convert unknown types to string representation
+		return parquet.ValueOf(fmt.Sprintf("%v", v)), nil
+	}
 }
 
 func (a *AccumulatorInserter) valueToNode(value any) (parquet.Node, error) {
@@ -261,7 +466,7 @@ func (a *AccumulatorInserter) valueToNode(value any) (parquet.Node, error) {
 		return parquet.Leaf(parquet.BooleanType), nil
 	case int32:
 		return parquet.Leaf(parquet.Int32Type), nil
-	case int64:
+	case int64, int:
 		return parquet.Leaf(parquet.Int64Type), nil
 	case float32:
 		return parquet.Leaf(parquet.FloatType), nil
@@ -273,6 +478,8 @@ func (a *AccumulatorInserter) valueToNode(value any) (parquet.Node, error) {
 		return parquet.Leaf(parquet.ByteArrayType), nil
 	case time.Time:
 		return parquet.Timestamp(parquet.Millisecond), nil
+	case []int32:
+		return parquet.List(parquet.Leaf(parquet.Int32Type)), nil
 	case []any:
 		if len(v) > 0 {
 			elementNode, err := a.valueToNode(v[0])
@@ -283,7 +490,8 @@ func (a *AccumulatorInserter) valueToNode(value any) (parquet.Node, error) {
 		}
 		return parquet.List(parquet.String()), nil
 	default:
-		return parquet.String(), nil
+		panic(fmt.Sprintf("unsupported type %T", v))
+		//return parquet.String(), nil
 	}
 }
 
@@ -312,6 +520,8 @@ func (a *AccumulatorInserter) anyToParquetValue(val any) (parquet.Value, error) 
 		return parquet.BooleanValue(v), nil
 	case int32:
 		return parquet.Int32Value(v), nil
+	case int:
+		return parquet.Int64Value(int64(v)), nil
 	case int64:
 		return parquet.Int64Value(v), nil
 	case float32:
@@ -324,7 +534,41 @@ func (a *AccumulatorInserter) anyToParquetValue(val any) (parquet.Value, error) 
 		return parquet.ByteArrayValue(v), nil
 	case time.Time:
 		return parquet.ValueOf(v), nil
+	case []int32:
+		// Handle []int32 arrays - convert to string representation for compatibility
+		if len(v) == 0 {
+			return parquet.ValueOf(""), nil
+		}
+		result := "["
+		for i, elem := range v {
+			if i > 0 {
+				result += ", "
+			}
+			result += fmt.Sprintf("%d", elem)
+		}
+		result += "]"
+		return parquet.ValueOf(result), nil
+	case []any:
+		// NOTE: Native parquet LIST structures are not supported in our map-based approach
+		// because parquet.ValueOf() doesn't support slice types. The parquet-go library
+		// requires structured data with proper schema definitions to handle native arrays.
+		// Since we're working with dynamic maps, we convert arrays to readable string representations.
+		if len(v) == 0 {
+			return parquet.ValueOf(""), nil
+		}
+
+		// Create a string representation like "[elem1, elem2, elem3]"
+		result := "["
+		for i, elem := range v {
+			if i > 0 {
+				result += ", "
+			}
+			result += fmt.Sprintf("%v", elem)
+		}
+		result += "]"
+		return parquet.ValueOf(result), nil
 	default:
-		return parquet.ValueOf(fmt.Sprintf("%v", v)), nil
+		panic(fmt.Sprintf("unsupported type %T", v))
+		//return parquet.ValueOf(fmt.Sprintf("%v", v)), nil
 	}
 }

@@ -16,22 +16,12 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-type parquetInserter interface {
-	insert(table string, values []any) error
-	init(db *Database) error
-}
-
-type parquetFlusher interface {
-	flush(db *Database) error
-}
-
 type Database struct {
 	*sql.BaseDatabase
 	basePath string
 	logger   *zap.Logger
 	dialect  *DialectParquet
-	inserter parquetInserter
-	flusher  parquetFlusher
+	inserter *AccumulatorInserter
 }
 
 func NewDatabase(schema *schema.Schema, dsn *db.DSN, moduleOutputType string, rootMessageDescriptor protoreflect.MessageDescriptor, useProtoOptions bool, bytesEncoding bytes.Encoding, logger *zap.Logger) (*Database, error) {
@@ -68,7 +58,6 @@ func (d *Database) Open() error {
 		return fmt.Errorf("initializing accumulator inserter: %w", err)
 	}
 	d.inserter = inserter
-	d.flusher = inserter
 
 	return nil
 }
@@ -126,7 +115,7 @@ func (d *Database) InsertBlock(blockNum uint64, hash string, timestamp time.Time
 
 func (d *Database) Flush() (time.Duration, error) {
 	startFlush := time.Now()
-	err := d.flusher.flush(d)
+	err := d.inserter.flush(d)
 	if err != nil {
 		return 0, fmt.Errorf("flushing: %w", err)
 	}

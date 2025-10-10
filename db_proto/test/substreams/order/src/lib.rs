@@ -41,7 +41,7 @@ fn map_output(block: Block) -> model::relations::Output {
                     optional_string_not_set: None,
                     optional_int32_field_set: Some(99),
                     optional_int32_field_not_set: None,
-
+    
                     repeated_int32_field: vec![0, 1, 2, 3],
                     repeated_int64_field: vec![0, 1, 2, 3],
                     repeated_uint32_field: vec![0, 1, 2, 3],

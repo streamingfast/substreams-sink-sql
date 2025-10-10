@@ -187,6 +187,9 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 			}
 			if len(childs) > 0 && d.useProtoOptions {
 				if table.PrimaryKey == nil {
+					for _, child := range childs {
+						fmt.Println("child:", child.Descriptor().FullName())
+					}
 					return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
 				}
 				id := fieldValues[table.PrimaryKey.Index+primaryKeyOffset]
