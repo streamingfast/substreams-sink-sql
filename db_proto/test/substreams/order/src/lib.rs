@@ -4,7 +4,7 @@ use std::i64;
 use pb::test as model;
 
 use substreams_solana::pb::sf::solana::r#type::v1::Block;
-use crate::pb::test::relations::OrderExtension;
+use crate::pb::test::relations::{NestedLevel1, NestedLevel2, OrderExtension};
 
 #[substreams::handlers::map]
 fn map_output(block: Block) -> model::relations::Output {
@@ -63,6 +63,12 @@ fn map_output(block: Block) -> model::relations::Output {
                     str_2_uint256: "115792089237316195423570985008687907853269984665640564039457584007913129639935".to_string(),
                     str_2_decimal128: "17014118346046923173168.9988".to_string(),
                     str_2_decimal256: "17014118346046923173168.9988".to_string(),
+                    optional_str_2_uint256: None,
+                    level1: Some(NestedLevel1 {
+                        name: "level1.name".to_string(),
+                        level2: Some(NestedLevel2 { name: "level2.name".to_string() }),
+                    })
+
                 },
             }),
         });

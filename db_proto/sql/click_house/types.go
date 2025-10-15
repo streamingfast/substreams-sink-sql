@@ -49,9 +49,12 @@ func MapFieldType(fd protoreflect.FieldDescriptor, bytesEncoding bytes.Encoding,
 
 	switch kind {
 	case protoreflect.MessageKind:
-		switch string(fd.Message().FullName()) {
-		case "google.protobuf.Timestamp":
+		switch {
+		case fd.Message().FullName() == "google.protobuf.Timestamp":
 			baseType = TypeDateTime
+		case column.Nested != nil:
+			//handle nested message types
+			//check column.Nested to get columns to add to the nested,
 		default:
 			panic(fmt.Sprintf("Message type not supported: %s", string(fd.Message().FullName())))
 		}
@@ -118,9 +121,10 @@ func ColInputForColumn(fd protoreflect.FieldDescriptor, bytesEncoding bytes.Enco
 
 	switch fd.Kind() {
 	case protoreflect.MessageKind:
-		switch string(fd.Message().FullName()) {
-		case "google.protobuf.Timestamp":
+		switch {
+		case fd.Message().FullName() == "google.protobuf.Timestamp":
 			baseInput = &proto.ColDateTime{}
+		case column.Nested != nil:
 		default:
 			panic(fmt.Sprintf("Message type not supported: %s", string(fd.Message().FullName())))
 		}

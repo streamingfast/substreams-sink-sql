@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	pbSchmema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
+	"github.com/streamingfast/substreams-sink-sql/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -78,6 +79,7 @@ func (t *Table) processColumns(descriptor protoreflect.MessageDescriptor) error 
 	fields := descriptor.Fields()
 	for idx := 0; idx < fields.Len(); idx++ {
 		fieldDescriptor := fields.Get(idx)
+		fieldInfo := proto.FieldInfo(fieldDescriptor)
 
 		if fieldDescriptor.ContainingOneof() != nil && !fieldDescriptor.HasOptionalKeyword() {
 			continue
@@ -93,12 +95,13 @@ func (t *Table) processColumns(descriptor protoreflect.MessageDescriptor) error 
 		if fieldDescriptor.Kind() == protoreflect.MessageKind {
 			typeName := string(fieldDescriptor.Message().Name())
 			isTimestamp := typeName == ".google.protobuf.Timestamp" || typeName == "Timestamp"
-			if !isTimestamp {
+
+			isInline := fieldInfo != nil && fieldInfo.Inline
+			if !isTimestamp && !isInline {
 				continue
 			}
 		}
-
-		column, err := NewColumn(fieldDescriptor)
+		column, err := NewColumn(fieldDescriptor, fieldInfo)
 		if err != nil {
 			return fmt.Errorf("error processing column %q: %w", string(fieldDescriptor.Name()), err)
 		}

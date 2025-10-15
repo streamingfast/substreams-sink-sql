@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
-	"github.com/streamingfast/substreams-sink-sql/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -19,11 +18,12 @@ type Column struct {
 	IsExtension     bool
 	IsMessage       bool
 	IsOptional      bool
+	Nested          *Table
 	Message         string
 	ConvertTo       *v1.StringConvertion
 }
 
-func NewColumn(d protoreflect.FieldDescriptor) (*Column, error) {
+func NewColumn(d protoreflect.FieldDescriptor, fieldInfo *v1.Column) (*Column, error) {
 	out := &Column{
 		Name:            string(d.Name()),
 		FieldDescriptor: d,
@@ -33,8 +33,18 @@ func NewColumn(d protoreflect.FieldDescriptor) (*Column, error) {
 		IsOptional:      d.HasOptionalKeyword(),
 	}
 
-	fieldInfo := proto.FieldInfo(d)
 	if fieldInfo != nil {
+		if fieldInfo.Inline {
+			ti := &v1.Table{
+				Name: out.Name,
+			}
+			nested, err := NewTable(d.Message(), ti, 0)
+			if err != nil {
+				return nil, fmt.Errorf("creating nested column %s: %w", out.Name, err)
+			}
+			out.Nested = nested
+		}
+
 		if fieldInfo.Name != nil {
 			out.Name = *fieldInfo.Name
 		}

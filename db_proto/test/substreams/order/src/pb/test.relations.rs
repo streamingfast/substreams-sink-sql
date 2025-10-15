@@ -114,6 +114,11 @@ pub struct TypesTest {
     pub str_2_decimal128: ::prost::alloc::string::String,
     #[prost(string, tag="105")]
     pub str_2_decimal256: ::prost::alloc::string::String,
+    /// Optional uint256 field to test empty string handling
+    #[prost(string, optional, tag="106")]
+    pub optional_str_2_uint256: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag="200")]
+    pub level1: ::core::option::Option<NestedLevel1>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -134,6 +139,20 @@ pub struct Order {
     pub items: ::prost::alloc::vec::Vec<OrderItem>,
     #[prost(message, optional, tag="4")]
     pub extension: ::core::option::Option<OrderExtension>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NestedLevel1 {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag="2")]
+    pub level2: ::core::option::Option<NestedLevel2>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NestedLevel2 {
+    #[prost(string, tag="1")]
+    pub name: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -118,6 +118,8 @@ message Column {
   // Leave unset for no conversion (store as string).
   StringConvertion convertTo = 5;
 
+  bool inline = 6;
+
 }
 
 // ClickhouseTableOptions defines ClickHouse-specific table configuration options.

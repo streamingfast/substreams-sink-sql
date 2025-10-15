@@ -114,26 +114,43 @@ func (d *DialectClickHouse) createTable(table *schema.Table) error {
 		}
 	}
 
+	var buildNestedFields func(columns []*schema.Column) string
+	buildNestedFields = func(columns []*schema.Column) string {
+		var fields []string
+		for _, nestedCol := range columns {
+			if nestedCol.Nested != nil {
+				// Handle nested within nested
+				innerFields := buildNestedFields(nestedCol.Nested.Columns)
+				fields = append(fields, fmt.Sprintf("%s Nested(%s)", nestedCol.Name, innerFields))
+			} else {
+				fieldType := MapFieldType(nestedCol.FieldDescriptor, d.bytesEncoding, nestedCol).String()
+				fields = append(fields, fmt.Sprintf("%s %s", nestedCol.Name, fieldType))
+			}
+		}
+		return strings.Join(fields, ", ")
+	}
+
+	var processColumn func(f *schema.Column, sb *strings.Builder)
+	processColumn = func(f *schema.Column, sb *strings.Builder) {
+		// Check if this column has nested structure
+		if f.Nested != nil {
+			// Use ClickHouse Nested() syntax instead of prefixing
+			nestedFieldsStr := buildNestedFields(f.Nested.Columns)
+			sb.WriteString(fmt.Sprintf("%s Nested(%s)", f.Name, nestedFieldsStr))
+			sb.WriteString(",")
+		} else {
+			// Process regular column
+			fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding, f).String()
+			sb.WriteString(fmt.Sprintf("%s %s", f.Name, fieldType))
+			sb.WriteString(",")
+		}
+	}
+
 	for _, f := range table.Columns {
 		if f.Name == primaryKeyFieldName {
 			continue
 		}
-
-		fieldName := f.Name
-
-		fieldType := MapFieldType(f.FieldDescriptor, d.bytesEncoding, f).String()
-
-		//if f.ConvertTo != nil && f.ConvertTo.Convertion != nil {
-		//	switch t := f.ConvertTo.Convertion.(type) {
-		//	case *pbSchmema.StringConvertion_Decimal128:
-		//		fieldType = fmt.Sprintf("%s(%d)", fieldType, t.Decimal128.Scale)
-		//	case *pbSchmema.StringConvertion_Decimal256:
-		//		fieldType = fmt.Sprintf("%s(%d)", fieldType, t.Decimal256.Scale)
-		//	}
-		//}
-
-		sb.WriteString(fmt.Sprintf("%s %s", fieldName, fieldType))
-		sb.WriteString(",")
+		processColumn(f, &sb)
 	}
 
 	//removing the last comma since it is complicated to removing it before

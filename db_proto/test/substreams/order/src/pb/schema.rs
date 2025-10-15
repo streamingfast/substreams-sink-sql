@@ -76,6 +76,8 @@ pub struct Column {
     pub primary_key: bool,
     #[prost(message, optional, tag="5")]
     pub convert_to: ::core::option::Option<StringConvertion>,
+    #[prost(bool, tag="6")]
+    pub inline: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -84,8 +86,6 @@ pub struct ClickhouseTableOptions {
     pub order_by_fields: ::prost::alloc::vec::Vec<ClickhouseOrderByField>,
     #[prost(message, repeated, tag="2")]
     pub partition_fields: ::prost::alloc::vec::Vec<ClickhousePartitionByField>,
-    #[prost(message, repeated, tag="3")]
-    pub replacing_fields: ::prost::alloc::vec::Vec<ClickhouseReplacingField>,
     #[prost(message, repeated, tag="4")]
     pub index_fields: ::prost::alloc::vec::Vec<ClickhouseIndexField>,
 }
@@ -106,12 +106,6 @@ pub struct ClickhouseOrderByField {
     pub descending: bool,
     #[prost(enumeration="Function", tag="3")]
     pub function: i32,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ClickhouseReplacingField {
-    #[prost(string, tag="1")]
-    pub name: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

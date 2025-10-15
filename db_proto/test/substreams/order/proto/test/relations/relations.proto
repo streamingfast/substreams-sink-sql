@@ -87,6 +87,8 @@ message TypesTest {
   // Optional uint256 field to test empty string handling
   optional string optional_str_2_uint256 = 106 [(schema.field) = { convertTo: { uint256{}} }];
 
+  NestedLevel1 level1 = 200 [(schema.field) = {inline: true}];
+
 }
 
 message Customer {
@@ -123,10 +125,18 @@ message Order {
   OrderExtension extension = 4;
 }
 
+message NestedLevel1 {
+  string name = 1;
+  NestedLevel2 level2 =2 [(schema.field) = {inline: true}];
+}
+message NestedLevel2 {
+  string name = 1 ;
+}
+
 message OrderExtension {
   option (schema.table) = {
     name: "order_extensions",
-    child_of: "orders on `order_id`"
+    child_of: "orders on order_id"
     clickhouse_table_options: {
       order_by_fields: [{name: "order_id"}],
       partition_fields: [{name: "_block_timestamp_", function: toYYYYDD}]
