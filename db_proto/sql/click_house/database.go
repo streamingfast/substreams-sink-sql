@@ -175,6 +175,12 @@ func (d *Database) CreateDatabase(useConstraints bool) error {
 
 	d.logger.Info("block table created", zap.String("schema_name", d.schema.Name))
 
+	if err := client.Do(d.ctx, ch.Query{
+		Body: "SET flatten_nested = 1;",
+	}); err != nil {
+		return fmt.Errorf("executing flatten nested sql: %w", err)
+	}
+
 	for _, statement := range d.dialect.CreateTableSql {
 		if err := client.Do(d.ctx, ch.Query{
 			Body: statement,

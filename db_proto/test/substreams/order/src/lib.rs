@@ -4,7 +4,7 @@ use std::i64;
 use pb::test as model;
 
 use substreams_solana::pb::sf::solana::r#type::v1::Block;
-use crate::pb::test::relations::{NestedLevel1, NestedLevel2, OrderExtension};
+use crate::pb::test::relations::{NestedLevel1, OrderExtension};
 
 #[substreams::handlers::map]
 fn map_output(block: Block) -> model::relations::Output {
@@ -66,7 +66,7 @@ fn map_output(block: Block) -> model::relations::Output {
                     optional_str_2_uint256: None,
                     level1: Some(NestedLevel1 {
                         name: "level1.name".to_string(),
-                        level2: Some(NestedLevel2 { name: "level2.name".to_string() }),
+                        desc: "level1.desc".to_string(),   
                     })
 
                 },

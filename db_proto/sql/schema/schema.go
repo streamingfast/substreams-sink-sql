@@ -62,7 +62,7 @@ func (s *Schema) init(rootMessageDescriptor protoreflect.MessageDescriptor) erro
 		if _, found := s.TableRegistry[tableInfo.Name]; found {
 			return nil
 		}
-		table, err := NewTable(md, tableInfo, ordinal)
+		table, err := NewTable(md, tableInfo, ordinal, 0)
 		if err != nil {
 			return fmt.Errorf("creating table message descriptor: %w", err)
 		}

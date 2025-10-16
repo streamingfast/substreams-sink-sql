@@ -127,10 +127,7 @@ message Order {
 
 message NestedLevel1 {
   string name = 1;
-  NestedLevel2 level2 =2 [(schema.field) = {inline: true}];
-}
-message NestedLevel2 {
-  string name = 1 ;
+  string desc = 2;
 }
 
 message OrderExtension {

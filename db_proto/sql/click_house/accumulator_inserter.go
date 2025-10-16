@@ -129,6 +129,50 @@ func createAccumulators(dialect *DialectClickHouse) (map[string]*accumulator, er
 				skipCount++
 				continue
 			}
+			// Handle nested columns with flatten_nested = 1 using dot notation
+			if column.Nested != nil {
+				// For each field in the nested table, create a proto.NewArray column with dot notation
+				for _, nestedCol := range column.Nested.Columns {
+					nestedColName := fmt.Sprintf("%s.%s", column.Name, nestedCol.Name)
+					nestedInput := ColInputForColumn(nestedCol.FieldDescriptor, dialect.bytesEncoding, nestedCol)
+					if nestedInput != nil {
+						// Wrap in proto.NewArray for nested columns
+						switch base := nestedInput.(type) {
+						case *proto.ColStr:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColInt32:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColInt64:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColUInt32:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColUInt64:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColFloat32:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColFloat64:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColBool:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColBytes:
+							input[nestedColName] = proto.NewArray(base)
+						case *proto.ColDateTime:
+							input[nestedColName] = proto.NewArray(base)
+						default:
+							return nil, fmt.Errorf("unsupported nested column type %T for column %s.%s", base, column.Name, nestedCol.Name)
+						}
+						// Create a pseudo-column entry for tracking
+						nestedColEntry := &schema.Column{
+							Name:            nestedColName,
+							FieldDescriptor: nestedCol.FieldDescriptor,
+						}
+						columns[i+offset-skipCount] = nestedColEntry
+						offset++
+					}
+				}
+				skipCount++
+				continue
+			}
 			input[column.Name] = ColInputForColumn(column.FieldDescriptor, dialect.bytesEncoding, column)
 			columns[i+offset-skipCount] = column
 		}
@@ -514,7 +558,6 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 	}
 
 	queryDuration := time.Duration(0)
-
 	rowCount := 0
 	for _, acc := range accumulators {
 		qStart := time.Now()

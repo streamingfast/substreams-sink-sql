@@ -38,13 +38,15 @@ type Table struct {
 	ChildOf     *ChildOf
 	Columns     []*Column
 	Ordinal     int
+	InlineDepth int
 	PbTableInfo *pbSchmema.Table
 }
 
-func NewTable(descriptor protoreflect.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int) (*Table, error) {
+func NewTable(descriptor protoreflect.MessageDescriptor, tableInfo *pbSchmema.Table, ordinal int, inlineDepth int) (*Table, error) {
 	table := &Table{
 		Name:        string(descriptor.Name()),
 		Ordinal:     ordinal,
+		InlineDepth: inlineDepth,
 		PbTableInfo: tableInfo,
 	}
 	table.Name = tableInfo.Name
@@ -101,7 +103,7 @@ func (t *Table) processColumns(descriptor protoreflect.MessageDescriptor) error 
 				continue
 			}
 		}
-		column, err := NewColumn(fieldDescriptor, fieldInfo)
+		column, err := NewColumn(fieldDescriptor, fieldInfo, t.Ordinal, t.InlineDepth)
 		if err != nil {
 			return fmt.Errorf("error processing column %q: %w", string(fieldDescriptor.Name()), err)
 		}

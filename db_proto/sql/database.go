@@ -167,6 +167,21 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 					fieldValues = append(fieldValues, timestamp)
 					continue
 				}
+
+				// Check if this field should be treated as a nested (inline) column
+				fieldInfo := proto.FieldInfo(fd)
+				if fieldInfo != nil && fieldInfo.Inline {
+					// Handle as nested column - extract each field as an array
+					nestedFields := fm.Descriptor().Fields()
+					for j := 0; j < nestedFields.Len(); j++ {
+						nestedFd := nestedFields.Get(j)
+						nestedValue := fm.Get(nestedFd)
+						// Wrap the single value in an array (array of size 1)
+						fieldValues = append(fieldValues, []interface{}{nestedValue.Interface()})
+					}
+					continue
+				}
+
 				childs = append(childs, fm) //need to be handled after current message inserted
 			}
 		} else {

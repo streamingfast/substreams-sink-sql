@@ -23,7 +23,7 @@ type Column struct {
 	ConvertTo       *v1.StringConvertion
 }
 
-func NewColumn(d protoreflect.FieldDescriptor, fieldInfo *v1.Column) (*Column, error) {
+func NewColumn(d protoreflect.FieldDescriptor, fieldInfo *v1.Column, ordinal int, inlineDepth int) (*Column, error) {
 	out := &Column{
 		Name:            string(d.Name()),
 		FieldDescriptor: d,
@@ -35,10 +35,13 @@ func NewColumn(d protoreflect.FieldDescriptor, fieldInfo *v1.Column) (*Column, e
 
 	if fieldInfo != nil {
 		if fieldInfo.Inline {
+			if inlineDepth >= 1 {
+				return nil, fmt.Errorf("inline nesting level %d is not supported for column %q: only 1 level of inline nesting is allowed", inlineDepth+1, out.Name)
+			}
 			ti := &v1.Table{
 				Name: out.Name,
 			}
-			nested, err := NewTable(d.Message(), ti, 0)
+			nested, err := NewTable(d.Message(), ti, ordinal+1, inlineDepth+1)
 			if err != nil {
 				return nil, fmt.Errorf("creating nested column %s: %w", out.Name, err)
 			}

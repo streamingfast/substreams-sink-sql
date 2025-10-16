@@ -145,14 +145,8 @@ pub struct Order {
 pub struct NestedLevel1 {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag="2")]
-    pub level2: ::core::option::Option<NestedLevel2>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NestedLevel2 {
-    #[prost(string, tag="1")]
-    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
+    pub desc: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
