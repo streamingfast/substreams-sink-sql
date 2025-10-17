@@ -73,7 +73,7 @@ func TestDbProtoClickhouseIntegration(t *testing.T) {
 			"order with optional uint256 empty string",
 			streamMock(
 				relationsBlockData(t, "1a", "2025-01-01",
-					entityOrderWithOptionalUint256("o1", "c1", orderExtensionWithOptionalUint256("o1 desc", ""), orderItem("i1", 2)),
+					entityOrderWithOptionalUint256("o1", "c1", orderExtensionWithOptionalUint256("o1 desc"), orderItem("i1", 2)),
 				),
 			),
 			equalsOrderRows([]*OrderRow{
@@ -219,12 +219,9 @@ func orderExtension(description string) *pbrelations.OrderExtension {
 	}
 }
 
-func orderExtensionWithOptionalUint256(description string, optionalUint256 string) *pbrelations.OrderExtension {
+func orderExtensionWithOptionalUint256(description string) *pbrelations.OrderExtension {
 	ext := &pbrelations.OrderExtension{
 		Description: description,
-	}
-	if optionalUint256 != "" {
-		ext.OptionalStr_2Uint256 = &optionalUint256
 	}
 	return ext
 }
