@@ -1,7 +1,7 @@
 package postgres
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -138,7 +138,8 @@ func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
 	case []uint8:
 		if bytesEncoding == bytes.EncodingRaw {
 			// For raw encoding, use PostgreSQL bytea format
-			s = "'" + base64.StdEncoding.EncodeToString(v) + "'"
+			//s = "'" + base64.StdEncoding.EncodeToString(v) + "'"
+			s = "E'" + hex.EncodeToString(v) + "'::BYTEA"
 		} else {
 			encoded, err := bytesEncoding.EncodeBytes(v)
 			if err != nil {

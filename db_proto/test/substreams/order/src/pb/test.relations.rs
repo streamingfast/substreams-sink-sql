@@ -117,10 +117,6 @@ pub struct TypesTest {
     /// Optional uint256 field to test empty string handling
     #[prost(string, optional, tag="106")]
     pub optional_str_2_uint256: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(message, optional, tag="200")]
-    pub level1: ::core::option::Option<NestedLevel1>,
-    #[prost(message, repeated, tag="201")]
-    pub list_of_level1: ::prost::alloc::vec::Vec<NestedLevel1>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

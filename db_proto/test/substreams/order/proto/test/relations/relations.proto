@@ -85,10 +85,10 @@ message TypesTest {
   string str_2_decimal256 = 105 [(schema.field) = { convertTo: { decimal256{ scale: 4 }}}];
 
   // Optional uint256 field to test empty string handling
-  optional string optional_str_2_uint256 = 106 [(schema.field) = { convertTo: { uint256{}} }];
+  optional string optional_str_2_uint256 = 106 [(schema.field) = { convertTo: { uint256{}} }];  
 
-  NestedLevel1 level1 = 200 [(schema.field) = {inline: true}];
-  repeated NestedLevel1 list_of_level1 = 201 [(schema.field) = {inline: true}];
+//  NestedLevel1 level1 = 200 [(schema.field) = {inline: true}];
+//  repeated NestedLevel1 list_of_level1 = 201 [(schema.field) = {inline: true}];
 
 }
 

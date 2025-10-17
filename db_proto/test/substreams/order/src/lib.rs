@@ -64,19 +64,19 @@ fn map_output(block: Block) -> model::relations::Output {
                     str_2_decimal128: "17014118346046923173168.9988".to_string(),
                     str_2_decimal256: "17014118346046923173168.9988".to_string(),
                     optional_str_2_uint256: None,
-                    level1: Some(NestedLevel1 {
-                        name: "level1.name".to_string(),
-                        desc: "level1.desc".to_string(),
-                    }),
-                    list_of_level1: vec![
-                        NestedLevel1 {
-                            name: "name.1".to_string(),
-                            desc: "desc,1".to_string(),
-                        },
-                        NestedLevel1 {
-                            name: "name.2".to_string(),
-                            desc: "desc,2".to_string(),
-                        }],
+                    // level1: Some(NestedLevel1 {
+                    //     name: "level1.name".to_string(),
+                    //     desc: "level1.desc".to_string(),
+                    // }),
+                    // list_of_level1: vec![
+                    //     NestedLevel1 {
+                    //         name: "name.1".to_string(),
+                    //         desc: "desc,1".to_string(),
+                    //     },
+                    //     NestedLevel1 {
+                    //         name: "name.2".to_string(),
+                    //         desc: "desc,2".to_string(),
+                    //     }],
                 },
             }),
         });

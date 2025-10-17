@@ -18,6 +18,7 @@ type RowInserter struct {
 	insertQueries    map[string]string
 	insertStatements map[string]*sql.Stmt
 	logger           *zap.Logger
+	database         *Database
 }
 
 func NewRowInserter(logger *zap.Logger) (*RowInserter, error) {
@@ -32,6 +33,8 @@ func (i *RowInserter) init(database *Database) error {
 	tables := database.dialect.GetTables()
 	insertStatements := map[string]*sql.Stmt{}
 	insertQueries := map[string]string{}
+
+	i.database = database
 
 	for _, table := range tables {
 		query, err := createInsertFromDescriptor(table, database.dialect)
@@ -132,8 +135,29 @@ func (i *RowInserter) insert(table string, values []any, database *Database) err
 	stmt := i.insertStatements[table]
 	stmt = database.wrapInsertStatement(stmt)
 
+	t := i.database.dialect.TableRegistry[table]
+
+	fieldIndexOffset := 2
+	if t != nil && t.ChildOf != nil {
+		fieldIndexOffset = 3 //remove foreign key
+	}
+
 	for i, value := range values {
+
+		var column *schema.Column
+		fieldIndex := i - fieldIndexOffset //remove _block_number and _block_timestamp + foreign key
+
+		if t != nil && fieldIndex >= 0 {
+			column = t.Columns[fieldIndex]
+		}
+
 		switch v := value.(type) {
+		case string:
+			if column != nil && column.ConvertTo != nil && column.ConvertTo.Convertion != nil {
+				if v == "" {
+					values[i] = 0
+				}
+			}
 		case uint64:
 			values[i] = strconv.FormatUint(v, 10)
 		case []uint8:
