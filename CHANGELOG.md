@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v4.10.0
 * Added support for one level deep nested objects in clickhouse from-proto mode. Table with nested objects will be created with `Nested` type.
+* Fix postgres handling of type bytea[]
 
 ## v4.9.0
 
