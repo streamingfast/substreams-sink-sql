@@ -10,7 +10,6 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	clickhouse "github.com/streamingfast/substreams-sink-sql/db_proto/sql/click_house"
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/parquet"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/postgres"
 	schema2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	stats2 "github.com/streamingfast/substreams-sink-sql/db_proto/stats"
@@ -88,12 +87,6 @@ func SinkerFactory(
 			)
 			if err != nil {
 				return nil, fmt.Errorf("creating clickhouse database: %w", err)
-			}
-
-		case "parquet":
-			database, err = parquet.NewDatabase(schema, dsn, outputModuleName, rootMessageDescriptor, options.UseProtoOption, options.Encoding, logger)
-			if err != nil {
-				return nil, fmt.Errorf("creating parquet database: %w", err)
 			}
 
 		default:
