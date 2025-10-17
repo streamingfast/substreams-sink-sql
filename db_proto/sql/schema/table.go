@@ -88,8 +88,14 @@ func (t *Table) processColumns(descriptor protoreflect.MessageDescriptor) error 
 		}
 
 		if fieldDescriptor.IsList() {
-			if fieldDescriptor.Kind() == protoreflect.MessageKind { //This will be handled by table relations
-				continue
+			if fieldDescriptor.Kind() == protoreflect.MessageKind {
+				// Check if this is an inline nested field - if so, process it as a column
+				if fieldInfo != nil && fieldInfo.Inline {
+					// Allow inline repeated message fields to be processed as nested columns
+				} else {
+					// This will be handled by table relations
+					continue
+				}
 			}
 			// Allow repeated scalar fields to be processed as array columns
 		}

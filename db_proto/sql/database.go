@@ -140,21 +140,54 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 		if fd.IsList() {
 			// Check if this is an array of messages or native values
 			list := fv.List()
-			if list.Len() > 0 {
-				if fd.Kind() == protoreflect.MessageKind {
+			if fd.Kind() == protoreflect.MessageKind {
+				// Check if this is an inline nested array
+				fieldInfo := proto.FieldInfo(fd)
+				if fieldInfo != nil && fieldInfo.Inline {
+					// Handle as array of nested columns - flatten into multiple arrays
+					if list.Len() > 0 {
+						firstMessage := list.Get(0).Message().Interface().(*dynamicpb.Message)
+						nestedFields := firstMessage.Descriptor().Fields()
+
+						// For each nested field, create an array of values from all list elements
+						for j := 0; j < nestedFields.Len(); j++ {
+							nestedFd := nestedFields.Get(j)
+							var nestedValues []interface{}
+
+							// Collect values for this nested field from all list elements
+							for k := 0; k < list.Len(); k++ {
+								fm := list.Get(k).Message().Interface().(*dynamicpb.Message)
+								nestedValue := fm.Get(nestedFd)
+								nestedValues = append(nestedValues, nestedValue.Interface())
+							}
+
+							fieldValues = append(fieldValues, nestedValues)
+						}
+					} else {
+						// Empty list - need to get field count from descriptor
+						// Get the message descriptor for this field type
+						msgDesc := fd.Message()
+						nestedFields := msgDesc.Fields()
+
+						// Append empty arrays for each nested field
+						for j := 0; j < nestedFields.Len(); j++ {
+							fieldValues = append(fieldValues, []interface{}{})
+						}
+					}
+				} else if list.Len() > 0 {
 					// Array of messages - process as child tables
 					for j := 0; j < list.Len(); j++ {
 						fm := list.Get(j).Message().Interface().(*dynamicpb.Message)
 						childs = append(childs, fm)
 					}
-				} else {
-					// Array of native values - add as a single field value (the array itself)
-					var values []interface{}
-					for j := 0; j < list.Len(); j++ {
-						values = append(values, list.Get(j).Interface())
-					}
-					fieldValues = append(fieldValues, values)
 				}
+			} else if list.Len() > 0 {
+				// Array of native values - add as a single field value (the array itself)
+				var values []interface{}
+				for j := 0; j < list.Len(); j++ {
+					values = append(values, list.Get(j).Interface())
+				}
+				fieldValues = append(fieldValues, values)
 			}
 		} else if fd.Kind() == protoreflect.MessageKind {
 			if fv.Message().IsValid() {

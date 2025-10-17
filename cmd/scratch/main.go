@@ -11,9 +11,10 @@ import (
 )
 
 type Top struct {
-	ID     string  `json:"id"`
-	Name   string  `json:"name"`
-	Level1 *Level1 `json:"level1"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Level1       *Level1   `json:"level1"`
+	ListOfLevel1 []*Level1 `json:"list_of_level_1"`
 }
 
 type Level1 struct {
@@ -82,6 +83,10 @@ func main() {
 		level1 Nested(
 			name String,
 			description String
+		),
+		list_of_level_1 Nested(
+			name String,
+			description String
 		)
 	) ENGINE = MergeTree()
 	ORDER BY id
@@ -96,10 +101,12 @@ func main() {
 
 	// Prepare data for insertion
 	var (
-		colID                proto.ColStr
-		colName              proto.ColStr
-		colLevel1Name        = proto.NewArray[string](new(proto.ColStr))
-		colLevel1Description = proto.NewArray[string](new(proto.ColStr))
+		colID                      proto.ColStr
+		colName                    proto.ColStr
+		colLevel1Name              = proto.NewArray[string](new(proto.ColStr))
+		colLevel1Description       = proto.NewArray[string](new(proto.ColStr))
+		colListOfLevel1Name        = proto.NewArray[string](new(proto.ColStr))
+		colListOfLevel1Description = proto.NewArray[string](new(proto.ColStr))
 	)
 
 	// Insert sample data
@@ -108,24 +115,32 @@ func main() {
 	colName.Append("Top One")
 	colLevel1Name.Append([]string{"Level1 A"})
 	colLevel1Description.Append([]string{"Description for Level1 A"})
+	colListOfLevel1Name.Append([]string{"List Item 1A", "List Item 1B"})
+	colListOfLevel1Description.Append([]string{"Description for List Item 1A", "Description for List Item 1B"})
 
 	// Record 2
 	colID.Append("2")
 	colName.Append("Top Two")
 	colLevel1Name.Append([]string{"Level1 B"})
 	colLevel1Description.Append([]string{"Description for Level1 B"})
+	colListOfLevel1Name.Append([]string{"List Item 2A", "List Item 2B", "List Item 2C"})
+	colListOfLevel1Description.Append([]string{"Description for List Item 2A", "Description for List Item 2B", "Description for List Item 2C"})
 
 	// Record 3
 	colID.Append("3")
 	colName.Append("Top Three")
 	colLevel1Name.Append([]string{"Level1 C"})
 	colLevel1Description.Append([]string{"Description for Level1 C"})
+	colListOfLevel1Name.Append([]string{"List Item 3A"})
+	colListOfLevel1Description.Append([]string{"Description for List Item 3A"})
 
 	input := proto.Input{
 		{Name: "id", Data: colID},
 		{Name: "name", Data: colName},
 		{Name: "level1.name", Data: colLevel1Name},
 		{Name: "level1.description", Data: colLevel1Description},
+		{Name: "list_of_level_1.name", Data: colListOfLevel1Name},
+		{Name: "list_of_level_1.description", Data: colListOfLevel1Description},
 	}
 
 	skip := false
@@ -141,14 +156,16 @@ func main() {
 
 	// Query data back
 	var (
-		resultID                proto.ColStr
-		resultName              proto.ColStr
-		resultLevel1Name        = proto.NewArray[string](new(proto.ColStr))
-		resultLevel1Description = proto.NewArray[string](new(proto.ColStr))
+		resultID                      proto.ColStr
+		resultName                    proto.ColStr
+		resultLevel1Name              = proto.NewArray[string](new(proto.ColStr))
+		resultLevel1Description       = proto.NewArray[string](new(proto.ColStr))
+		resultListOfLevel1Name        = proto.NewArray[string](new(proto.ColStr))
+		resultListOfLevel1Description = proto.NewArray[string](new(proto.ColStr))
 	)
 
 	if err := client.Do(ctx, ch.Query{
-		Body: "SELECT id, name, level1.name, level1.description FROM top_table",
+		Body: "SELECT id, name, level1.name, level1.description, list_of_level_1.name, list_of_level_1.description FROM top_table",
 		OnResult: func(ctx context.Context, block proto.Block) error {
 			return nil
 		},
@@ -157,6 +174,8 @@ func main() {
 			{Name: "name", Data: &resultName},
 			{Name: "level1.name", Data: resultLevel1Name},
 			{Name: "level1.description", Data: resultLevel1Description},
+			{Name: "list_of_level_1.name", Data: resultListOfLevel1Name},
+			{Name: "list_of_level_1.description", Data: resultListOfLevel1Description},
 		},
 	}); err != nil {
 		log.Fatalf("failed to query data: %v", err)
@@ -185,10 +204,22 @@ func main() {
 			}
 		}
 
+		listOfLevel1Names := resultListOfLevel1Name.Row(i)
+		listOfLevel1Descriptions := resultListOfLevel1Description.Row(i)
+
+		var listOfLevel1 []*Level1
+		for j := 0; j < len(listOfLevel1Names); j++ {
+			listOfLevel1 = append(listOfLevel1, &Level1{
+				Name:        listOfLevel1Names[j],
+				Description: listOfLevel1Descriptions[j],
+			})
+		}
+
 		top := Top{
-			ID:     resultID.Row(i),
-			Name:   resultName.Row(i),
-			Level1: level1,
+			ID:           resultID.Row(i),
+			Name:         resultName.Row(i),
+			Level1:       level1,
+			ListOfLevel1: listOfLevel1,
 		}
 		tops = append(tops, top)
 	}

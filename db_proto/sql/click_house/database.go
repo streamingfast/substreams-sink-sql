@@ -398,7 +398,13 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		}
 
 		for _, column := range table.Columns {
-			fields += fmt.Sprintf(", %s", column.Name)
+			if column.Nested != nil {
+				for _, nestedColumn := range column.Nested.Columns {
+					fields += fmt.Sprintf(", %s.%s", column.Name, nestedColumn.Name)
+				}
+			} else {
+				fields += fmt.Sprintf(", %s", column.Name)
+			}
 		}
 		query := fmt.Sprintf(`
 			INSERT INTO %s

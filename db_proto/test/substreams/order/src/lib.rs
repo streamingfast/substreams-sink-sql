@@ -14,7 +14,7 @@ fn map_output(block: Block) -> model::relations::Output {
     let long_string = "a".repeat(255);
 
     let byte_vector: Vec<u8> = (1..=255).collect();
-    
+
     if block.slot % 100 != 0 {
         entities.push(model::relations::Entity {
             entity: Some(model::relations::entity::Entity::TypesTest {
@@ -41,7 +41,7 @@ fn map_output(block: Block) -> model::relations::Output {
                     optional_string_not_set: None,
                     optional_int32_field_set: Some(99),
                     optional_int32_field_not_set: None,
-    
+
                     repeated_int32_field: vec![0, 1, 2, 3],
                     repeated_int64_field: vec![0, 1, 2, 3],
                     repeated_uint32_field: vec![0, 1, 2, 3],
@@ -66,9 +66,17 @@ fn map_output(block: Block) -> model::relations::Output {
                     optional_str_2_uint256: None,
                     level1: Some(NestedLevel1 {
                         name: "level1.name".to_string(),
-                        desc: "level1.desc".to_string(),   
-                    })
-
+                        desc: "level1.desc".to_string(),
+                    }),
+                    list_of_level1: vec![
+                        NestedLevel1 {
+                            name: "name.1".to_string(),
+                            desc: "desc,1".to_string(),
+                        },
+                        NestedLevel1 {
+                            name: "name.2".to_string(),
+                            desc: "desc,2".to_string(),
+                        }],
                 },
             }),
         });
@@ -105,7 +113,7 @@ fn map_output(block: Block) -> model::relations::Output {
                     },
                     // model::relations::OrderItem { item_id: format!("item.id.{}", block.slot+1), quantity: 20 },
                 ],
-                extension: Some(OrderExtension{ description: "desc".to_string() }),
+                extension: Some(OrderExtension { description: "desc".to_string() }),
             },
         }),
     });
