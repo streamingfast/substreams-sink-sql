@@ -7,10 +7,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 const postgresStaticSql = `
@@ -134,6 +138,9 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 		switch {
 		case f.IsRepeated:
 			// Arrays are now supported, continue processing
+		case f.Nested != nil:
+			// Nested types are not supported, continue processing
+			fmt.Println("found nested type")
 		case f.IsMessage && !IsWellKnownType(f.FieldDescriptor):
 			childTable, found := d.TableRegistry[f.Message]
 			if !found {
@@ -203,6 +210,32 @@ func (d *DialectPostgres) createTable(table *schema.Table) error {
 
 func (d *DialectPostgres) FullTableName(table *schema.Table) string {
 	return tableName(d.schemaName, table.Name)
+}
+
+func (d *DialectPostgres) AppendInlineFieldValues(fieldValues []any, fd protoreflect.FieldDescriptor, fv protoreflect.Value, dm *dynamicpb.Message) ([]any, error) {
+	if fd.IsList() {
+		// For repeated inline messages, append the list of JSON strings
+		list := fv.List()
+		var jsonStrings []string
+		for j := 0; j < list.Len(); j++ {
+			fm := list.Get(j).Message().Interface().(*dynamicpb.Message)
+			jsonBytes, err := protojson.Marshal(fm)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal protobuf message to JSON: %w", err)
+			}
+			jsonStrings = append(jsonStrings, string(jsonBytes))
+		}
+		fieldValues = append(fieldValues, pq.Array(jsonStrings))
+	} else {
+		// For single inline message, append the JSON string
+		fm := fv.Message().Interface().(*dynamicpb.Message)
+		jsonBytes, err := protojson.Marshal(fm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal protobuf message to JSON: %w", err)
+		}
+		fieldValues = append(fieldValues, string(jsonBytes))
+	}
+	return fieldValues, nil
 }
 
 func (d *DialectPostgres) SchemaHash() string {

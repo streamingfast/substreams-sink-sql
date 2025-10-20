@@ -144,35 +144,11 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 				// Check if this is an inline nested array
 				fieldInfo := proto.FieldInfo(fd)
 				if fieldInfo != nil && fieldInfo.Inline {
-					// Handle as array of nested columns - flatten into multiple arrays
-					if list.Len() > 0 {
-						firstMessage := list.Get(0).Message().Interface().(*dynamicpb.Message)
-						nestedFields := firstMessage.Descriptor().Fields()
-
-						// For each nested field, create an array of values from all list elements
-						for j := 0; j < nestedFields.Len(); j++ {
-							nestedFd := nestedFields.Get(j)
-							var nestedValues []interface{}
-
-							// Collect values for this nested field from all list elements
-							for k := 0; k < list.Len(); k++ {
-								fm := list.Get(k).Message().Interface().(*dynamicpb.Message)
-								nestedValue := fm.Get(nestedFd)
-								nestedValues = append(nestedValues, nestedValue.Interface())
-							}
-
-							fieldValues = append(fieldValues, nestedValues)
-						}
-					} else {
-						// Empty list - need to get field count from descriptor
-						// Get the message descriptor for this field type
-						msgDesc := fd.Message()
-						nestedFields := msgDesc.Fields()
-
-						// Append empty arrays for each nested field
-						for j := 0; j < nestedFields.Len(); j++ {
-							fieldValues = append(fieldValues, []interface{}{})
-						}
+					// Delegate to dialect for inline handling
+					var err error
+					fieldValues, err = dialect.AppendInlineFieldValues(fieldValues, fd, fv, dm)
+					if err != nil {
+						return 0, fmt.Errorf("appending inline field values for %q: %w", string(fd.Name()), err)
 					}
 				} else if list.Len() > 0 {
 					// Array of messages - process as child tables
@@ -204,13 +180,11 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 				// Check if this field should be treated as a nested (inline) column
 				fieldInfo := proto.FieldInfo(fd)
 				if fieldInfo != nil && fieldInfo.Inline {
-					// Handle as nested column - extract each field as an array
-					nestedFields := fm.Descriptor().Fields()
-					for j := 0; j < nestedFields.Len(); j++ {
-						nestedFd := nestedFields.Get(j)
-						nestedValue := fm.Get(nestedFd)
-						// Wrap the single value in an array (array of size 1)
-						fieldValues = append(fieldValues, []interface{}{nestedValue.Interface()})
+					// Delegate to dialect for inline handling
+					var err error
+					fieldValues, err = dialect.AppendInlineFieldValues(fieldValues, fd, fv, dm)
+					if err != nil {
+						return 0, fmt.Errorf("appending inline field values for %q: %w", string(fd.Name()), err)
 					}
 					continue
 				}

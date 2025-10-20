@@ -10,6 +10,7 @@ import (
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -28,6 +29,7 @@ const (
 	TypeVarchar   DataType = "VARCHAR(255)"
 	TypeBytea     DataType = "BYTEA"
 	TypeTimestamp DataType = "TIMESTAMP"
+	TypeJSONB     DataType = "JSONB"
 )
 
 func (s DataType) String() string {
@@ -52,11 +54,15 @@ func MapFieldType(fd protoreflect.FieldDescriptor, bytesEncoding bytes.Encoding,
 
 	switch kind {
 	case protoreflect.MessageKind:
-		switch string(fd.Message().FullName()) {
-		case "google.protobuf.Timestamp":
-			baseType = TypeTimestamp
-		default:
-			panic(fmt.Sprintf("Message type not supported: %s", string(fd.Message().FullName())))
+		if column.Nested != nil {
+			baseType = TypeJSONB
+		} else {
+			switch string(fd.Message().FullName()) {
+			case "google.protobuf.Timestamp":
+				baseType = TypeTimestamp
+			default:
+				panic(fmt.Sprintf("Message type not supported: %s", string(fd.Message().FullName())))
+			}
 		}
 	case protoreflect.BoolKind:
 		baseType = TypeBool
@@ -160,7 +166,22 @@ func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
 			elements = append(elements, ValueToString(elem, bytesEncoding))
 		}
 		s = "array[" + strings.Join(elements, ",") + "]"
+	case protoreflect.Message:
+		jsonBytes, err := protojson.Marshal(v.Interface())
+		if err != nil {
+			panic(fmt.Sprintf("failed to marshal protobuf message to JSON: %v", err))
+		}
+		s = "'" + strings.ReplaceAll(strings.ReplaceAll(string(jsonBytes), "'", "''"), "\\", "\\\\") + "'"
+		return
 	default:
+		if msg, ok := v.(protoreflect.ProtoMessage); ok {
+			jsonBytes, err := protojson.Marshal(msg)
+			if err != nil {
+				panic(fmt.Sprintf("failed to marshal protobuf message to JSON: %v", err))
+			}
+			s = "'" + strings.ReplaceAll(strings.ReplaceAll(string(jsonBytes), "'", "''"), "\\", "\\\\") + "'"
+			return
+		}
 		panic(fmt.Sprintf("unsupported type: %T", v))
 	}
 	return

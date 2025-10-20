@@ -110,7 +110,7 @@ func createInsertFromDescriptor(table *schema.Table, dialect sql2.Dialect) (stri
 		if field.IsExtension { //not a direct child
 			continue
 		}
-		if field.IsRepeated {
+		if field.IsRepeated && field.Nested == nil {
 			// Check if it's a repeated message (which should be skipped) or repeated scalar (which should be processed)
 			if field.IsMessage {
 				continue
