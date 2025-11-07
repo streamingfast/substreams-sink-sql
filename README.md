@@ -135,6 +135,9 @@ clickhouse://<user>:<password>@<host>:<port>/<dbname>[?<options>]
 ```
 
 > [!IMPORTANT]
+> **Only TCP protocol is supported**. The sink connects using ClickHouse's native TCP protocol (default port 9000, or 9440 for secure connections). HTTP protocol ports (8123, 8443) are not supported and will be rejected with an error.
+
+> [!IMPORTANT]
 > You are using Clickhouse Cloud? Add `?secure=true` option to your DSN otherwise you will receive weird error like `setup: exec schema: exec schema: read: EOF`. Here a DSN example for Clickhouse Cloud `clickhouse://default:<password>@<instance-id>.clickhouse.cloud:9440/default?secure=true`.
 >
 > Make sure also that you are using the _Native protocol SSL/TLS_ port which is usually set at 9440.

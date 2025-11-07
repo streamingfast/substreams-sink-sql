@@ -162,13 +162,7 @@ func setupRawClickhouseContainer(config ClickhouseContainerConfig) (*ClickhouseC
 		panic(fmt.Sprintf("failed to get ClickHouse host: %s", err))
 	}
 
-	// Build native protocol connection string for the ClickHouse Go driver
-	// Use 127.0.0.1 instead of localhost to avoid DSN conversion to HTTP protocol
-	if host == "localhost" {
-		host = "127.0.0.1"
-	}
-	connectionString := fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s",
-		dbUser, dbPassword, host, mappedPort.Port(), dbName)
+	connectionString := fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s", dbUser, dbPassword, host, mappedPort.Port(), dbName)
 
 	return &ClickhouseContainerExt{
 			ClickHouseContainer: clickhouseContainer,

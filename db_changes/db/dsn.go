@@ -14,6 +14,7 @@ import (
 type DSN struct {
 	driver   string
 	original string
+	scheme   string
 
 	Host     string
 	Port     int64
@@ -73,6 +74,7 @@ func ParseDSN(dsn string) (*DSN, error) {
 	d := &DSN{
 		original: dsn,
 		driver:   driver,
+		scheme:   dsnURL.Scheme,
 		Host:     host,
 		Port:     port,
 		Username: username,
@@ -109,19 +111,8 @@ func (c *DSN) Driver() string {
 
 func (c *DSN) ConnString() string {
 	if c.driver == "clickhouse" {
-		scheme := "clickhouse"
+		scheme := c.driver
 		host := c.Host
-
-		//if host == "localhost" {
-		//	// Weird handling to keep old behavior while we discuss the right way to handle that
-		//	// In the old code, of there was options set and the host was localhost, we were switching
-		//	// to host 127.0.0.1 + change of scheme to http/https, let's keep that for now
-		//	host = "127.0.0.1"
-		//	scheme = "http"
-		//	if c.Options.Get("secure") == "true" {
-		//		scheme = "https"
-		//	}
-		//}
 
 		baseURL := fmt.Sprintf("%s://%s:%s@%s:%d/%s", scheme, c.Username, c.Password, host, c.Port, c.Database)
 		if len(c.Options) > 0 {
@@ -150,6 +141,7 @@ func (c *DSN) Clone() *DSN {
 	return &DSN{
 		driver:   c.driver,
 		original: c.original,
+		scheme:   c.scheme,
 		Host:     c.Host,
 		Port:     c.Port,
 		Username: c.Username,

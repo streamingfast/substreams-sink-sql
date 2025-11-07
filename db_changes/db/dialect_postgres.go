@@ -610,6 +610,37 @@ func (d PostgresDialect) GetTableColumns(db *sql.DB, schemaName, tableName strin
 	return rows.ColumnTypes()
 }
 
+func (d PostgresDialect) GetTablesInSchema(db *sql.DB, schemaName string) ([][2]string, error) {
+	query := `
+		SELECT table_schema, table_name
+		FROM information_schema.tables
+		WHERE table_type = 'BASE TABLE'
+		AND table_schema = $1
+		ORDER BY table_schema, table_name
+	`
+
+	rows, err := db.Query(query, schemaName)
+	if err != nil {
+		return nil, fmt.Errorf("querying tables: %w", err)
+	}
+	defer rows.Close()
+
+	var result [][2]string
+	for rows.Next() {
+		var schema, table string
+		if err := rows.Scan(&schema, &table); err != nil {
+			return nil, fmt.Errorf("scanning table row: %w", err)
+		}
+		result = append(result, [2]string{schema, table})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating table rows: %w", err)
+	}
+
+	return result, nil
+}
+
 const postgresPrimaryKeyQuery = `
 	SELECT kcu.column_name
 	FROM information_schema.table_constraints tco

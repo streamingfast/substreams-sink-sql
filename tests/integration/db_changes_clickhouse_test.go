@@ -20,8 +20,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-
-
 func TestClickhouseSinker_Integration_SinglePrimaryKey(t *testing.T) {
 	tests := []sinkerTestCase{
 		{
@@ -81,7 +79,7 @@ func TestClickhouseSinker_Integration_AggregateFunction(t *testing.T) {
 		equalsClickhouseMetricsRows([]*MetricsRow{
 			{ID: "metric1", Value: "100", Count: "1"},
 		}),
-		"Block #10 (10a) - LIB #10 (10a)", // Enable cursor validation now that timing issue is fixed
+		"Block #10 (10a) - LIB #10 (10a)",
 	)
 }
 

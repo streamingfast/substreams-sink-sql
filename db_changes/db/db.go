@@ -62,12 +62,19 @@ func NewLoader(
 	tracer logging.Tracer,
 ) (*Loader, error) {
 
+	// Validate ClickHouse is not using HTTP protocol ports
+	if dsn.Driver() == "clickhouse" {
+		if dsn.Port == 8123 || dsn.Port == 8443 {
+			return nil, fmt.Errorf("ClickHouse HTTP protocol (port %d) is not supported. Please use the native TCP protocol on port 9000 or 9440", dsn.Port)
+		}
+	}
+
 	sqlDB, err := sql.Open(dsn.Driver(), dsn.ConnString())
 	if err != nil {
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
 
-	dialect, err := newDialect(sqlDB.Driver(), dsn.Schema(), cursorTableName, historyTableName, clickhouseCluster)
+	dialect, err := newDialect(sqlDB.Driver(), dsn, cursorTableName, historyTableName, clickhouseCluster)
 	if err != nil {
 		return nil, fmt.Errorf("get dialect: %w", err)
 	}
@@ -114,13 +121,13 @@ func NewLoader(
 	return l, nil
 }
 
-func newDialect(driver driver.Driver, schemaName string, cursorTableName string, historyTableName string, clickHouseClusterName string) (Dialect, error) {
+func newDialect(driver driver.Driver, dsn *DSN, cursorTableName string, historyTableName string, clickHouseClusterName string) (Dialect, error) {
 	driverType := fmt.Sprintf("%T", driver)
 	switch driverType {
 	case "*pq.Driver":
-		return NewPostgresDialect(schemaName, cursorTableName, historyTableName), nil
+		return NewPostgresDialect(dsn.Schema(), cursorTableName, historyTableName), nil
 	case "*clickhouse.stdDriver":
-		return NewClickhouseDialect(schemaName, cursorTableName, clickHouseClusterName), nil
+		return NewClickhouseDialect(dsn.Schema(), cursorTableName, clickHouseClusterName), nil
 	default:
 		return nil, fmt.Errorf("unsupported driver: %s", driverType)
 	}
@@ -164,28 +171,16 @@ func (l *Loader) FlushNeeded() bool {
 // getTablesFromSchema returns table information similar to schema.Tables()
 // but only inspects tables in the specified schema to avoid issues with database extensions
 func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.ColumnType, error) {
-	// Only get tables from the specified schema
-	query := `
-		SELECT table_schema, table_name
-		FROM information_schema.tables
-		WHERE table_type = 'BASE TABLE'
-		AND table_schema = $1
-		ORDER BY table_schema, table_name
-	`
-
-	rows, err := l.DB.Query(query, schemaName)
+	// Use dialect-specific method to get tables
+	tables, err := l.dialect.GetTablesInSchema(l.DB, schemaName)
 	if err != nil {
-		return nil, fmt.Errorf("querying tables: %w", err)
+		return nil, fmt.Errorf("getting tables from schema: %w", err)
 	}
-	defer rows.Close()
 
 	result := make(map[[2]string][]*sql.ColumnType)
 
-	for rows.Next() {
-		var schemaName, tableName string
-		if err := rows.Scan(&schemaName, &tableName); err != nil {
-			return nil, fmt.Errorf("scanning table row: %w", err)
-		}
+	for _, table := range tables {
+		schemaName, tableName := table[0], table[1]
 
 		// Get column information for this table
 		columns, err := l.dialect.GetTableColumns(l.DB, schemaName, tableName)
@@ -200,10 +195,6 @@ func (l *Loader) getTablesFromSchema(schemaName string) (map[[2]string][]*sql.Co
 
 		key := [2]string{schemaName, tableName}
 		result[key] = columns
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating table rows: %w", err)
 	}
 
 	return result, nil

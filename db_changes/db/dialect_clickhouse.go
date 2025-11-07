@@ -380,7 +380,7 @@ func convertToType(value string, valueType reflect.Type) (any, error) {
 }
 
 func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error) {
-	// For ClickHouse, use DESCRIBE TABLE to filter out AggregateFunction columns
+	// For TCP, use DESCRIBE TABLE to filter out AggregateFunction columns
 	describeQuery := fmt.Sprintf("DESCRIBE TABLE %s.%s",
 		EscapeIdentifier(schemaName),
 		EscapeIdentifier(tableName))
@@ -393,13 +393,29 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 
 	var nonAggregateColumns []string
 
+	// Get the column types to know how many columns DESCRIBE returns
+	describeColumnTypes, err := describeRows.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("getting describe column types: %w", err)
+	}
+
 	// Parse DESCRIBE results to filter out AggregateFunction columns
 	for describeRows.Next() {
-		var name, dataType, defaultKind, defaultExpression, comment, codecExpression, ttlExpression string
-		err := describeRows.Scan(&name, &dataType, &defaultKind, &defaultExpression, &comment, &codecExpression, &ttlExpression)
+		// Create slice to hold all column values dynamically
+		values := make([]interface{}, len(describeColumnTypes))
+		valuePtrs := make([]interface{}, len(describeColumnTypes))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		err := describeRows.Scan(valuePtrs...)
 		if err != nil {
 			return nil, fmt.Errorf("scanning describe results: %w", err)
 		}
+
+		// First column is always the column name, second is the data type
+		name := fmt.Sprintf("%v", values[0])
+		dataType := fmt.Sprintf("%v", values[1])
 
 		if !strings.Contains(dataType, "AggregateFunction") {
 			nonAggregateColumns = append(nonAggregateColumns, EscapeIdentifier(name))
@@ -414,7 +430,7 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 		return nil, fmt.Errorf("no non-aggregate columns found in table %s.%s", schemaName, tableName)
 	}
 
-	// Now query for column types with only the non-aggregate columns
+	// TCP protocol works well with WHERE 1=0
 	columnList := strings.Join(nonAggregateColumns, ", ")
 	selectQuery := fmt.Sprintf("SELECT %s FROM %s.%s WHERE 1=0",
 		columnList,
@@ -428,6 +444,37 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 	defer rows.Close()
 
 	return rows.ColumnTypes()
+}
+
+func (d ClickhouseDialect) GetTablesInSchema(db *sql.DB, schemaName string) ([][2]string, error) {
+	// Use system.tables to query for tables in the schema
+	query := fmt.Sprintf(`
+		SELECT database as table_schema, name as table_name
+		FROM system.tables
+		WHERE database = '%s'
+		ORDER BY database, name
+	`, schemaName)
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("querying tables from system.tables: %w", err)
+	}
+	defer rows.Close()
+
+	var result [][2]string
+	for rows.Next() {
+		var schema, table string
+		if err := rows.Scan(&schema, &table); err != nil {
+			return nil, fmt.Errorf("scanning table row: %w", err)
+		}
+		result = append(result, [2]string{schema, table})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating table rows: %w", err)
+	}
+
+	return result, nil
 }
 
 const clickhousePrimaryKeyQuery = `

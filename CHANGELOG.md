@@ -5,9 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### DatabaseChanges mode improvements
+
+* Refactor encoder to use CSV writer for row formatting when using `substreams-sink-sql generate-csv` command.
+
+#### Clickhouse specific changes
+
+* **Breaking**: ClickHouse HTTP protocol is no longer supported. Only the native TCP protocol is accepted (ports 9000 or 9440 for secure connections). Attempting to use HTTP ports (8123 or 8443) will result in an explicit error: `ClickHouse HTTP protocol (port <port>) is not supported. Please use the native TCP protocol on port 9000 or 9440`. The HTTP protocol had compatibility issues with schema introspection and metadata queries.
+
 ## v4.11.0
+
 * Added support for nested objects in postgres from-proto mode. Table with nested objects will be created with `JSONB` type.
-* Refactor encoder to use CSV writer for row formatting.
 
 ## v4.10.0
 * Added support for one level deep nested objects in clickhouse from-proto mode. Table with nested objects will be created with `Nested` type.

@@ -51,20 +51,6 @@ func TestParseDSN(t *testing.T) {
 			expectSchema:     "testdb",
 			expectPassword:   "password",
 		},
-		{
-			name:             "clickhouse DSN weird code, if option present and host is NOT localhost, nothing changes",
-			dns:              "clickhouse://default:password@host:9000/default?any=option",
-			expectConnString: "clickhouse://default:password@host:9000/default?any=option",
-			expectSchema:     "default",
-			expectPassword:   "password",
-		},
-		{
-			name:             "clickhouse DSN weird code, if option present and host is NOT localhost and secure=true option, nothing changes",
-			dns:              "clickhouse://default:password@host:9000/default?secure=true",
-			expectConnString: "clickhouse://default:password@host:9000/default?secure=true",
-			expectSchema:     "default",
-			expectPassword:   "password",
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

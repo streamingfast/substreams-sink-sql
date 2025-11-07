@@ -32,4 +32,5 @@ type Dialect interface {
 	CreateUser(tx Tx, ctx context.Context, l *Loader, username string, password string, database string, readOnly bool) error
 	GetTableColumns(db *sql.DB, schemaName, tableName string) ([]*sql.ColumnType, error)
 	GetPrimaryKey(db *sql.DB, schemaName, tableName string) ([]string, error)
+	GetTablesInSchema(db *sql.DB, schemaName string) ([][2]string, error)
 }
