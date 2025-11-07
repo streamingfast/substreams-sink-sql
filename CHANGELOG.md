@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v4.11.0
 * Added support for nested objects in postgres from-proto mode. Table with nested objects will be created with `JSONB` type.
+* Refactor encoder to use CSV writer for row formatting.
 
 ## v4.10.0
 * Added support for one level deep nested objects in clickhouse from-proto mode. Table with nested objects will be created with `Nested` type.

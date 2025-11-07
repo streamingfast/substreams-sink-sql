@@ -1,10 +1,11 @@
 package bundler
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -29,12 +30,20 @@ func CSVEncode(message map[string]string) ([]byte, error) {
 	}
 	sort.Strings(keys)
 
-	var row []string
+	row := make([]string, 0, len(keys))
 	for _, key := range keys {
 		row = append(row, message[key])
 	}
-	str := strings.Join(row, ",")
-	data := []byte(str)
-	data = append(data, byte('\n'))
-	return data, nil
+
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	if err := writer.Write(row); err != nil {
+		return nil, err
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
