@@ -574,11 +574,28 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 			})
 		}
 
-		if err := client.Do(database.ctx, ch.Query{
-			Body:  inputs.Into(acc.tableName), // helper that generates INSERT INTO query with all columns
-			Input: inputs,
-		}); err != nil {
-			return fmt.Errorf("clickhouse accumulator inserter: executing query on %q: %w", acc.debugTableAndColumns(), err)
+		// Retry logic on client.Do failure: sleep between attempts and get a fresh client for each retry
+		retryCount := database.queryRetryCount
+		retrySleep := database.queryRetrySleep
+		for attempt := 0; ; attempt++ {
+			if err := client.Do(database.ctx, ch.Query{
+				Body:  inputs.Into(acc.tableName), // helper that generates INSERT INTO query with all columns
+				Input: inputs,
+			}); err != nil {
+				if attempt >= retryCount {
+					return fmt.Errorf("clickhouse accumulator inserter: executing query on %q after %d retries: %w", acc.debugTableAndColumns(), attempt, err)
+				}
+				// Log, sleep, and get a fresh client before retrying
+				i.logger.Warn("clickhouse insert failed, will retry", zap.Int("attempt", attempt+1), zap.Int("max_attempts", retryCount), zap.String("table", acc.tableName), zap.Error(err))
+				time.Sleep(retrySleep)
+				fresh, cErr := database.freshClient()
+				if cErr != nil {
+					return fmt.Errorf("clickhouse accumulator inserter: getting fresh client: %w", cErr)
+				}
+				client = fresh
+				continue
+			}
+			break
 		}
 
 		queryDuration += time.Since(qStart)

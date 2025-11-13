@@ -3,6 +3,7 @@ package db_proto
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/streamingfast/logging"
 	sink "github.com/streamingfast/substreams-sink"
@@ -30,8 +31,10 @@ type SinkerFactoryOptions struct {
 }
 
 type SinkerFactoryClickhouse struct {
-	SinkInfoFolder string
-	CursorFilePath string
+	SinkInfoFolder  string
+	CursorFilePath  string
+	QueryRetryCount int
+	QueryRetrySleep time.Duration
 }
 
 func (o SinkerFactoryOptions) Defaults() SinkerFactoryOptions {
@@ -84,6 +87,8 @@ func SinkerFactory(
 				options.Encoding,
 				logger,
 				tracer,
+				options.Clickhouse.QueryRetryCount,
+				options.Clickhouse.QueryRetrySleep,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("creating clickhouse database: %w", err)

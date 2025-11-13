@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
@@ -41,6 +42,8 @@ var fromProtoCmd = Command(fromProtoE,
 		flags.String("clickhouse-cursor-file-path", "cursor.txt", "file name where to store the clickhouse cursor")
 		flags.String("bytes-encoding", "raw", "Encoding for protobuf bytes fields (raw, hex, 0xhex, base64, base58)")
 		flags.String("proto-file-override", "", "Override protobuf file to use instead of extracting from substreams package")
+		flags.Int("clickhouse-query-retry-count", 3, "Number of retries for ClickHouse queries when an error occurs")
+		flags.Duration("clickhouse-query-retry-sleep", time.Second, "Sleep duration between ClickHouse query retries (e.g. 1s, 500ms)")
 	}),
 )
 
@@ -76,6 +79,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 
 	useTransactions := true
 	parallel := false
+
+	retryCount := sflags.MustGetInt(cmd, "clickhouse-query-retry-count")
+	retrySleep := sflags.MustGetDuration(cmd, "clickhouse-query-retry-sleep")
 
 	endpoint := sflags.MustGetString(cmd, "substreams-endpoint")
 	if endpoint == "" {
@@ -225,8 +231,10 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		Parallel:        parallel,
 		Encoding:        encoding,
 		Clickhouse: db_proto.SinkerFactoryClickhouse{
-			SinkInfoFolder: sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
-			CursorFilePath: sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
+			SinkInfoFolder:  sflags.MustGetString(cmd, "clickhouse-sink-info-folder"),
+			CursorFilePath:  sflags.MustGetString(cmd, "clickhouse-cursor-file-path"),
+			QueryRetryCount: retryCount,
+			QueryRetrySleep: retrySleep,
 		},
 	})
 

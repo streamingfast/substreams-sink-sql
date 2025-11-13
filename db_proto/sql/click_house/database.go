@@ -24,16 +24,18 @@ import (
 
 type Database struct {
 	*sql.BaseDatabase
-	schema         *schema.Schema
-	sinkInfoFolder string
-	cursorFilePath string
-	logger         *zap.Logger
-	dialect        *DialectClickHouse
-	cachedClient   *ch.Client
-	dsn            *db.DSN
-	ctx            context.Context
-	inserter       *AccumulatorInserter
-	bytesEncoding  bytes.Encoding
+	schema          *schema.Schema
+	sinkInfoFolder  string
+	cursorFilePath  string
+	logger          *zap.Logger
+	dialect         *DialectClickHouse
+	cachedClient    *ch.Client
+	dsn             *db.DSN
+	ctx             context.Context
+	inserter        *AccumulatorInserter
+	bytesEncoding   bytes.Encoding
+	queryRetryCount int
+	queryRetrySleep time.Duration
 }
 
 func NewDatabase(
@@ -48,6 +50,8 @@ func NewDatabase(
 	bytesEncoding bytes.Encoding,
 	logger *zap.Logger,
 	tracer logging.Tracer,
+	queryRetryCount int,
+	queryRetrySleep time.Duration,
 ) (*Database, error) {
 	baseDB, err := sql.NewBaseDatabase(moduleOutputType, rootMessageDescriptor, useProtoOptions, logger)
 	if err != nil {
@@ -59,15 +63,23 @@ func NewDatabase(
 	}
 
 	database := &Database{
-		ctx:            ctx,
-		dsn:            dsn,
-		BaseDatabase:   baseDB,
-		dialect:        dialect,
-		schema:         schema,
-		sinkInfoFolder: sinkInfoFolder,
-		cursorFilePath: cursorFilePath,
-		logger:         logger,
-		bytesEncoding:  bytesEncoding,
+		ctx:             ctx,
+		dsn:             dsn,
+		BaseDatabase:    baseDB,
+		dialect:         dialect,
+		schema:          schema,
+		sinkInfoFolder:  sinkInfoFolder,
+		cursorFilePath:  cursorFilePath,
+		logger:          logger,
+		bytesEncoding:   bytesEncoding,
+		queryRetryCount: queryRetryCount,
+		queryRetrySleep: queryRetrySleep,
+	}
+	if database.queryRetryCount <= 0 {
+		database.queryRetryCount = 3
+	}
+	if database.queryRetrySleep <= 0 {
+		database.queryRetrySleep = time.Second
 	}
 	inserter, err := NewAccumulatorInserter(database, logger, tracer)
 	if err != nil {
@@ -82,7 +94,7 @@ func (d *Database) Open() error {
 	return nil
 }
 
-func newClient(dsn *db.DSN) (*ch.Client, error) {
+func newClient(dsn *db.DSN, logger *zap.Logger) (*ch.Client, error) {
 	chOption := ch.Options{
 		Address:     fmt.Sprintf("%s:%d", dsn.Host, dsn.Port),
 		Database:    dsn.Database,
@@ -110,17 +122,20 @@ func newClient(dsn *db.DSN) (*ch.Client, error) {
 		}
 	}
 
-	client, err := ch.Dial(context.Background(), chOption)
-
-	if err != nil {
-		return nil, fmt.Errorf("dialing clickhouse: %w", err)
+	for {
+		client, err := ch.Dial(context.Background(), chOption)
+		if err != nil {
+			logger.Warn("dialing clickhouse failed, will retry", zap.Error(err))
+			time.Sleep(time.Second)
+			continue
+		}
+		return client, nil
 	}
-	return client, nil
 }
 
 func (d *Database) client() (*ch.Client, error) {
 	if d.cachedClient == nil || d.cachedClient.IsClosed() {
-		client, err := newClient(d.dsn)
+		client, err := newClient(d.dsn, d.logger)
 		if err != nil {
 			return nil, fmt.Errorf("creating clickhouse client: %w", err)
 		}
@@ -131,8 +146,17 @@ func (d *Database) client() (*ch.Client, error) {
 	return d.cachedClient, nil
 }
 
+func (d *Database) freshClient() (*ch.Client, error) {
+	client, err := newClient(d.dsn, d.logger)
+	if err != nil {
+		return nil, fmt.Errorf("creating clickhouse client: %w", err)
+	}
+	d.cachedClient = client
+	return client, nil
+}
+
 func (d *Database) clientNoCache(dsn *db.DSN) (*ch.Client, error) {
-	client, err := newClient(dsn)
+	client, err := newClient(dsn, d.logger)
 	if err != nil {
 		return nil, fmt.Errorf("creating clickhouse client: %w", err)
 	}
@@ -341,6 +365,29 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		return fmt.Errorf("creating clickhouse client: %w", err)
 	}
 
+	// local helper with retry and fresh client per attempt
+	doWithRetry := func(q string) error {
+		retryCount := d.queryRetryCount
+		retrySleep := d.queryRetrySleep
+		for attempt := 0; ; attempt++ {
+			if err := client.Do(d.ctx, ch.Query{Body: q}); err != nil {
+				if attempt >= retryCount {
+					return fmt.Errorf("executing clickhouse query after %d retries: %w", attempt, err)
+				}
+				d.logger.Warn("clickhouse query failed, will retry", zap.Int("attempt", attempt+1), zap.Int("max_attempts", retryCount), zap.Error(err))
+				time.Sleep(retrySleep)
+				fresh, cErr := d.freshClient()
+				if cErr != nil {
+					return fmt.Errorf("getting fresh client: %w", cErr)
+				}
+				client = fresh
+				continue
+			}
+			break
+		}
+		return nil
+	}
+
 	err = d.BeginTransaction()
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -356,9 +403,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		FROM %s._blocks_ WHERE number > %d
 		`, d.schema.Name, version, d.schema.Name, lastValidBlockNum)
 
-	err = client.Do(d.ctx, ch.Query{
-		Body: insertDeleteBlocks,
-	})
+	err = doWithRetry(insertDeleteBlocks)
 	if err != nil {
 		return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 	}
@@ -412,9 +457,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 			FROM %s WHERE %s > %d AND _deleted_ != 1
 			`, tableFullName, sql.DialectFieldBlockNumber, sql.DialectFieldBlockTimestamp, version, fields, tableFullName, sql.DialectFieldBlockNumber, lastValidBlockNum)
 
-		err := client.Do(d.ctx, ch.Query{
-			Body: query,
-		})
+		err := doWithRetry(query)
 		if err != nil {
 			return fmt.Errorf("deleting block from %d: %w", lastValidBlockNum, err)
 		}
