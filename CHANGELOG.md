@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.11.1
+
+### Clickhouse from proto improvements
+Add retry logic queries and enhance client handling
+
+- Introduced `clickhouse-query-retry-count` and `clickhouse-query-retry-sleep` flags to configure retries.
+- Implemented retry mechanism with fresh client acquisition for query execution failures.
+- Enhanced ClickHouse database and inserter logic to handle retries consistently.
 
 ### DatabaseChanges mode improvements
 
