@@ -32,9 +32,8 @@ type Database struct {
 func NewDatabase(schema *schema.Schema, dsn *db.DSN, moduleOutputType string, rootMessageDescriptor protoreflect.MessageDescriptor, useProtoOptions bool, useConstraints bool, bytesEncoding bytes.Encoding, logger *zap.Logger) (*Database, error) {
 	logger = logger.Named("postgres")
 
-	connectionString := dsn.ConnString()
-	logger.Info("connecting to db", zap.String("dsn", connectionString))
-	sqlDB, err := pgsql.Open(dsn.Driver(), connectionString)
+	logger.Info("connecting to db", zap.String("host", dsn.Host), zap.Int64("port", dsn.Port), zap.String("database", dsn.Database))
+	sqlDB, err := pgsql.Open(dsn.Driver(), dsn.ConnString())
 	if err != nil {
 		return nil, fmt.Errorf("open db connection: %w", err)
 	}
