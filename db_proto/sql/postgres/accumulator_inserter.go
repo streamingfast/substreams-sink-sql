@@ -11,8 +11,9 @@ import (
 )
 
 type accumulator struct {
-	query     string
-	rowValues [][]string
+	query       string
+	fieldsCount int
+	rowValues   [][]string
 }
 
 type AccumulatorInserter struct {
@@ -34,12 +35,13 @@ func (i *AccumulatorInserter) init(database *Database) error {
 	accumulators := map[string]*accumulator{}
 
 	for _, table := range tables {
-		query, err := createInsertFromDescriptorAcc(table, database.dialect)
+		query, fieldsCount, err := createInsertFromDescriptorAcc(table, database.dialect)
 		if err != nil {
 			return fmt.Errorf("creating insert from descriptor for table %q: %w", table.Name, err)
 		}
 		accumulators[table.Name] = &accumulator{
-			query: query,
+			query:       query,
+			fieldsCount: fieldsCount,
 		}
 	}
 	accumulators["_blocks_"] = &accumulator{
@@ -58,7 +60,7 @@ func (i *AccumulatorInserter) init(database *Database) error {
 	return nil
 }
 
-func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (string, error) {
+func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (string, int, error) {
 	tableName := dialect.FullTableName(table)
 	fields := table.Columns
 
@@ -95,11 +97,12 @@ func createInsertFromDescriptorAcc(table *schema.Table, dialect sql2.Dialect) (s
 	return fmt.Sprintf("INSERT INTO %s (%s) VALUES ",
 		tableName,
 		strings.Join(fieldNames, ", "),
-	), nil
+	), len(fieldNames), nil
 
 }
 
 func (i *AccumulatorInserter) insert(table string, values []any, database *Database) error {
+
 	var v []string
 	if table == "_cursor_" {
 		stmt := database.wrapInsertStatement(i.cursorStmt)
@@ -116,6 +119,11 @@ func (i *AccumulatorInserter) insert(table string, values []any, database *Datab
 	if accumulator == nil {
 		return fmt.Errorf("accumulator not found for table %q", table)
 	}
+
+	for i := 0; i < accumulator.fieldsCount-len(v); i++ {
+		v = append(v, "NULL")
+	}
+
 	accumulator.rowValues = append(accumulator.rowValues, v)
 
 	return nil
