@@ -1,100 +1,21 @@
-name: Build docker image
+---
+name: Build and Publish Docker Image
 
 on:
-  push:
-    tags:
-      - "v*"
-    branches:
-      - "*"
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  release:
+    types:
+      - published
 
 jobs:
-  build-and-push-image:
-    runs-on: ubuntu-22.04
-    if: "${{ !startsWith(github.event.head_commit.message, 'GitBook: [#') }}"
-
-    outputs:
-      image: ${{ steps.meta.outputs.image }}
-      tags: ${{ steps.meta.outputs.tags }}
-
+  build:
+    uses: ICN-Protocol/github-common/.github/workflows/build-docker.yml@v0.4.2
     permissions:
       contents: read
       packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate docker tags/labels from github build context
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=tag
-            type=sha,prefix=
-            type=raw,enable=${{ github.ref == 'refs/heads/develop' }},value=develop
-            type=edge,branch=develop
-          flavor: |
-            latest=${{ startsWith(github.ref, 'refs/tags/') }}
-
-      - name: Extract version
-        id: extract-version
-        run: |
-          version=edge
-          commit_date="$(git show -s --format=%cI)"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version=${GITHUB_REF#refs/tags/}
-          fi
-
-          echo "VERSION=$version (Commit ${GITHUB_SHA::7}, Commit Date $commit_date)" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.extract-version.outputs.VERSION }}
-
-  slack-notifications:
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: [build-and-push-image]
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Slack notification
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-        uses: Ilshidur/action-slack@2.0.2
-        with:
-          args: |
-            :done: *${{ github.repository }}* Success building docker images from ${{ github.ref_type }} _${{ github.ref_name }}_ (${{ github.actor }}) :sparkling_heart: ```${{ join(needs.build-and-push-image.outputs.tags, ' ') }}
-            ${{ needs.build-and-push-image.outputs.image }}```
+    with:
+      imageName: ${{ github.event.repository.name }}
+      push: true
+      file: ./Dockerfile
+    secrets:
+      token: ${{ secrets.GIT_TOKEN }}
+      password: ${{ secrets.GITHUB_TOKEN }}
