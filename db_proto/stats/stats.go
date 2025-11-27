@@ -3,6 +3,7 @@ package stats
 import (
 	"time"
 
+	"github.com/streamingfast/logging/zapx"
 	"go.uber.org/zap"
 )
 
@@ -31,11 +32,11 @@ func (a *Average) Average() time.Duration {
 	if len(a.Duration) == 0 {
 		return 0
 	}
-	var total int64
+	var total time.Duration
 	for _, d := range a.Duration {
-		total += d.Nanoseconds()
+		total += d
 	}
-	return time.Duration(total / int64(len(a.Duration)))
+	return time.Duration(total / time.Duration(len(a.Duration)))
 }
 
 func (a *Average) LastItemsAverage(count int) time.Duration {
@@ -53,7 +54,10 @@ func (a *Average) LastItemsAverage(count int) time.Duration {
 }
 
 func (a *Average) Log(logger *zap.Logger) {
-	logger.Info(a.title, zap.Duration("average", a.Average()), zap.Duration("last X average", a.LastItemsAverage(a.lastX)))
+	logger.Info(a.title,
+		zapx.HumanDuration("average", a.Average()),
+		zapx.HumanDuration("last X average", a.LastItemsAverage(a.lastX)),
+	)
 }
 
 type Stats struct {
@@ -97,7 +101,14 @@ func (s *Stats) Log() {
 	if s.BlockCount == 0 {
 		s.logger.Info("Stats: no blocks processed yet")
 	} else {
-		s.logger.Info("Stats", zap.Int("block_count", s.BlockCount), zap.Duration("Processing Time", s.TotalProcessingDuration), zap.Duration("Total Wait Duration", s.TotalDurationBetween), zap.Duration("Total Duration", s.TotalDurationBetween+s.TotalProcessingDuration), zap.Time("Last Block Process At", s.LastBlockProcessAt))
+		s.logger.Info("Stats",
+			zap.Int("block_count", s.BlockCount),
+			zapx.HumanDuration("Processing Time", s.TotalProcessingDuration),
+			zapx.HumanDuration("Total Wait Duration", s.TotalDurationBetween),
+			zapx.HumanDuration("Total Duration", s.TotalDurationBetween+s.TotalProcessingDuration),
+			zap.Time("Last Block Process At", s.LastBlockProcessAt),
+		)
+
 		s.WaitDurationBetweenBlocks.Log(s.logger)
 		s.BlockProcessingDuration.Log(s.logger)
 		s.UnmarshallingDuration.Log(s.logger)

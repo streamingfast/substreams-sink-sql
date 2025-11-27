@@ -5,6 +5,7 @@ import (
 
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/dmetrics"
+	"github.com/streamingfast/logging/zapx"
 	"go.uber.org/zap"
 )
 
@@ -61,14 +62,14 @@ func (s *boundaryStats) Log() []zap.Field {
 	return []zap.Field{
 		zap.Uint64("file_count", s.totalBoundaryCount),
 		zap.Stringer("boundary", s.boundary),
-		zap.Duration("boundary_process_duration", s.boundaryProcessTime),
-		zap.Duration("upload_duration", s.uploadedDuration),
-		zap.Duration("data_process_duration", s.procesingDataTime),
-		zap.Duration("avg_upload_duration", s.avgUploadDuration.Average()),
-		zap.Duration("total_upload_duration", s.avgUploadDuration.Total()),
-		zap.Duration("avg_boundary_process_duration", s.avgBoundaryProcessDuration.Average()),
-		zap.Duration("total_boundary_process_duration", s.avgBoundaryProcessDuration.Total()),
-		zap.Duration("avg_data_process_duration", s.avgDataProcessDuration.Average()),
-		zap.Duration("total_data_process_duration", s.avgDataProcessDuration.Total()),
+		zapx.HumanDuration("boundary_process_duration", s.boundaryProcessTime),
+		zapx.HumanDuration("upload_duration", s.uploadedDuration),
+		zapx.HumanDuration("data_process_duration", s.procesingDataTime),
+		zapx.HumanDuration("avg_upload_duration", s.avgUploadDuration.Average()),
+		zapx.HumanDuration("total_upload_duration", s.avgUploadDuration.Total()),
+		zapx.HumanDuration("avg_boundary_process_duration", s.avgBoundaryProcessDuration.Average()),
+		zapx.HumanDuration("total_boundary_process_duration", s.avgBoundaryProcessDuration.Total()),
+		zapx.HumanDuration("avg_data_process_duration", s.avgDataProcessDuration.Average()),
+		zapx.HumanDuration("total_data_process_duration", s.avgDataProcessDuration.Total()),
 	}
 }

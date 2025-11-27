@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"time"
 
+	"github.com/streamingfast/logging/zapx"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
@@ -148,7 +149,7 @@ func (d *Database) applyConstraints() error {
 			return fmt.Errorf("executing fk constraint statement: %w %s", err, constraint.Sql)
 		}
 	}
-	d.logger.Info("applying constraints", zap.Duration("duration", time.Since(startAt)))
+	d.logger.Info("applying constraints", zapx.HumanDuration("duration", time.Since(startAt)))
 	return nil
 }
 

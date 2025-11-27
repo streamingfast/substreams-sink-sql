@@ -15,6 +15,7 @@ import (
 
 	"github.com/streamingfast/dstore"
 	"github.com/streamingfast/logging"
+	"github.com/streamingfast/logging/zapx"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
@@ -154,7 +155,7 @@ func (s *GenerateCSVSinker) Run(ctx context.Context) {
 	s.stats.Start(logEach, cursor)
 
 	s.logger.Info("starting sql generate CSV sink",
-		zap.Duration("stats_refresh_each", logEach),
+		zapx.HumanDuration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
 		zap.String("loader", s.loader.GetIdentifier()),
 	)

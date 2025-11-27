@@ -12,6 +12,7 @@ import (
 
 	"github.com/ClickHouse/ch-go"
 	"github.com/streamingfast/logging"
+	"github.com/streamingfast/logging/zapx"
 	sink "github.com/streamingfast/substreams-sink"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
@@ -415,7 +416,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 	//	return fmt.Errorf("optimizing table: %w", err)
 	//}
 
-	d.logger.Info("undo completed", zap.String("table", "_block_"), zap.Duration("duration", time.Since(start)))
+	d.logger.Info("undo completed", zap.String("table", "_block_"), zapx.HumanDuration("duration", time.Since(start)))
 
 	for _, table := range tables {
 		d.logger.Info("undoing blocks", zap.String("table", table.Name), zap.Uint64("last_valid_block_num", lastValidBlockNum))
@@ -467,7 +468,7 @@ func (d *Database) HandleBlocksUndo(lastValidBlockNum uint64) error {
 		//	Body: fmt.Sprintf("OPTIMIZE TABLE %s FINAL CLEANUP;", tableFullName),
 		//})
 
-		d.logger.Info("undo completed", zap.String("table", table.Name), zap.Duration("duration", time.Since(start)))
+		d.logger.Info("undo completed", zap.String("table", table.Name), zapx.HumanDuration("duration", time.Since(start)))
 	}
 	err = d.CommitTransaction()
 	if err != nil {

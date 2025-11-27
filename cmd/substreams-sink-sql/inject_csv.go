@@ -19,6 +19,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/dstore"
+	"github.com/streamingfast/logging/zapx"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"go.uber.org/zap"
 )
@@ -79,7 +80,7 @@ func injectCSVE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("table filler %q: %w", tableName, err)
 	}
 
-	zlog.Info("table done", zap.Duration("total", time.Since(t0)))
+	zlog.Info("table done", zapx.HumanDuration("total", time.Since(t0)))
 	return nil
 }
 
@@ -232,7 +233,7 @@ func (t *TableFiller) injectCSVFromReader(ctx context.Context, fl io.Reader, sou
 		zap.String("source", source),
 		zap.String("table_name", t.tblName),
 		zap.Int64("rows_affected", count),
-		zap.Duration("elapsed", elapsed),
+		zapx.HumanDuration("elapsed", elapsed),
 	)
 
 	return nil

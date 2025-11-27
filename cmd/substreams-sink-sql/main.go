@@ -12,6 +12,7 @@ import (
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/dmetrics"
+	"github.com/streamingfast/logging/zapx"
 	"go.uber.org/zap"
 )
 
@@ -50,7 +51,7 @@ func preStart(cmd *cobra.Command, _ []string) {
 
 	delay := sflags.MustGetDuration(cmd, "delay-before-start")
 	if delay > 0 {
-		zlog.Info("sleeping to respect delay before start setting", zap.Duration("delay", delay))
+		zlog.Info("sleeping to respect delay before start setting", zapx.HumanDuration("delay", delay))
 		time.Sleep(delay)
 	}
 

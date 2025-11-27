@@ -117,10 +117,7 @@ func TestDbProtoClickhouseIntegration(t *testing.T) {
 				UseTransactions: true,
 				BlockBatchSize:  1,
 				Parallel:        false,
-				Clickhouse: struct {
-					SinkInfoFolder string
-					CursorFilePath string
-				}{
+				Clickhouse: db_proto.SinkerFactoryClickhouse{
 					SinkInfoFolder: clickhouseStateFolder,
 					CursorFilePath: filepath.Join(clickhouseStateFolder, "cursor.txt"),
 				},

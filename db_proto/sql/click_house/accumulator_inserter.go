@@ -608,7 +608,7 @@ func (i *AccumulatorInserter) flush(database *Database) error {
 	}
 	i.accumulators = accs
 
-	i.logger.Debug("flushing done", zap.Duration("duration", time.Since(start)), zap.Int("rows", rowCount))
+	i.logger.Debug("flushing done", zapx.HumanDuration("duration", time.Since(start)), zap.Int("rows", rowCount))
 
 	return nil
 }

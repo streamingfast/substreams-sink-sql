@@ -13,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/logging"
+	"github.com/streamingfast/logging/zapx"
 	"github.com/streamingfast/substreams/client"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
@@ -178,7 +179,9 @@ func setupClickhouseContainer(t *testing.T, seedDb ClickhouseSeeder) (dbConnecti
 	t.Helper()
 
 	start := time.Now()
-	defer func() { logger.Debug("setupClickhouseContainer duration", zap.Duration("duration", time.Since(start))) }()
+	defer func() {
+		logger.Debug("setupClickhouseContainer duration", zapx.HumanDuration("duration", time.Since(start)))
+	}()
 
 	ctx := context.Background()
 

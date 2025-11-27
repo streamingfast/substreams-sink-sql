@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/streamingfast/logging"
+	"github.com/streamingfast/logging/zapx"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
@@ -109,7 +110,7 @@ func (s *SQLSinker) Run(ctx context.Context) {
 	s.stats.Start(logEach, cursor)
 
 	s.logger.Info("starting sql sink",
-		zap.Duration("stats_refresh_each", logEach),
+		zapx.HumanDuration("stats_refresh_each", logEach),
 		zap.Stringer("restarting_at", cursor.Block()),
 		zap.String("loader", s.loader.GetIdentifier()),
 	)
@@ -129,7 +130,7 @@ func (s *SQLSinker) flushWithRetry(ctx context.Context, moduleHash string, curso
 			s.logger.Warn("retrying flush after error",
 				zap.Int("attempt", attempt),
 				zap.Int("max_retries", retries),
-				zap.Duration("delay", delay),
+				zapx.HumanDuration("delay", delay),
 				zap.Error(lastErr))
 
 			select {
@@ -194,7 +195,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		zap.Bool("block_flush_needed_before_timing_check", blockFlushNeeded))
 
 	if blockFlushNeeded && isLive != nil && *isLive && s.stats.AverageFlushDuration() > data.Clock.Timestamp.AsTime().Sub(s.lastAppliedBlockTime) {
-		s.logger.Debug("skipping a flush because we are LIVE and flush average duration is above time between blocks", zap.Duration("flush_duration_average", s.stats.AverageFlushDuration()), zap.Time("last_block_time", s.lastAppliedBlockTime), zap.Time("block_time", data.Clock.Timestamp.AsTime()))
+		s.logger.Debug("skipping a flush because we are LIVE and flush average duration is above time between blocks", zapx.HumanDuration("flush_duration_average", s.stats.AverageFlushDuration()), zap.Time("last_block_time", s.lastAppliedBlockTime), zap.Time("block_time", data.Clock.Timestamp.AsTime()))
 		blockFlushNeeded = false
 	}
 
@@ -225,7 +226,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 				level = zap.WarnLevel
 			}
 
-			s.logger.Check(level, "flush to database took a long time to complete, could cause long sync time along the road").Write(zap.Duration("took", flushDuration))
+			s.logger.Check(level, "flush to database took a long time to complete, could cause long sync time along the road").Write(zapx.HumanDuration("took", flushDuration))
 		}
 
 		FlushCount.Inc()
