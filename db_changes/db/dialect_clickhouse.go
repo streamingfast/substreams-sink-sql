@@ -448,6 +448,7 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 
 func (d ClickhouseDialect) GetTablesInSchema(db *sql.DB, schemaName string) ([][2]string, error) {
 	// Use system.tables to query for tables in the schema
+	// Filter out MaterializedView as they are not regular tables and should not receive direct inserts
 	query := fmt.Sprintf(`
 		SELECT database AS table_schema, name AS table_name
 		FROM system.tables

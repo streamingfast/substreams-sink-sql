@@ -83,6 +83,43 @@ func TestClickhouseSinker_Integration_AggregateFunction(t *testing.T) {
 	)
 }
 
+func TestClickhouseSinker_Integration_MaterializedView(t *testing.T) {
+	runClickhouseSinkerTest(
+		t,
+		sharedDbChangesClickhouseContainer,
+		nil,
+		nil,
+		rawSQLInput(func(schema string) string {
+			return `
+				CREATE TABLE IF NOT EXISTS xfer (
+					id String,
+					"from" String,
+					"to" String
+				) ENGINE = ReplacingMergeTree()
+				ORDER BY id;
+
+				CREATE MATERIALIZED VIEW IF NOT EXISTS xfer_summary
+				ENGINE = SummingMergeTree()
+				ORDER BY "from"
+				AS SELECT
+					"from",
+					count() as transfer_count
+				FROM xfer
+				GROUP BY "from";
+			`
+		}),
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
+				insertRowSinglePK("xfer", "1234", "from", "sender1", "to", "receiver1"),
+			),
+		),
+		equalsClickhouseXferRows([]*XferSinglePKRow{
+			{ID: "1234", From: "sender1", To: "receiver1"},
+		}),
+		"Block #10 (10a) - LIB #10 (10a)",
+	)
+}
+
 func runClickhouseSinkerTest(
 	t *testing.T,
 	clickhouseContainer *ClickhouseContainerExt,
