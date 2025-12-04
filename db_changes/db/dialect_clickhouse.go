@@ -449,9 +449,13 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 func (d ClickhouseDialect) GetTablesInSchema(db *sql.DB, schemaName string) ([][2]string, error) {
 	// Use system.tables to query for tables in the schema
 	query := fmt.Sprintf(`
-		SELECT database as table_schema, name as table_name
+		SELECT database AS table_schema, name AS table_name
 		FROM system.tables
 		WHERE database = '%s'
+		  AND NOT is_temporary
+		  AND engine NOT LIKE '%%View'
+		  AND engine NOT LIKE 'System%%'
+		  AND has_own_data != 0
 		ORDER BY database, name
 	`, schemaName)
 
