@@ -451,7 +451,11 @@ func (d ClickhouseDialect) GetTablesInSchema(db *sql.DB, schemaName string) ([][
 	query := fmt.Sprintf(`
 		SELECT database as table_schema, name as table_name
 		FROM system.tables
-		WHERE database = '%s'
+		WHERE database = '%s' 
+		    AND NOT is_temporary 
+			AND engine NOT LIKE '%View'
+			AND engine NOT LIKE 'System%'
+			AND has_own_data != 0
 		ORDER BY database, name
 	`, schemaName)
 
