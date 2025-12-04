@@ -141,7 +141,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 			return e
 		}
 
-		return fmt.Errorf("load psql table: %w", err)
+		return fmt.Errorf("load tables: %w", err)
 	}
 
 	generateCSVSinker, err := sinker2.NewGenerateCSVSinker(

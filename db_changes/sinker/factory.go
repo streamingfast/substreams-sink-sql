@@ -59,7 +59,7 @@ func SinkerFactory(
 			if errors.As(err, &e) {
 				return nil, fmt.Errorf("error validating the system table: %w. Did you run setup?", e)
 			}
-			return nil, fmt.Errorf("load psql table: %w", err)
+			return nil, fmt.Errorf("load tables: %w", err)
 		}
 
 		sinker, err := New(baseSink, dbLoader, logger, tracer, options.FlushRetryCount, options.FlushRetryDelay)

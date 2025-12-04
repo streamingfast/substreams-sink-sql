@@ -115,12 +115,12 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		FlushRetryDelay:         flushRetryDelay,
 	})
 
-	postgresSinker, err := sinkerFactory(app.Context(), dsnString, zlog, tracer)
+	sqlSinker, err := sinkerFactory(app.Context(), dsnString, zlog, tracer)
 	if err != nil {
-		return fmt.Errorf("unable to setup postgres sinker: %w", err)
+		return fmt.Errorf("unable to setup sql sinker: %w", err)
 	}
 
-	app.SuperviseAndStart(postgresSinker)
+	app.SuperviseAndStart(sqlSinker)
 
 	return app.WaitForTermination(zlog, 0*time.Second, 30*time.Second)
 }
