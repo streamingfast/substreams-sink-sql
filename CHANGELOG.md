@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v4.11.3
+
+### DatabaseChanges mode improvements
+
+* Fixed Clickhouse table fetching to ignore materialized columns when inserting data. If a column is materialized from another one, the column is skipped for data insertion coming from the Substreams.
+
+* Added `handle_block_duration` to `postgres sink stats` periodic logger to show how long from start to finish handling a block takes (this make more sense once live where each block is flushed to the database normally).
+
+* Added new Prometheus metrics:
+  - `substreams_sink_sql_prune_reversible_segment_duration` - How long it takes to prune the reversible of the chain, when there is one
+  - `substreams_sink_sql_tx_query_execution_duration{query_type: normal|undo}` - How long it took to execute the `tx.ExecContext` call for saving the received data into the database, `normal` being for the data insertion, `undo` being for the saving of "undo" row to handle re-orgs.
+
+  *Note* Current metrics starts with `substreams_sink_postgres`, we have started to now use `substreams_sink_sql`.
 
 ## v4.11.2
 
