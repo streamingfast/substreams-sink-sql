@@ -413,11 +413,18 @@ func (d ClickhouseDialect) GetTableColumns(db *sql.DB, schemaName, tableName str
 			return nil, fmt.Errorf("scanning describe results: %w", err)
 		}
 
-		// First column is always the column name, second is the data type
+		// First column is always the column name, second is the data type,
+		// third is the default_type (MATERIALIZED, ALIAS, DEFAULT, or empty)
 		name := fmt.Sprintf("%v", values[0])
 		dataType := fmt.Sprintf("%v", values[1])
+		defaultType := ""
+		if len(values) > 2 && values[2] != nil {
+			defaultType = fmt.Sprintf("%v", values[2])
+		}
 
-		if !strings.Contains(dataType, "AggregateFunction") {
+		// Skip AggregateFunction columns and MATERIALIZED columns
+		// MATERIALIZED columns are auto-computed and cannot be inserted into
+		if !strings.Contains(dataType, "AggregateFunction") && defaultType != "MATERIALIZED" {
 			nonAggregateColumns = append(nonAggregateColumns, EscapeIdentifier(name))
 		}
 	}

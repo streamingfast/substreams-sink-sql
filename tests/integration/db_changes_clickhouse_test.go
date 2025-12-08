@@ -120,6 +120,35 @@ func TestClickhouseSinker_Integration_MaterializedView(t *testing.T) {
 	)
 }
 
+func TestClickhouseSinker_Integration_MaterializedColumn(t *testing.T) {
+	runClickhouseSinkerTest(
+		t,
+		sharedDbChangesClickhouseContainer,
+		nil,
+		nil,
+		rawSQLInput(func(schema string) string {
+			return `
+				CREATE TABLE IF NOT EXISTS events (
+					id String,
+					timestamp DateTime,
+					value String,
+					minute DateTime MATERIALIZED toStartOfMinute(timestamp)
+				) ENGINE = MergeTree()
+				ORDER BY id;
+			`
+		}),
+		streamMock(
+			dbChangesBlockData(t, "10a", finalBlock("10a"),
+				insertRowSinglePK("events", "event1", "timestamp", "2021-01-01 12:34:56", "value", "test_value"),
+			),
+		),
+		equalsClickhouseEventsRows([]*EventsRow{
+			{ID: "event1", Timestamp: "2021-01-01T12:34:56Z", Value: "test_value"},
+		}),
+		"Block #10 (10a) - LIB #10 (10a)",
+	)
+}
+
 func runClickhouseSinkerTest(
 	t *testing.T,
 	clickhouseContainer *ClickhouseContainerExt,
@@ -306,6 +335,32 @@ func readClickhouseMetricsRows(t *testing.T, db *sqlx.DB, schema SchemaName) []*
 	var rows []*MetricsRow
 	// Only select the regular String columns, not the AggregateFunction columns
 	query := fmt.Sprintf(`SELECT id, value, count FROM %s.metrics ORDER BY id;`, schema)
+	err := db.SelectContext(context.Background(), &rows, query)
+	require.NoError(t, err)
+
+	return rows
+}
+
+// EventsRow represents a row in the events table with MATERIALIZED columns
+type EventsRow struct {
+	ID        string `db:"id"`
+	Timestamp string `db:"timestamp"`
+	Value     string `db:"value"`
+}
+
+func equalsClickhouseEventsRows(expected []*EventsRow) func(t *testing.T, dbx *sqlx.DB, schema string) {
+	return func(t *testing.T, dbx *sqlx.DB, schema string) {
+		schemaName := NewSchemaName(schema)
+		require.Equal(t, expected, readClickhouseEventsRows(t, dbx, schemaName))
+	}
+}
+
+func readClickhouseEventsRows(t *testing.T, db *sqlx.DB, schema SchemaName) []*EventsRow {
+	t.Helper()
+
+	var rows []*EventsRow
+	// Only select the regular columns, not the MATERIALIZED columns
+	query := fmt.Sprintf(`SELECT id, timestamp, value FROM %s.events ORDER BY id;`, schema)
 	err := db.SelectContext(context.Background(), &rows, query)
 	require.NoError(t, err)
 
