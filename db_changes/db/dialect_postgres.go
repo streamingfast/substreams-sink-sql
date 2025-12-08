@@ -115,24 +115,46 @@ func (d PostgresDialect) Flush(tx Tx, ctx context.Context, l *Loader, outputModu
 
 	var rowCount int
 	for _, entry := range allOperations {
-		query, err := d.prepareStatement(d.schemaName, entry)
+		normalQuery, undoQuery, err := d.prepareStatement(d.schemaName, entry)
 		if err != nil {
 			return 0, fmt.Errorf("failed to prepare statement: %w", err)
 		}
 
-		if l.tracer.Enabled() {
-			l.logger.Debug("adding query from operation to transaction", zap.Stringer("op", entry), zap.String("query", query), zap.Uint64("ordinal", entry.ordinal))
+		// Execute undo query first (if present) to save state before modifying
+		if undoQuery != "" {
+			if l.tracer.Enabled() {
+				l.logger.Debug("adding undo query from operation to transaction", zap.Stringer("op", entry), zap.String("query", undoQuery), zap.Uint64("ordinal", entry.ordinal))
+			}
+
+			undoStart := time.Now()
+			if _, err := tx.ExecContext(ctx, undoQuery); err != nil {
+				return 0, fmt.Errorf("executing undo query %q: %w", undoQuery, err)
+			}
+			undoDuration := time.Since(undoStart)
+			QueryExecutionDuration.AddInt64(undoDuration.Nanoseconds(), "undo")
 		}
 
-		if _, err := tx.ExecContext(ctx, query); err != nil {
-			return 0, fmt.Errorf("executing flush query %q: %w", query, err)
+		// Execute normal query
+		if l.tracer.Enabled() {
+			l.logger.Debug("adding normal query from operation to transaction", zap.Stringer("op", entry), zap.String("query", normalQuery), zap.Uint64("ordinal", entry.ordinal))
 		}
+
+		normalStart := time.Now()
+		if _, err := tx.ExecContext(ctx, normalQuery); err != nil {
+			return 0, fmt.Errorf("executing normal query %q: %w", normalQuery, err)
+		}
+		normalDuration := time.Since(normalStart)
+		QueryExecutionDuration.AddInt64(normalDuration.Nanoseconds(), "normal")
+
 		rowCount++
 	}
 
+	pruneStart := time.Now()
 	if err := d.pruneReversibleSegment(tx, ctx, d.schemaName, lastFinalBlock); err != nil {
 		return 0, err
 	}
+	pruneDuration := time.Since(pruneStart)
+	PruneReversibleSegmentDuration.AddInt64(pruneDuration.Nanoseconds())
 
 	return rowCount, nil
 }
@@ -363,20 +385,19 @@ func (d PostgresDialect) saveRow(op, schema, escapedTableName string, primaryKey
 
 }
 
-func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string, error) {
+func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQuery string, undoQuery string, err error) {
 	var columns, values []string
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate {
-		var err error
 		columns, values, err = d.prepareColValues(o.table, o.data)
 		if err != nil {
-			return "", fmt.Errorf("preparing column & values: %w", err)
+			return "", "", fmt.Errorf("preparing column & values: %w", err)
 		}
 	}
 
 	if o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate || o.opType == OperationTypeDelete {
 		// A table without a primary key set yield a `primaryKey` map with a single entry where the key is an empty string
 		if _, found := o.primaryKey[""]; found {
-			return "", fmt.Errorf("trying to perform %s operation but table %q don't have a primary key set, this is not accepted", o.opType, o.table.name)
+			return "", "", fmt.Errorf("trying to perform %s operation but table %q don't have a primary key set, this is not accepted", o.opType, o.table.name)
 		}
 	}
 
@@ -389,9 +410,9 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		)
 
 		if o.reversibleBlockNum != nil {
-			return d.saveInsert(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
+			return insertQuery, d.saveInsert(schema, o.table.identifier, o.primaryKey, *o.reversibleBlockNum), nil
 		}
-		return insertQuery, nil
+		return insertQuery, "", nil
 
 	case OperationTypeUpsert:
 		updates := make([]string, len(columns))
@@ -415,9 +436,9 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		)
 
 		if o.reversibleBlockNum != nil {
-			return d.saveUpsert(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + insertQuery, nil
+			return insertQuery, d.saveUpsert(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum), nil
 		}
-		return insertQuery, nil
+		return insertQuery, "", nil
 
 	case OperationTypeUpdate:
 		updates := make([]string, len(columns))
@@ -434,9 +455,9 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 		)
 
 		if o.reversibleBlockNum != nil {
-			return d.saveUpdate(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + updateQuery, nil
+			return updateQuery, d.saveUpdate(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum), nil
 		}
-		return updateQuery, nil
+		return updateQuery, "", nil
 
 	case OperationTypeDelete:
 		primaryKeyWhereClause := getPrimaryKeyWhereClause(o.primaryKey, "")
@@ -445,9 +466,9 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (string,
 			primaryKeyWhereClause,
 		)
 		if o.reversibleBlockNum != nil {
-			return d.saveDelete(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum) + deleteQuery, nil
+			return deleteQuery, d.saveDelete(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum), nil
 		}
-		return deleteQuery, nil
+		return deleteQuery, "", nil
 
 	default:
 		panic(fmt.Errorf("unknown operation type %q", o.opType))

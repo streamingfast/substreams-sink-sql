@@ -2,10 +2,12 @@ package sinker
 
 import (
 	"github.com/streamingfast/dmetrics"
+	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 )
 
 func RegisterMetrics() {
 	metrics.Register()
+	db.RegisterMetrics()
 }
 
 var metrics = dmetrics.NewSet()

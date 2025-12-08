@@ -154,6 +154,8 @@ func (s *SQLSinker) flushWithRetry(ctx context.Context, moduleHash string, curso
 }
 
 func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstreamsrpc.BlockScopedData, isLive *bool, cursor *sink.Cursor) error {
+	blockReceivedAt := time.Now()
+
 	output := data.Output
 
 	if output.Name == "" {
@@ -220,6 +222,8 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 		}
 
 		flushDuration := time.Since(flushStart)
+		handleBlockDuration := time.Since(blockReceivedAt)
+
 		if flushDuration > 5*time.Second {
 			level := zap.InfoLevel
 			if flushDuration > 30*time.Second {
@@ -237,6 +241,7 @@ func (s *SQLSinker) HandleBlockScopedData(ctx context.Context, data *pbsubstream
 
 		s.stats.RecordBlock(cursor.Block())
 		s.stats.RecordFlushDuration(flushDuration)
+		s.stats.RecordHandleBlockDuration(handleBlockDuration)
 		s.lastAppliedBlockNum = data.Clock.Number
 		s.lastAppliedBlockTime = data.Clock.Timestamp.AsTime()
 	}
@@ -325,7 +330,17 @@ func (s *SQLSinker) HandleBlockRangeCompletion(ctx context.Context, cursor *sink
 }
 
 func (s *SQLSinker) HandleBlockUndoSignal(ctx context.Context, data *pbsubstreamsrpc.BlockUndoSignal, cursor *sink.Cursor) error {
-	return s.loader.Revert(ctx, s.OutputModuleHash(), cursor, data.LastValidBlock.Number)
+	handlerStart := time.Now()
+
+	err := s.loader.Revert(ctx, s.OutputModuleHash(), cursor, data.LastValidBlock.Number)
+	if err != nil {
+		return err
+	}
+
+	handleUndoDuration := time.Since(handlerStart)
+	s.stats.RecordHandleUndoDuration(handleUndoDuration)
+
+	return nil
 }
 
 func (s *SQLSinker) batchBlockModulo(isLive *bool) uint64 {
