@@ -277,3 +277,71 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversib
 	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey, l.NextBatchOrdinal(), reversibleBlockNum))
 	return nil
 }
+
+// DeltaUpsert performs an upsert where numeric columns are added to existing values
+// instead of replacing them. Uses: col = COALESCE(col, 0) + value
+// Values are signed: negative values will subtract, positive values will add.
+func (l *Loader) DeltaUpsert(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+	if l.dialect.OnlyInserts() {
+		return fmt.Errorf("delta upsert operation is not supported by the current database")
+	}
+
+	uniqueID := createRowUniqueID(primaryKey)
+	if l.tracer.Enabled() {
+		l.logger.Debug("processing delta upsert operation", zap.String("table_name", tableName), zap.String("primary_key", uniqueID), zap.Int("field_count", len(data)))
+	}
+
+	table, found := l.tables[tableName]
+	if !found {
+		return fmt.Errorf("unknown table %q", tableName)
+	}
+
+	if len(table.primaryColumns) == 0 {
+		return fmt.Errorf("trying to perform a DELTA_UPSERT operation but table %q don't have a primary key(s) set, this is not accepted", tableName)
+	}
+
+	entry, found := l.entries.Get(tableName)
+	if !found {
+		if l.tracer.Enabled() {
+			l.logger.Debug("adding tracking of table never seen before", zap.String("table_name", tableName))
+		}
+
+		entry = NewOrderedMap[string, *Operation]()
+		l.entries.Set(tableName, entry)
+	}
+
+	if op, found := entry.Get(uniqueID); found {
+		switch op.opType {
+		case OperationTypeInsert:
+			return fmt.Errorf("attempting to delta upsert an object with primary key %q, that is scheduled to be inserted", primaryKey)
+		case OperationTypeDelete:
+			return fmt.Errorf("attempting to delta upsert an object with primary key %q, that is scheduled to be deleted", primaryKey)
+		case OperationTypeUpdate, OperationTypeUpsert:
+			return fmt.Errorf("attempting to delta upsert an object with primary key %q, that is scheduled for a regular update/upsert", primaryKey)
+		case OperationTypeDeltaUpsert:
+			// Accumulate deltas: add numeric values together
+			if l.tracer.Enabled() {
+				l.logger.Debug("primary key entry already exist for delta upsert, accumulating deltas", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
+			}
+			op.accumulateDeltas(data)
+			entry.Set(uniqueID, op)
+			return nil
+		}
+	} else {
+		l.entriesCount++
+	}
+
+	if l.tracer.Enabled() {
+		l.logger.Debug("primary key entry never existed for table, adding delta upsert operation", zap.String("primary_key", uniqueID), zap.String("table_name", tableName))
+	}
+
+	// Add primary key(s) to data
+	for _, primary := range l.tables[tableName].primaryColumns {
+		if dataFromPrimaryKey, ok := primaryKey[primary.name]; ok {
+			data[primary.name] = dataFromPrimaryKey
+		}
+	}
+
+	entry.Set(uniqueID, l.newDeltaUpsertOperation(table, primaryKey, data, l.NextBatchOrdinal(), reversibleBlockNum))
+	return nil
+}

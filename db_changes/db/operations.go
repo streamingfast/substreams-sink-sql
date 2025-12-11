@@ -3,6 +3,7 @@ package db
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"regexp"
 	"strings"
@@ -18,10 +19,11 @@ type Queryable interface {
 type OperationType string
 
 const (
-	OperationTypeInsert OperationType = "INSERT"
-	OperationTypeUpsert OperationType = "UPSERT"
-	OperationTypeUpdate OperationType = "UPDATE"
-	OperationTypeDelete OperationType = "DELETE"
+	OperationTypeInsert      OperationType = "INSERT"
+	OperationTypeUpsert      OperationType = "UPSERT"
+	OperationTypeUpdate      OperationType = "UPDATE"
+	OperationTypeDelete      OperationType = "DELETE"
+	OperationTypeDeltaUpsert OperationType = "DELTA_UPSERT" // For numeric delta updates: balance = balance + delta
 )
 
 type Operation struct {
@@ -80,6 +82,17 @@ func (l *Loader) newDeleteOperation(table *TableInfo, primaryKey map[string]stri
 	}
 }
 
+func (l *Loader) newDeltaUpsertOperation(table *TableInfo, primaryKey map[string]string, data map[string]string, ordinal uint64, reversibleBlockNum *uint64) *Operation {
+	return &Operation{
+		table:              table,
+		opType:             OperationTypeDeltaUpsert,
+		primaryKey:         primaryKey,
+		data:               data,
+		ordinal:            ordinal,
+		reversibleBlockNum: reversibleBlockNum,
+	}
+}
+
 func (o *Operation) mergeData(newData map[string]string) error {
 	if o.opType == OperationTypeDelete {
 		return fmt.Errorf("unable to merge data for a delete operation")
@@ -98,6 +111,74 @@ func (o *Operation) mergeOperation(otherData map[string]string) error {
 	}
 
 	return o.mergeData(otherData)
+}
+
+// accumulateDeltas adds numeric delta values together for the same primary key
+// Used when multiple delta operations target the same row within a batch
+// Values are signed (negative for subtract, positive for add)
+func (o *Operation) accumulateDeltas(newData map[string]string) {
+	for k, v := range newData {
+		// Skip primary key columns - they don't change
+		isPK := false
+		for pk := range o.primaryKey {
+			if k == pk {
+				isPK = true
+				break
+			}
+		}
+		if isPK {
+			continue
+		}
+
+		existingStr, exists := o.data[k]
+		if !exists {
+			o.data[k] = v
+			continue
+		}
+
+		// Parse as signed decimals and add them (sign is embedded in value)
+		existingDec, err1 := parseDecimal(existingStr)
+		newDec, err2 := parseDecimal(v)
+		if err1 == nil && err2 == nil {
+			o.data[k] = existingDec.Add(newDec).String()
+		} else {
+			// Not numeric, just replace (shouldn't happen for deltas)
+			o.data[k] = v
+		}
+	}
+}
+
+func parseDecimal(s string) (decimal, error) {
+	// Simple decimal parsing - just use big.Rat for precision
+	var d decimal
+	_, ok := d.SetString(s)
+	if !ok {
+		return decimal{}, fmt.Errorf("invalid decimal: %s", s)
+	}
+	return d, nil
+}
+
+// decimal is a simple wrapper around big.Rat for delta accumulation
+type decimal struct {
+	*big.Rat
+}
+
+func (d *decimal) SetString(s string) (*decimal, bool) {
+	if d.Rat == nil {
+		d.Rat = new(big.Rat)
+	}
+	_, ok := d.Rat.SetString(s)
+	return d, ok
+}
+
+func (d decimal) Add(other decimal) decimal {
+	result := new(big.Rat)
+	result.Add(d.Rat, other.Rat)
+	return decimal{result}
+}
+
+func (d decimal) String() string {
+	return d.Rat.FloatString(18)
 }
 
 var integerRegex = regexp.MustCompile(`^\d+$`)

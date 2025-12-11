@@ -305,6 +305,12 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 			if err != nil {
 				return fmt.Errorf("database delete: %w", err)
 			}
+		case pbdatabase.TableChange_OPERATION_DELTA_UPSERT:
+			// Values are signed: negative means subtract, positive means add
+			err := s.loader.DeltaUpsert(change.Table, primaryKeys, changes, reversibleBlockNum)
+			if err != nil {
+				return fmt.Errorf("database delta upsert: %w", err)
+			}
 		default:
 		}
 	}

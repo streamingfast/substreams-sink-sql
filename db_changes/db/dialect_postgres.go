@@ -387,14 +387,14 @@ func (d PostgresDialect) saveRow(op, schema, escapedTableName string, primaryKey
 
 func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQuery string, undoQuery string, err error) {
 	var columns, values []string
-	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate {
+	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate || o.opType == OperationTypeDeltaUpsert {
 		columns, values, err = d.prepareColValues(o.table, o.data)
 		if err != nil {
 			return "", "", fmt.Errorf("preparing column & values: %w", err)
 		}
 	}
 
-	if o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate || o.opType == OperationTypeDelete {
+	if o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate || o.opType == OperationTypeDelete || o.opType == OperationTypeDeltaUpsert {
 		// A table without a primary key set yield a `primaryKey` map with a single entry where the key is an empty string
 		if _, found := o.primaryKey[""]; found {
 			return "", "", fmt.Errorf("trying to perform %s operation but table %q don't have a primary key set, this is not accepted", o.opType, o.table.name)
@@ -469,6 +469,49 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQ
 			return deleteQuery, d.saveDelete(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum), nil
 		}
 		return deleteQuery, "", nil
+
+	case OperationTypeDeltaUpsert:
+		// Delta upsert: numeric columns are added (values are signed)
+		updates := make([]string, len(columns))
+		for i := range columns {
+			col := columns[i]
+			// Check if column is a primary key - those use regular assignment
+			isPK := false
+			for pk := range o.primaryKey {
+				if col == EscapeIdentifier(pk) {
+					isPK = true
+					break
+				}
+			}
+			if isPK {
+				updates[i] = fmt.Sprintf("%s=EXCLUDED.%s", col, col)
+				continue
+			}
+
+			// Numeric delta: always add since value is signed (negative for subtract)
+			// balance = (COALESCE(balance::numeric, 0) + EXCLUDED.balance::numeric)::text
+			updates[i] = fmt.Sprintf("%s=(COALESCE(%s.%s::numeric, 0) + EXCLUDED.%s::numeric)::text", col, o.table.nameEscaped, col, col)
+		}
+
+		// Escape primary key column names
+		escapedPKColumns := make([]string, 0, len(o.primaryKey))
+		for pkColumn := range o.primaryKey {
+			escapedPKColumns = append(escapedPKColumns, EscapeIdentifier(pkColumn))
+		}
+		sort.Strings(escapedPKColumns)
+
+		deltaQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s;",
+			o.table.identifier,
+			strings.Join(columns, ","),
+			strings.Join(values, ","),
+			strings.Join(escapedPKColumns, ","),
+			strings.Join(updates, ", "),
+		)
+
+		if o.reversibleBlockNum != nil {
+			return deltaQuery, d.saveUpsert(schema, o.table.nameEscaped, o.primaryKey, *o.reversibleBlockNum), nil
+		}
+		return deltaQuery, "", nil
 
 	default:
 		panic(fmt.Errorf("unknown operation type %q", o.opType))
