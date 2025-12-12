@@ -11,7 +11,7 @@ import (
 
 // Insert a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map[string]FieldData, reversibleBlockNum *uint64) error {
 	uniqueID := createRowUniqueID(primaryKey)
 
 	if l.tracer.Enabled() {
@@ -55,7 +55,7 @@ func (l *Loader) Insert(tableName string, primaryKey map[string]string, data map
 	// We need to make sure to add the primary key(s) in the data so that those column get created correctly, but only if there is data
 	for _, primary := range l.tables[tableName].primaryColumns {
 		if dataFromPrimaryKey, ok := primaryKey[primary.name]; ok {
-			data[primary.name] = dataFromPrimaryKey
+			data[primary.name] = FieldData{Value: dataFromPrimaryKey, UpdateOp: UpdateOpSet}
 		}
 	}
 
@@ -101,7 +101,7 @@ func (l *Loader) GetPrimaryKey(tableName string, pk string) (map[string]string, 
 
 // Upsert a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable().
-func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map[string]FieldData, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
 		return fmt.Errorf("update operation is not supported by the current database")
 	}
@@ -161,7 +161,7 @@ func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map
 	// We need to make sure to add the primary key(s) in the data so that those column get created correctly, but only if there is data
 	for _, primary := range l.tables[tableName].primaryColumns {
 		if dataFromPrimaryKey, ok := primaryKey[primary.name]; ok {
-			data[primary.name] = dataFromPrimaryKey
+			data[primary.name] = FieldData{Value: dataFromPrimaryKey, UpdateOp: UpdateOpSet}
 		}
 	}
 
@@ -171,7 +171,7 @@ func (l *Loader) Upsert(tableName string, primaryKey map[string]string, data map
 
 // Update a row in the DB, it is assumed the table exists, you can do a
 // check before with HasTable()
-func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]string, reversibleBlockNum *uint64) error {
+func (l *Loader) Update(tableName string, primaryKey map[string]string, data map[string]FieldData, reversibleBlockNum *uint64) error {
 	if l.dialect.OnlyInserts() {
 		return fmt.Errorf("update operation is not supported by the current database")
 	}
@@ -277,3 +277,4 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversib
 	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey, l.NextBatchOrdinal(), reversibleBlockNum))
 	return nil
 }
+

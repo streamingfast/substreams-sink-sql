@@ -274,9 +274,12 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 			return fmt.Errorf("unknown primary key type: %T", change.PrimaryKey)
 		}
 
-		changes := map[string]string{}
+		changes := map[string]db2.FieldData{}
 		for _, field := range change.Fields {
-			changes[field.Name] = field.NewValue
+			changes[field.Name] = db2.FieldData{
+				Value:    field.NewValue,
+				UpdateOp: protoUpdateOpToDbUpdateOp(field.UpdateOp),
+			}
 		}
 
 		var reversibleBlockNum *uint64
@@ -310,6 +313,22 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 	}
 
 	return nil
+}
+
+// protoUpdateOpToDbUpdateOp converts proto Field_UpdateOp to db UpdateOp
+func protoUpdateOpToDbUpdateOp(op pbdatabase.Field_UpdateOp) db2.UpdateOp {
+	switch op {
+	case pbdatabase.Field_UPDATE_OP_ADD:
+		return db2.UpdateOpAdd
+	case pbdatabase.Field_UPDATE_OP_MAX:
+		return db2.UpdateOpMax
+	case pbdatabase.Field_UPDATE_OP_MIN:
+		return db2.UpdateOpMin
+	case pbdatabase.Field_UPDATE_OP_SET_IF_NULL:
+		return db2.UpdateOpSetIfNull
+	default:
+		return db2.UpdateOpSet
+	}
 }
 
 func (s *SQLSinker) HandleBlockRangeCompletion(ctx context.Context, cursor *sink.Cursor) error {

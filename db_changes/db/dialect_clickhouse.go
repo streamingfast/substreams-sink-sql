@@ -262,9 +262,10 @@ func convertOpToClickhouseValues(o *Operation) ([]any, error) {
 	values := make([]any, len(o.data))
 	for i, v := range columns {
 		if col, exists := o.table.columnsByName[v]; exists {
-			convertedType, err := convertToType(o.data[v], col.scanType)
+			fieldData := o.data[v]
+			convertedType, err := convertToType(fieldData.Value, col.scanType)
 			if err != nil {
-				return nil, fmt.Errorf("converting value %q to type %q in column %q: %w", o.data[v], col.scanType, v, err)
+				return nil, fmt.Errorf("converting value %q to type %q in column %q: %w", fieldData.Value, col.scanType, v, err)
 			}
 			values[i] = convertedType
 		} else {

@@ -363,3 +363,33 @@ func simpleCursor(num, finalNum uint64) string {
 		HeadBlock: blk,
 	}).ToOpaque()
 }
+
+// TestProtoUpdateOpToDbUpdateOp tests the proto-to-db UpdateOp converter
+func TestProtoUpdateOpToDbUpdateOp(t *testing.T) {
+	tests := []struct {
+		name     string
+		protoOp  pbdatabase.Field_UpdateOp
+		expected db2.UpdateOp
+	}{
+		{"SET (default)", pbdatabase.Field_UPDATE_OP_SET, db2.UpdateOpSet},
+		{"ADD", pbdatabase.Field_UPDATE_OP_ADD, db2.UpdateOpAdd},
+		{"MAX", pbdatabase.Field_UPDATE_OP_MAX, db2.UpdateOpMax},
+		{"MIN", pbdatabase.Field_UPDATE_OP_MIN, db2.UpdateOpMin},
+		{"SET_IF_NULL", pbdatabase.Field_UPDATE_OP_SET_IF_NULL, db2.UpdateOpSetIfNull},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := protoUpdateOpToDbUpdateOp(tt.protoOp)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestProtoUpdateOpToDbUpdateOp_UnknownValue tests that unknown proto values default to SET
+func TestProtoUpdateOpToDbUpdateOp_UnknownValue(t *testing.T) {
+	// Test with an unknown/invalid proto value - should default to SET
+	unknownOp := pbdatabase.Field_UpdateOp(999)
+	result := protoUpdateOpToDbUpdateOp(unknownOp)
+	assert.Equal(t, db2.UpdateOpSet, result, "unknown proto values should default to SET")
+}

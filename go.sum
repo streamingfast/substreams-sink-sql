@@ -111,6 +111,8 @@ github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA
 github.com/RoaringBitmap/roaring v1.9.1 h1:LXcSqGGGMKm+KAzUyWn7ZeREqoOkoMX+KwLOK1thc4I=
 github.com/RoaringBitmap/roaring v1.9.1/go.mod h1:6AXUsoIEzDTFFQCe1RbGA6uFONMhvejWj5rqITANK90=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
+github.com/aggris2/substreams-sink-database-changes v0.0.0-20251212101149-92bb6e02e179 h1:1th3GxO9qbHwnZ6hQhivS5DOVOWQHwk2LTyuXwULsoU=
+github.com/aggris2/substreams-sink-database-changes v0.0.0-20251212101149-92bb6e02e179/go.mod h1:f51ljuUsQEYuyuDdo5BB/4AfB87QDAegy5e8p5qBxis=
 github.com/alecthomas/gometalinter v2.0.11+incompatible/go.mod h1:qfIpQGGz3d+NmgyPBqv+LSh50emm1pt72EtcX2vKYQk=
 github.com/alecthomas/participle v0.7.1 h1:2bN7reTw//5f0cugJcTOnY/NYZcWQOaajW+BwZB5xWs=
 github.com/alecthomas/participle v0.7.1/go.mod h1:HfdmEuwvr12HXQN44HPWXR0lHmVolVYe4dyL6lQ3duY=
@@ -626,8 +628,6 @@ github.com/streamingfast/substreams v1.16.7-0.20250925152521-9d7a8ef0f261 h1:5vk
 github.com/streamingfast/substreams v1.16.7-0.20250925152521-9d7a8ef0f261/go.mod h1:3s/qTXV85jh40Li1gbYTRtbAOyFzpaHN0Bi1OtuXIDA=
 github.com/streamingfast/substreams-sink v0.5.3-0.20250818134825-6b25ffb8232c h1:LCJhSgR7XTiKxCtIBPyoFLQdYRCbFaW8EljIL8IvaWs=
 github.com/streamingfast/substreams-sink v0.5.3-0.20250818134825-6b25ffb8232c/go.mod h1:EbwZgN7FRZY6oNBmA7ufcaHZ215nDo3ejyyasuS3xj4=
-github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72 h1:yjEm3ypUUxCVFiaAwHr477ClRAJXHLXX2VHzk6HsxHk=
-github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72/go.mod h1:f51ljuUsQEYuyuDdo5BB/4AfB87QDAegy5e8p5qBxis=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.2.0/go.mod h1:qt09Ya8vawLte6SNmTgCsAVtYtaKzEcn8ATUoHMkEqE=

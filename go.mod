@@ -216,3 +216,5 @@ require (
 	google.golang.org/grpc v1.72.0
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+replace github.com/streamingfast/substreams-sink-database-changes => github.com/aggris2/substreams-sink-database-changes v0.0.0-20251212101149-92bb6e02e179

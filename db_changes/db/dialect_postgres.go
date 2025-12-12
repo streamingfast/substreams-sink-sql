@@ -385,10 +385,30 @@ func (d PostgresDialect) saveRow(op, schema, escapedTableName string, primaryKey
 
 }
 
+// getResultCast returns the appropriate cast suffix for the result of arithmetic operations
+// based on the column's scan type. TEXT columns need ::text cast, numeric types don't need cast.
+func getResultCast(scanType reflect.Type) string {
+	if scanType == nil {
+		return "" // unknown type, let PostgreSQL handle it
+	}
+	switch scanType.Kind() {
+	case reflect.String:
+		return "::text" // TEXT columns need explicit cast from numeric
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return "" // numeric types don't need cast, PostgreSQL will handle it
+	default:
+		return "" // unknown type, let PostgreSQL handle it
+	}
+}
+
 func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQuery string, undoQuery string, err error) {
 	var columns, values []string
+	var updateOps []UpdateOp
+	var scanTypes []reflect.Type
 	if o.opType == OperationTypeInsert || o.opType == OperationTypeUpsert || o.opType == OperationTypeUpdate {
-		columns, values, err = d.prepareColValues(o.table, o.data)
+		columns, values, updateOps, scanTypes, err = d.prepareColValues(o.table, o.data)
 		if err != nil {
 			return "", "", fmt.Errorf("preparing column & values: %w", err)
 		}
@@ -415,9 +435,30 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQ
 		return insertQuery, "", nil
 
 	case OperationTypeUpsert:
+		// Build per-field update expressions based on UpdateOp
 		updates := make([]string, len(columns))
 		for i := range columns {
-			updates[i] = fmt.Sprintf("%s=EXCLUDED.%s", columns[i], columns[i])
+			col := columns[i]
+			resultCast := getResultCast(scanTypes[i])
+			switch updateOps[i] {
+			case UpdateOpSet:
+				// Direct assignment: col = EXCLUDED.col
+				updates[i] = fmt.Sprintf("%s=EXCLUDED.%s", col, col)
+			case UpdateOpAdd:
+				// Accumulate: col = COALESCE(col, 0) + EXCLUDED.col
+				updates[i] = fmt.Sprintf("%s=(COALESCE(%s.%s::numeric, 0) + EXCLUDED.%s::numeric)%s", col, o.table.nameEscaped, col, col, resultCast)
+			case UpdateOpMax:
+				// Maximum: col = GREATEST(COALESCE(col, 0), EXCLUDED.col)
+				updates[i] = fmt.Sprintf("%s=GREATEST(COALESCE(%s.%s::numeric, 0), EXCLUDED.%s::numeric)%s", col, o.table.nameEscaped, col, col, resultCast)
+			case UpdateOpMin:
+				// Minimum: col = LEAST(COALESCE(col, 0), EXCLUDED.col)
+				updates[i] = fmt.Sprintf("%s=LEAST(COALESCE(%s.%s::numeric, 0), EXCLUDED.%s::numeric)%s", col, o.table.nameEscaped, col, col, resultCast)
+			case UpdateOpSetIfNull:
+				// Set only if NULL (first value wins): col = COALESCE(col, EXCLUDED.col)
+				updates[i] = fmt.Sprintf("%s=COALESCE(%s.%s, EXCLUDED.%s)", col, o.table.nameEscaped, col, col)
+			default:
+				updates[i] = fmt.Sprintf("%s=EXCLUDED.%s", col, col)
+			}
 		}
 
 		// Escape primary key column names to preserve case sensitivity (e.g., camelCase)
@@ -441,9 +482,31 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQ
 		return insertQuery, "", nil
 
 	case OperationTypeUpdate:
+		// Build per-field update expressions based on UpdateOp
 		updates := make([]string, len(columns))
-		for i := 0; i < len(columns); i++ {
-			updates[i] = fmt.Sprintf("%s=%s", columns[i], values[i])
+		for i := range columns {
+			col := columns[i]
+			val := values[i]
+			resultCast := getResultCast(scanTypes[i])
+			switch updateOps[i] {
+			case UpdateOpSet:
+				// Direct assignment: col = value
+				updates[i] = fmt.Sprintf("%s=%s", col, val)
+			case UpdateOpAdd:
+				// Accumulate: col = COALESCE(col, 0) + value
+				updates[i] = fmt.Sprintf("%s=(COALESCE(%s::numeric, 0) + %s::numeric)%s", col, col, val, resultCast)
+			case UpdateOpMax:
+				// Maximum: col = GREATEST(COALESCE(col, 0), value)
+				updates[i] = fmt.Sprintf("%s=GREATEST(COALESCE(%s::numeric, 0), %s::numeric)%s", col, col, val, resultCast)
+			case UpdateOpMin:
+				// Minimum: col = LEAST(COALESCE(col, 0), value)
+				updates[i] = fmt.Sprintf("%s=LEAST(COALESCE(%s::numeric, 0), %s::numeric)%s", col, col, val, resultCast)
+			case UpdateOpSetIfNull:
+				// Set only if NULL (first value wins): col = COALESCE(col, value)
+				updates[i] = fmt.Sprintf("%s=COALESCE(%s, %s)", col, col, val)
+			default:
+				updates[i] = fmt.Sprintf("%s=%s", col, val)
+			}
 		}
 
 		primaryKeySelector := getPrimaryKeyWhereClause(o.primaryKey, "")
@@ -475,13 +538,15 @@ func (d *PostgresDialect) prepareStatement(schema string, o *Operation) (normalQ
 	}
 }
 
-func (d *PostgresDialect) prepareColValues(table *TableInfo, colValues map[string]string) (columns []string, values []string, err error) {
+func (d *PostgresDialect) prepareColValues(table *TableInfo, colValues map[string]FieldData) (columns []string, values []string, updateOps []UpdateOp, scanTypes []reflect.Type, err error) {
 	if len(colValues) == 0 {
 		return
 	}
 
 	columns = make([]string, len(colValues))
 	values = make([]string, len(colValues))
+	updateOps = make([]UpdateOp, len(colValues))
+	scanTypes = make([]reflect.Type, len(colValues))
 
 	i := 0
 	for colName := range colValues {
@@ -491,19 +556,21 @@ func (d *PostgresDialect) prepareColValues(table *TableInfo, colValues map[strin
 	sort.Strings(columns) // sorted for determinism in tests
 
 	for i, columnName := range columns {
-		value := colValues[columnName]
+		fieldData := colValues[columnName]
 		columnInfo, found := table.columnsByName[columnName]
 		if !found {
-			return nil, nil, fmt.Errorf("cannot find column %q for table %q (valid columns are %q)", columnName, table.identifier, strings.Join(maps.Keys(table.columnsByName), ", "))
+			return nil, nil, nil, nil, fmt.Errorf("cannot find column %q for table %q (valid columns are %q)", columnName, table.identifier, strings.Join(maps.Keys(table.columnsByName), ", "))
 		}
 
-		normalizedValue, err := d.normalizeValueType(value, columnInfo.scanType)
+		normalizedValue, err := d.normalizeValueType(fieldData.Value, columnInfo.scanType)
 		if err != nil {
-			return nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", table.identifier, columnName, value, err)
+			return nil, nil, nil, nil, fmt.Errorf("getting sql value from table %s for column %q raw value %q: %w", table.identifier, columnName, fieldData.Value, err)
 		}
 
 		values[i] = normalizedValue
 		columns[i] = columnInfo.escapedName // escape the column name
+		updateOps[i] = fieldData.UpdateOp
+		scanTypes[i] = columnInfo.scanType
 	}
 	return
 }
