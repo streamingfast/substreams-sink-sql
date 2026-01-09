@@ -164,6 +164,8 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 					values = append(values, list.Get(j).Interface())
 				}
 				fieldValues = append(fieldValues, values)
+			} else {
+				fieldValues = append(fieldValues, []interface{}{})
 			}
 		} else if fd.Kind() == protoreflect.MessageKind {
 			if fv.Message().IsValid() {
@@ -214,7 +216,8 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 					}
 					return 0, fmt.Errorf("table %q has no primary key and has %d associated children table", table.Name, len(childs))
 				}
-				id := fieldValues[table.PrimaryKey.Index+primaryKeyOffset]
+				idx := table.PrimaryKey.Index + primaryKeyOffset
+				id := fieldValues[idx]
 				p = &Parent{
 					field: strings.ToLower(string(md.Name())),
 					id:    id,
