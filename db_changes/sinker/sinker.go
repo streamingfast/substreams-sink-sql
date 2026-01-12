@@ -277,7 +277,7 @@ func (s *SQLSinker) applyDatabaseChanges(dbChanges *pbdatabase.DatabaseChanges, 
 		changes := map[string]db2.FieldData{}
 		for _, field := range change.Fields {
 			changes[field.Name] = db2.FieldData{
-				Value:    field.NewValue,
+				Value:    field.Value,
 				UpdateOp: protoUpdateOpToDbUpdateOp(field.UpdateOp),
 			}
 		}

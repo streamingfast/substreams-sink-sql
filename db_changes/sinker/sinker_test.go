@@ -268,8 +268,8 @@ func getFields(fieldsAndValues ...string) (out []*pbdatabase.Field) {
 	}
 	for i := 0; i < len(fieldsAndValues); i += 2 {
 		out = append(out, &pbdatabase.Field{
-			Name:     fieldsAndValues[i],
-			NewValue: fieldsAndValues[i+1],
+			Name:  fieldsAndValues[i],
+			Value: fieldsAndValues[i+1],
 		})
 	}
 	return

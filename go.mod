@@ -18,7 +18,7 @@ require (
 	github.com/streamingfast/logging v0.0.0-20251127143054-23a35e5bd633
 	github.com/streamingfast/substreams v1.16.7-0.20250925152521-9d7a8ef0f261
 	github.com/streamingfast/substreams-sink v0.5.3-0.20250818134825-6b25ffb8232c
-	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20250509171446-cb64cdbfea72
+	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20260110015235-04b544bbecb9
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.38.0
@@ -216,5 +216,3 @@ require (
 	google.golang.org/grpc v1.72.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/streamingfast/substreams-sink-database-changes => github.com/aggris2/substreams-sink-database-changes v0.0.0-20251212101149-92bb6e02e179

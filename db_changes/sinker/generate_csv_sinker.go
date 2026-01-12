@@ -253,7 +253,7 @@ func (s *GenerateCSVSinker) dumpDatabaseChangesIntoCSV(dbChanges *pbdatabase.Dat
 		case pbdatabase.TableChange_OPERATION_CREATE:
 			// Add fields
 			for _, field := range change.Fields {
-				fields[field.Name] = field.NewValue
+				fields[field.Name] = field.Value
 			}
 
 			data, _ := bundler2.CSVEncode(fields)
