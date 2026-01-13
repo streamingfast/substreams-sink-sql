@@ -879,7 +879,7 @@ func runSinkerTest(
 		HistoryTableName:        setupOptions.HistoryTableName,
 		ClickhouseCluster:       setupOptions.ClickhouseCluster,
 		BatchBlockFlushInterval: 1,
-		BatchRowFlushInterval:   3,
+		BatchRowFlushInterval:   5,
 		LiveBlockFlushInterval:  1,
 		OnModuleHashMismatch:    setupOptions.OnModuleHashMismatch,
 		HandleReorgs:            true,
