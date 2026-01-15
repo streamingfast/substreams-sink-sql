@@ -147,7 +147,7 @@ func (o *Operation) mergeData(newData map[string]FieldData) error {
 				}
 				o.data[k] = FieldData{
 					Value:    maxVal.String(),
-					UpdateOp: UpdateOpMax,
+					UpdateOp: existing.UpdateOp, // Keep existing op: SET stays SET, MAX stays MAX
 				}
 			} else {
 				// Non-numeric: latest value wins
@@ -165,7 +165,7 @@ func (o *Operation) mergeData(newData map[string]FieldData) error {
 				}
 				o.data[k] = FieldData{
 					Value:    minVal.String(),
-					UpdateOp: UpdateOpMin,
+					UpdateOp: existing.UpdateOp, // Keep existing op: SET stays SET, MIN stays MIN
 				}
 			} else {
 				// Non-numeric: latest value wins
