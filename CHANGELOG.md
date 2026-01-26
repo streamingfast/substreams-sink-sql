@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### DatabaseChanges mode improvements
+
+* Added support for delta update operations (`add`/`sub`/`min`/`max`/`set_if_null`) on rows for PostgreSQL. These operations allow atomic increments, decrements, and conditional updates. Requires latest [substreams-sink-database-changes](https://github.com/streamingfast/substreams-sink-database-changes) Rust crate version (`>= 4.0.0`).
+
+* Relaxed UpdateOp transition rules: `ADD`, `MAX`, `MIN`, and `SET_IF_NULL` operations can now be followed by a `SET` operation. Previously, non-SET operations could only be followed by the same operation type.
+
 ## v4.11.3
 
 ### DatabaseChanges mode improvements

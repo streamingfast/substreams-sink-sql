@@ -106,7 +106,7 @@ The schema file should contain `CREATE TABLE IF NOT EXISTS` statements to ensure
 
 ### Network
 
-Your Substreams manifest defines which network to connect to by default. For example, a manifest configured for `mainnet` will connect to the `mainnet.eth.streamingfast.io:443` endpoint automatically. 
+Your Substreams manifest defines which network to connect to by default. For example, a manifest configured for `mainnet` will connect to the `mainnet.eth.streamingfast.io:443` endpoint automatically.
 
 You can override the default endpoint in two ways:
 - **Command line flag**: Use `-e another.endpoint:443` when running the sink
@@ -195,13 +195,45 @@ The `substreams-sink-sql` accepts two types of Substreams output modules:
 
 #### Database Changes Modules
 
-For the **Database Changes** approach, your module output type must be [`sf.substreams.sink.database.v1.DatabaseChanges`](https://github.com/streamingfast/substreams-sink-database-changes/blob/develop/proto/sf/substreams/sink/database/v1/database.proto#L7). 
+For the **Database Changes** approach, your module output type must be [`sf.substreams.sink.database.v1.DatabaseChanges`](https://github.com/streamingfast/substreams-sink-database-changes/blob/develop/proto/sf/substreams/sink/database/v1/database.proto#L7).
 
 **Development Resources:**
 - **Rust**: Use the [`substreams-database-change`](https://github.com/streamingfast/substreams-database-change) crate for bindings and helpers
 - **Examples**: See [`substreams-eth-block-meta`](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/lib.rs#L35) and its [db_out.rs helper](https://github.com/streamingfast/substreams-eth-block-meta/blob/master/src/db_out.rs#L6)
 
 By convention, the module that emits `DatabaseChanges` is named `db_out`.
+
+##### Postgres Delta Update Operations
+
+When using the **Database Changes** approach with PostgreSQL, you can use delta update operations to perform atomic increments, decrements, and conditional updates on numeric and nullable columns. These operations are particularly useful for aggregations and counters that need to be updated across multiple blocks.
+
+> [!NOTE]
+> Delta operations are currently supported only on PostgreSQL. ClickHouse support is not available at this time.
+
+**Available Operations:**
+
+| Operation | SQL Equivalent | Description |
+|-----------|----------------|-------------|
+| `add` | `column = COALESCE(column, 0) + value` | Atomically add to a column |
+| `sub` | `column = COALESCE(column, 0) - value` | Atomically subtract from a column |
+| `max` | `column = GREATEST(column, value)` | Keep the maximum value |
+| `min` | `column = LEAST(column, value)` | Keep the minimum value |
+| `set_if_null` | `column = COALESCE(column, value)` | Set only if column is NULL |
+
+**Rust Example:**
+
+```rust
+tables.upsert_row("Account", id)
+    .set("owner", owner)
+    .add("balance", 100i64)      // column = COALESCE(column, 0) + 100
+    .sub("debt", 50i64)          // column = COALESCE(column, 0) - 50
+    .max("high_score", score)    // column = GREATEST(column, score)
+    .min("best_time", duration)  // column = LEAST(column, duration)
+    .set_if_null("created_at", timestamp); // column = COALESCE(column, timestamp)
+```
+
+> [!IMPORTANT]
+> Delta update operations require [substreams-sink-database-changes](https://github.com/streamingfast/substreams-sink-database-changes) Rust crate version `>= 4.0.0`.
 
 #### Relational Mappings Modules
 

@@ -215,10 +215,10 @@ func TestMergeData_ValidTransitions(t *testing.T) {
 		// SET → any (all allowed)
 		{"SET → SET", UpdateOpSet, "100", UpdateOpSet, "200", "200", UpdateOpSet},
 		{"SET → ADD", UpdateOpSet, "100", UpdateOpAdd, "50", "150.000000000000000000", UpdateOpSet},
-		{"SET → MAX", UpdateOpSet, "100", UpdateOpMax, "150", "150.000000000000000000", UpdateOpMax},
-		{"SET → MAX (existing wins)", UpdateOpSet, "200", UpdateOpMax, "150", "200.000000000000000000", UpdateOpMax},
-		{"SET → MIN", UpdateOpSet, "100", UpdateOpMin, "50", "50.000000000000000000", UpdateOpMin},
-		{"SET → MIN (existing wins)", UpdateOpSet, "50", UpdateOpMin, "100", "50.000000000000000000", UpdateOpMin},
+		{"SET → MAX", UpdateOpSet, "100", UpdateOpMax, "150", "150.000000000000000000", UpdateOpSet},
+		{"SET → MAX (existing wins)", UpdateOpSet, "200", UpdateOpMax, "150", "200.000000000000000000", UpdateOpSet},
+		{"SET → MIN", UpdateOpSet, "100", UpdateOpMin, "50", "50.000000000000000000", UpdateOpSet},
+		{"SET → MIN (existing wins)", UpdateOpSet, "50", UpdateOpMin, "100", "50.000000000000000000", UpdateOpSet},
 		{"SET → SET_IF_NULL", UpdateOpSet, "100", UpdateOpSetIfNull, "200", "100", UpdateOpSet},
 
 		// ADD → ADD (accumulates)
@@ -235,6 +235,12 @@ func TestMergeData_ValidTransitions(t *testing.T) {
 
 		// SET_IF_NULL → SET_IF_NULL (first value wins)
 		{"SET_IF_NULL → SET_IF_NULL", UpdateOpSetIfNull, "100", UpdateOpSetIfNull, "200", "100", UpdateOpSetIfNull},
+
+		// any → SET (SET always overwrites)
+		{"ADD → SET", UpdateOpAdd, "100", UpdateOpSet, "200", "200", UpdateOpSet},
+		{"MAX → SET", UpdateOpMax, "100", UpdateOpSet, "200", "200", UpdateOpSet},
+		{"MIN → SET", UpdateOpMin, "100", UpdateOpSet, "200", "200", UpdateOpSet},
+		{"SET_IF_NULL → SET", UpdateOpSetIfNull, "100", UpdateOpSet, "200", "200", UpdateOpSet},
 	}
 
 	for _, tt := range tests {
@@ -260,26 +266,22 @@ func TestMergeData_InvalidTransitions(t *testing.T) {
 		existingOp UpdateOp
 		incomingOp UpdateOp
 	}{
-		// ADD → others (except ADD)
-		{"ADD → SET", UpdateOpAdd, UpdateOpSet},
+		// ADD → others (except ADD and SET)
 		{"ADD → MAX", UpdateOpAdd, UpdateOpMax},
 		{"ADD → MIN", UpdateOpAdd, UpdateOpMin},
 		{"ADD → SET_IF_NULL", UpdateOpAdd, UpdateOpSetIfNull},
 
-		// MAX → others (except MAX)
-		{"MAX → SET", UpdateOpMax, UpdateOpSet},
+		// MAX → others (except MAX and SET)
 		{"MAX → ADD", UpdateOpMax, UpdateOpAdd},
 		{"MAX → MIN", UpdateOpMax, UpdateOpMin},
 		{"MAX → SET_IF_NULL", UpdateOpMax, UpdateOpSetIfNull},
 
-		// MIN → others (except MIN)
-		{"MIN → SET", UpdateOpMin, UpdateOpSet},
+		// MIN → others (except MIN and SET)
 		{"MIN → ADD", UpdateOpMin, UpdateOpAdd},
 		{"MIN → MAX", UpdateOpMin, UpdateOpMax},
 		{"MIN → SET_IF_NULL", UpdateOpMin, UpdateOpSetIfNull},
 
-		// SET_IF_NULL → others (except SET_IF_NULL)
-		{"SET_IF_NULL → SET", UpdateOpSetIfNull, UpdateOpSet},
+		// SET_IF_NULL → others (except SET_IF_NULL and SET)
 		{"SET_IF_NULL → ADD", UpdateOpSetIfNull, UpdateOpAdd},
 		{"SET_IF_NULL → MAX", UpdateOpSetIfNull, UpdateOpMax},
 		{"SET_IF_NULL → MIN", UpdateOpSetIfNull, UpdateOpMin},

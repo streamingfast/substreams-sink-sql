@@ -1628,11 +1628,11 @@ func TestSinker_Integration_DeltaUpdate_SetIfNull(t *testing.T) {
 			"Block #11 (11a) - LIB #11 (11a)",
 		},
 		{
-			"set_if_null - set after set_if_null in same block is invalid transition",
+			"set_if_null - set after set_if_null in same block overwrites",
 			streamMock(
 				dbChangesBlockData(t, "10a", finalBlock("10a"),
-					// SET_IF_NULL → SET is an invalid transition in the same block
-					// The first value is kept because the transition fails
+					// SET_IF_NULL → SET is a valid transition in the same block
+					// The SET value overwrites the SET_IF_NULL value
 					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
 					upsertRowSinglePK("counters", "counter1", "count", "200"),
 				),
@@ -1640,7 +1640,7 @@ func TestSinker_Integration_DeltaUpdate_SetIfNull(t *testing.T) {
 			func(t *testing.T, dbx *sqlx.DB, schema string) {
 				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
 				require.Len(t, rows, 1)
-				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 200}, rows[0])
 			},
 			"Block #10 (10a) - LIB #10 (10a)",
 		},

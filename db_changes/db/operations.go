@@ -119,7 +119,7 @@ func (o *Operation) mergeData(newData map[string]FieldData) error {
 		// Handle each incoming operation type
 		switch fd.UpdateOp {
 		case UpdateOpSet:
-			// SET: latest value wins (only valid after SET)
+			// SET: latest value wins, overwrites any previous operation
 			o.data[k] = fd
 
 		case UpdateOpAdd:
@@ -182,10 +182,11 @@ func (o *Operation) mergeData(newData map[string]FieldData) error {
 }
 
 // validateOpTransition checks if the transition from existing to incoming op is valid.
-// Returns an error for invalid transitions (consistent with Rust library strict rules).
+// Returns an error for invalid transitions.
 //
 // Valid transitions:
 //   - SET → any op: OK
+//   - any op → SET: OK (SET always overwrites)
 //   - ADD → ADD: OK (accumulates)
 //   - MAX → MAX: OK (computes max)
 //   - MIN → MIN: OK (computes min)
@@ -195,6 +196,11 @@ func (o *Operation) mergeData(newData map[string]FieldData) error {
 func validateOpTransition(fieldName string, existing, incoming UpdateOp) error {
 	// SET can be followed by any operation
 	if existing == UpdateOpSet {
+		return nil
+	}
+
+	// Any operation can be followed by SET (SET overwrites)
+	if incoming == UpdateOpSet {
 		return nil
 	}
 
