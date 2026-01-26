@@ -1,6 +1,7 @@
 .envrc
 .env.release
 .idea
+.vscode
 .DS_Store
 .release_notes.md
 dist/

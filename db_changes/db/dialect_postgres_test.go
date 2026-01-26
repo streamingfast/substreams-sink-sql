@@ -267,3 +267,156 @@ func TestRevertOp(t *testing.T) {
 	}
 
 }
+
+// TestPrepareStatement_UpdateOp tests SQL generation for each UpdateOp type
+func TestPrepareStatement_UpdateOp(t *testing.T) {
+	// Create a test table with numeric column
+	table := createTestTable(t, "test_table", "id", "amount")
+
+	tests := []struct {
+		name        string
+		opType      OperationType
+		updateOp    UpdateOp
+		value       string
+		expectSQL   string // substring to check in generated SQL
+	}{
+		// UPSERT with different UpdateOps
+		{
+			name:      "UPSERT SET",
+			opType:    OperationTypeUpsert,
+			updateOp:  UpdateOpSet,
+			value:     "100",
+			expectSQL: `"amount"=EXCLUDED."amount"`,
+		},
+		{
+			name:      "UPSERT ADD",
+			opType:    OperationTypeUpsert,
+			updateOp:  UpdateOpAdd,
+			value:     "100",
+			expectSQL: `"amount"=(COALESCE("test_table"."amount"::numeric, 0) + EXCLUDED."amount"::numeric)`,
+		},
+		{
+			name:      "UPSERT MAX",
+			opType:    OperationTypeUpsert,
+			updateOp:  UpdateOpMax,
+			value:     "100",
+			expectSQL: `"amount"=GREATEST(COALESCE("test_table"."amount"::numeric, 0), EXCLUDED."amount"::numeric)`,
+		},
+		{
+			name:      "UPSERT MIN",
+			opType:    OperationTypeUpsert,
+			updateOp:  UpdateOpMin,
+			value:     "100",
+			expectSQL: `"amount"=LEAST(COALESCE("test_table"."amount"::numeric, 0), EXCLUDED."amount"::numeric)`,
+		},
+		{
+			name:      "UPSERT SET_IF_NULL",
+			opType:    OperationTypeUpsert,
+			updateOp:  UpdateOpSetIfNull,
+			value:     "100",
+			expectSQL: `"amount"=COALESCE("test_table"."amount", EXCLUDED."amount")`,
+		},
+
+		// UPDATE with different UpdateOps
+		{
+			name:      "UPDATE SET",
+			opType:    OperationTypeUpdate,
+			updateOp:  UpdateOpSet,
+			value:     "100",
+			expectSQL: `"amount"=100`,
+		},
+		{
+			name:      "UPDATE ADD",
+			opType:    OperationTypeUpdate,
+			updateOp:  UpdateOpAdd,
+			value:     "100",
+			expectSQL: `"amount"=(COALESCE("amount"::numeric, 0) + 100::numeric)`,
+		},
+		{
+			name:      "UPDATE MAX",
+			opType:    OperationTypeUpdate,
+			updateOp:  UpdateOpMax,
+			value:     "100",
+			expectSQL: `"amount"=GREATEST(COALESCE("amount"::numeric, 0), 100::numeric)`,
+		},
+		{
+			name:      "UPDATE MIN",
+			opType:    OperationTypeUpdate,
+			updateOp:  UpdateOpMin,
+			value:     "100",
+			expectSQL: `"amount"=LEAST(COALESCE("amount"::numeric, 0), 100::numeric)`,
+		},
+		{
+			name:      "UPDATE SET_IF_NULL",
+			opType:    OperationTypeUpdate,
+			updateOp:  UpdateOpSetIfNull,
+			value:     "100",
+			expectSQL: `"amount"=COALESCE("amount", 100)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dialect := PostgresDialect{schemaName: "public"}
+			op := &Operation{
+				table:      table,
+				opType:     tt.opType,
+				primaryKey: map[string]string{"id": "123"},
+				data: map[string]FieldData{
+					"amount": {Value: tt.value, UpdateOp: tt.updateOp},
+				},
+			}
+
+			sql, _, err := dialect.prepareStatement("public", op)
+			require.NoError(t, err)
+			assert.Contains(t, sql, tt.expectSQL, "SQL should contain expected UpdateOp clause")
+		})
+	}
+}
+
+// TestPrepareStatement_INSERT_IgnoresUpdateOp tests that INSERT ignores UpdateOp (always direct values)
+func TestPrepareStatement_INSERT_IgnoresUpdateOp(t *testing.T) {
+	table := createTestTable(t, "test_table", "id", "amount")
+
+	// For INSERT, UpdateOp should not affect the SQL - it's always a direct INSERT
+	ops := []UpdateOp{UpdateOpSet, UpdateOpAdd, UpdateOpMax, UpdateOpMin, UpdateOpSetIfNull}
+
+	for _, updateOp := range ops {
+		t.Run(updateOpName(updateOp), func(t *testing.T) {
+			dialect := PostgresDialect{schemaName: "public"}
+			op := &Operation{
+				table:      table,
+				opType:     OperationTypeInsert,
+				primaryKey: map[string]string{"id": "123"},
+				data: map[string]FieldData{
+					"amount": {Value: "100", UpdateOp: updateOp},
+				},
+			}
+
+			sql, _, err := dialect.prepareStatement("public", op)
+			require.NoError(t, err)
+			// INSERT should always be a simple INSERT regardless of UpdateOp
+			assert.Contains(t, sql, "INSERT INTO")
+			assert.Contains(t, sql, "VALUES")
+			assert.NotContains(t, sql, "ON CONFLICT", "INSERT should not have ON CONFLICT clause")
+		})
+	}
+}
+
+// createTestTable creates a TableInfo for testing with numeric columns
+func createTestTable(t *testing.T, name, pkCol string, extraCols ...string) *TableInfo {
+	t.Helper()
+	columns := make(map[string]*ColumnInfo)
+
+	// Primary key column (text)
+	columns[pkCol] = NewColumnInfo(pkCol, "text", "")
+
+	// Extra columns (numeric for UpdateOp testing)
+	for _, col := range extraCols {
+		columns[col] = NewColumnInfo(col, "numeric", int64(0))
+	}
+
+	table, err := NewTableInfo("public", name, []string{pkCol}, columns)
+	require.NoError(t, err)
+	return table
+}

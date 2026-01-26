@@ -804,6 +804,1004 @@ func TestSinker_Integration_UndoBufferWorks(t *testing.T) {
 	)
 }
 
+func TestSinker_Integration_DeltaUpdate_Add(t *testing.T) {
+	type CounterRow struct {
+		ID    string `db:"id"`
+		Count int64  `db:"count"`
+	}
+
+	tests := []sinkerTestCase{
+		{
+			"add - initial upsert sets the value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"add - multiple adds accumulate within same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("100")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"add - adds accumulate across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("25")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 125}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"add - negative delta subtracts",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("-30")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 70}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"add - insert then update with delta",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", deltaAdd("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"add - insert with delta sets initial value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", deltaAdd("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"add - insert with delta then update with delta accumulates",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", deltaAdd("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", deltaAdd("25")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 125}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"add - multiple updates with delta in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+					updateRowSinglePK("counters", "counter1", "count", deltaAdd("20")),
+					updateRowSinglePK("counters", "counter1", "count", deltaAdd("30")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"add - set then add in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("10")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 110}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"add - set then add across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("10")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", "50"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaAdd("10")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 60}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"sub - basic subtraction",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaSub("30")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 70}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"sub - multiple subtractions accumulate",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaSub("20")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaSub("15")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 65}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"sub - subtracting negative value adds",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaSub("-25")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 125}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runSinkerTest(
+				t,
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				rawSQLInput(func(schema string) string {
+					return fmt.Sprintf(`
+						CREATE TABLE IF NOT EXISTS "%s".counters (
+							id TEXT PRIMARY KEY,
+							count BIGINT DEFAULT 0
+						);
+					`, schema)
+				}),
+				test.responses,
+				test.expected,
+				test.expectedFinalCursor,
+			)
+		})
+	}
+}
+
+func TestSinker_Integration_DeltaUpdate_Max(t *testing.T) {
+	type CounterRow struct {
+		ID    string `db:"id"`
+		Count int64  `db:"count"`
+	}
+
+	tests := []sinkerTestCase{
+		{
+			"max - initial upsert sets the value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"max - keeps higher value in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("100")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"max - updates to higher value in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("50")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"max - keeps higher value across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"max - updates to higher value across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("50")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"max - insert then update with max",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", deltaMax("150")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"max - insert then update with lower max keeps original",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", deltaMax("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"max - insert with max sets initial value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", deltaMax("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"max - multiple updates with max in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+					updateRowSinglePK("counters", "counter1", "count", deltaMax("80")),
+					updateRowSinglePK("counters", "counter1", "count", deltaMax("150")),
+					updateRowSinglePK("counters", "counter1", "count", deltaMax("120")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"max - set then max in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("150")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"max - set then max across blocks overwrites",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("150")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					// set(50) resets the value, then max(80) computes max(50,80)=80
+					// Since UpdateOp stays SET after set→max, the flush overwrites with 80
+					upsertRowSinglePK("counters", "counter1", "count", "50"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("80")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 80}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"max - handles negative values",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("-50")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMax("-100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: -50}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runSinkerTest(
+				t,
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				rawSQLInput(func(schema string) string {
+					return fmt.Sprintf(`
+						CREATE TABLE IF NOT EXISTS "%s".counters (
+							id TEXT PRIMARY KEY,
+							count BIGINT DEFAULT 0
+						);
+					`, schema)
+				}),
+				test.responses,
+				test.expected,
+				test.expectedFinalCursor,
+			)
+		})
+	}
+}
+
+func TestSinker_Integration_DeltaUpdate_Min(t *testing.T) {
+	type CounterRow struct {
+		ID    string `db:"id"`
+		Count int64  `db:"count"`
+	}
+
+	tests := []sinkerTestCase{
+		{
+			"min - initial upsert sets the value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"min - keeps lower value in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"min - updates to lower value in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("100")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"min - keeps lower value across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"min - updates to lower value across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"min - insert then update with min",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"min - insert then update with higher min keeps original",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", deltaMin("150")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"min - insert with min sets initial value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", deltaMin("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"min - multiple updates with min in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+					updateRowSinglePK("counters", "counter1", "count", deltaMin("120")),
+					updateRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+					updateRowSinglePK("counters", "counter1", "count", deltaMin("80")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"min - set then min in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 50}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"min - set then min across blocks overwrites",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("50")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					// set(200) resets the value, then min(150) computes min(200,150)=150
+					// Since UpdateOp stays SET after set→min, the flush overwrites with 150
+					upsertRowSinglePK("counters", "counter1", "count", "200"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("150")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 150}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"min - handles negative values",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("-50")),
+					upsertRowSinglePK("counters", "counter1", "count", deltaMin("-100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: -100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runSinkerTest(
+				t,
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				rawSQLInput(func(schema string) string {
+					return fmt.Sprintf(`
+						CREATE TABLE IF NOT EXISTS "%s".counters (
+							id TEXT PRIMARY KEY,
+							count BIGINT DEFAULT 0
+						);
+					`, schema)
+				}),
+				test.responses,
+				test.expected,
+				test.expectedFinalCursor,
+			)
+		})
+	}
+}
+
+func TestSinker_Integration_DeltaUpdate_SetIfNull(t *testing.T) {
+	type CounterRow struct {
+		ID    string `db:"id"`
+		Count int64  `db:"count"`
+	}
+
+	tests := []sinkerTestCase{
+		{
+			"set_if_null - initial upsert sets the value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"set_if_null - keeps first value in same block",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"set_if_null - keeps first value across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"set_if_null - insert then update with set_if_null keeps original",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					updateRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"set_if_null - insert with set_if_null sets initial value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					insertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"set_if_null - multiple set_if_null in same block keeps first",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("300")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"set_if_null - set then set_if_null in same block keeps set value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"set_if_null - set then set_if_null across blocks keeps set value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"set_if_null - set after set_if_null in same block overwrites",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					// SET_IF_NULL → SET is a valid transition in the same block
+					// The SET value overwrites the SET_IF_NULL value
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+					upsertRowSinglePK("counters", "counter1", "count", "200"),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 200}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		{
+			"set_if_null - set overwrites previous set_if_null across blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", "200"),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 200}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"set_if_null - handles negative values",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("-100")),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("-50")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: -100}, rows[0])
+			},
+			"Block #10 (10a) - LIB #10 (10a)",
+		},
+		// Mixed set_if_null and set across blocks
+		{
+			"set_if_null - set in block1 then set_if_null in block2 keeps block1 value",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"set_if_null - set_if_null in block1 then set in block2 overwrites",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", "200"),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 200}, rows[0])
+			},
+			"Block #11 (11a) - LIB #11 (11a)",
+		},
+		{
+			"set_if_null - alternating set and set_if_null across three blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", "200"),
+				),
+				dbChangesBlockData(t, "12a", finalBlock("12a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("300")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				// Block1: set_if_null(100) -> 100
+				// Block2: set(200) -> 200 (overwrites)
+				// Block3: set_if_null(300) -> 200 (keeps existing)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 200}, rows[0])
+			},
+			"Block #12 (12a) - LIB #12 (12a)",
+		},
+		{
+			"set_if_null - set then set_if_null then set across three blocks",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", "100"),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+				dbChangesBlockData(t, "12a", finalBlock("12a"),
+					upsertRowSinglePK("counters", "counter1", "count", "300"),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				// Block1: set(100) -> 100
+				// Block2: set_if_null(200) -> 100 (keeps existing)
+				// Block3: set(300) -> 300 (overwrites)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 300}, rows[0])
+			},
+			"Block #12 (12a) - LIB #12 (12a)",
+		},
+		{
+			"set_if_null - multiple set_if_null across blocks only first wins",
+			streamMock(
+				dbChangesBlockData(t, "10a", finalBlock("10a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("100")),
+				),
+				dbChangesBlockData(t, "11a", finalBlock("11a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("200")),
+				),
+				dbChangesBlockData(t, "12a", finalBlock("12a"),
+					upsertRowSinglePK("counters", "counter1", "count", setIfNull("300")),
+				),
+			),
+			func(t *testing.T, dbx *sqlx.DB, schema string) {
+				rows := readDbChangesRows[CounterRow](t, dbx, schema, "counters")
+				require.Len(t, rows, 1)
+				require.Equal(t, &CounterRow{ID: "counter1", Count: 100}, rows[0])
+			},
+			"Block #12 (12a) - LIB #12 (12a)",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runSinkerTest(
+				t,
+				sharedDbChangesPostgresContainer,
+				nil,
+				nil,
+				rawSQLInput(func(schema string) string {
+					return fmt.Sprintf(`
+						CREATE TABLE IF NOT EXISTS "%s".counters (
+							id TEXT PRIMARY KEY,
+							count BIGINT DEFAULT 0
+						);
+					`, schema)
+				}),
+				test.responses,
+				test.expected,
+				test.expectedFinalCursor,
+			)
+		})
+	}
+}
+
 type sinkerTestCase struct {
 	name                string
 	responses           []any
@@ -879,7 +1877,7 @@ func runSinkerTest(
 		HistoryTableName:        setupOptions.HistoryTableName,
 		ClickhouseCluster:       setupOptions.ClickhouseCluster,
 		BatchBlockFlushInterval: 1,
-		BatchRowFlushInterval:   3,
+		BatchRowFlushInterval:   5,
 		LiveBlockFlushInterval:  1,
 		OnModuleHashMismatch:    setupOptions.OnModuleHashMismatch,
 		HandleReorgs:            true,
@@ -928,15 +1926,47 @@ func randomSchemaName() string {
 	return "testschema" + string(b)
 }
 
-func getFields(fieldsAndValues ...string) (out []*pbdatabase.Field) {
+// deltaValue wraps a value with an UpdateOp for delta updates
+type deltaValue struct {
+	value    string
+	updateOp pbdatabase.Field_UpdateOp
+}
+
+func deltaAdd(value string) deltaValue { return deltaValue{value, pbdatabase.Field_UPDATE_OP_ADD} }
+func deltaSub(value string) deltaValue {
+	// Negate the value for subtraction (sub is just add with negated value)
+	if len(value) > 0 && value[0] == '-' {
+		return deltaValue{value[1:], pbdatabase.Field_UPDATE_OP_ADD} // Remove the minus sign
+	}
+	return deltaValue{"-" + value, pbdatabase.Field_UPDATE_OP_ADD} // Add minus sign
+}
+func deltaMax(value string) deltaValue { return deltaValue{value, pbdatabase.Field_UPDATE_OP_MAX} }
+func deltaMin(value string) deltaValue { return deltaValue{value, pbdatabase.Field_UPDATE_OP_MIN} }
+func setIfNull(value string) deltaValue {
+	return deltaValue{value, pbdatabase.Field_UPDATE_OP_SET_IF_NULL}
+}
+
+func getFields(fieldsAndValues ...any) (out []*pbdatabase.Field) {
 	if len(fieldsAndValues)%2 != 0 {
-		panic("tableChangeSinglePK needs even number of fieldsAndValues")
+		panic("getFields needs even number of fieldsAndValues")
 	}
 	for i := 0; i < len(fieldsAndValues); i += 2 {
-		out = append(out, &pbdatabase.Field{
-			Name:     fieldsAndValues[i],
-			NewValue: fieldsAndValues[i+1],
-		})
+		name, ok := fieldsAndValues[i].(string)
+		if !ok {
+			panic(fmt.Sprintf("field name at index %d must be a string, got %T", i, fieldsAndValues[i]))
+		}
+
+		field := &pbdatabase.Field{Name: name}
+		switch v := fieldsAndValues[i+1].(type) {
+		case string:
+			field.Value = v
+		case deltaValue:
+			field.Value = v.value
+			field.UpdateOp = v.updateOp
+		default:
+			panic(fmt.Sprintf("field value at index %d must be string or deltaValue, got %T", i+1, fieldsAndValues[i+1]))
+		}
+		out = append(out, field)
 	}
 	return
 }
@@ -952,7 +1982,7 @@ func compositePK(keyValuePairs ...string) map[string]string {
 	return out
 }
 
-func insertRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbdatabase.TableChange {
+func insertRowSinglePK(table string, pk string, fieldsAndValues ...any) *pbdatabase.TableChange {
 	return &pbdatabase.TableChange{
 		Table: table,
 		PrimaryKey: &pbdatabase.TableChange_Pk{
@@ -963,7 +1993,7 @@ func insertRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbda
 	}
 }
 
-func insertRowCompositePK(table string, pk map[string]string, fieldsAndValues ...string) *pbdatabase.TableChange {
+func insertRowCompositePK(table string, pk map[string]string, fieldsAndValues ...any) *pbdatabase.TableChange {
 	return &pbdatabase.TableChange{
 		Table: table,
 		PrimaryKey: &pbdatabase.TableChange_CompositePk{
@@ -976,7 +2006,7 @@ func insertRowCompositePK(table string, pk map[string]string, fieldsAndValues ..
 	}
 }
 
-func updateRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbdatabase.TableChange {
+func updateRowSinglePK(table string, pk string, fieldsAndValues ...any) *pbdatabase.TableChange {
 	return &pbdatabase.TableChange{
 		Table: table,
 		PrimaryKey: &pbdatabase.TableChange_Pk{
@@ -987,7 +2017,7 @@ func updateRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbda
 	}
 }
 
-func upsertRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbdatabase.TableChange {
+func upsertRowSinglePK(table string, pk string, fieldsAndValues ...any) *pbdatabase.TableChange {
 	return &pbdatabase.TableChange{
 		Table: table,
 		PrimaryKey: &pbdatabase.TableChange_Pk{
@@ -998,7 +2028,7 @@ func upsertRowSinglePK(table string, pk string, fieldsAndValues ...string) *pbda
 	}
 }
 
-func upsertRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...string) *pbdatabase.TableChange {
+func upsertRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...any) *pbdatabase.TableChange {
 	return &pbdatabase.TableChange{
 		Table: table,
 		PrimaryKey: &pbdatabase.TableChange_CompositePk{
@@ -1011,7 +2041,7 @@ func upsertRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...
 	}
 }
 
-func updateRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...string) *pbdatabase.TableChange {
+func updateRowMultiplePK(table string, pk map[string]string, fieldsAndValues ...any) *pbdatabase.TableChange {
 	return &pbdatabase.TableChange{
 		Table: table,
 		PrimaryKey: &pbdatabase.TableChange_CompositePk{
