@@ -5,13 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.12.0
 
 ### DatabaseChanges mode improvements
 
-* Added support for delta update operations (`add`/`sub`/`min`/`max`/`set_if_null`) on rows for PostgreSQL. These operations allow atomic increments, decrements, and conditional updates. Requires latest [substreams-sink-database-changes](https://github.com/streamingfast/substreams-sink-database-changes) Rust crate version (`>= 4.0.0`).
+* Added support for delta update operations (`add`/`sub`/`min`/`max`/`set_if_null`) on rows for PostgreSQL. These operations allow atomic increments, decrements, and conditional updates. Requires latest [substreams-sink-database-changes](https://github.com/streamingfast/substreams-sink-database-changes) Rust crate version (`>= 4.0.0`). A demo project showcasing this feature can be found at [substreams-eth-uni-v4-demo-candles](https://github.com/streamingfast/substreams-eth-uni-v4-demo-candles).
 
-* Relaxed UpdateOp transition rules: `ADD`, `MAX`, `MIN`, and `SET_IF_NULL` operations can now be followed by a `SET` operation. Previously, non-SET operations could only be followed by the same operation type.
+  Quick example of what it looks like in Rust:
+
+  ```rust
+  tables.upsert_row("candles", [
+      ("pool_id", pool_id),
+      ("interval", interval.to_string()),
+      ("timestamp", window_start.to_string()),
+  ])
+  .set_if_null("open", &price)
+  .set("close", &price)
+  .max("high", tick)
+  .min("low", tick)
+  .add("volume", volume)
+  .add("trade_count", 1i64);
+  ```
 
 ## v4.11.3
 
