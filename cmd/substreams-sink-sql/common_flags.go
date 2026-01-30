@@ -4,9 +4,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/cli"
+	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/shutter"
 	sink "github.com/streamingfast/substreams-sink"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
@@ -14,7 +16,8 @@ import (
 )
 
 var (
-	onModuleHashMistmatchFlag = "on-module-hash-mistmatch"
+	onModuleHashMismatchFlag          = "on-module-hash-mismatch"   // new, correct spelling
+	onModuleHashMistmatchFlagDeprecated = "on-module-hash-mistmatch" // old, typo (deprecated)
 )
 
 var supportedOutputTypes = "sf.substreams.sink.database.v1.DatabaseChanges,sf.substreams.database.v1.DatabaseChanges"
@@ -22,7 +25,7 @@ var supportedOutputTypes = "sf.substreams.sink.database.v1.DatabaseChanges,sf.su
 // AddCommonSinkerFlags adds the flags common to all command that needs to create a sinker,
 // namely the `run` and `generate-csv` commands.
 func AddCommonSinkerFlags(flags *pflag.FlagSet) {
-	flags.String(onModuleHashMistmatchFlag, "error", cli.FlagDescription(`
+	flags.String(onModuleHashMismatchFlag, "error", cli.FlagDescription(`
 		What to do when the module hash in the manifest does not match the one in the database, can be 'error', 'warn' or 'ignore'
 
 		- If 'error' is used (default), it will exit with an error explaining the problem and how to fix it.
@@ -30,6 +33,8 @@ func AddCommonSinkerFlags(flags *pflag.FlagSet) {
 		- If 'ignore' is set, we pick the cursor at the highest block number and use it as the starting point. Subsequent
 		updates to the cursor will overwrite the module hash in the database.
 	`))
+	// Register deprecated flag for backward compatibility
+	flags.String(onModuleHashMistmatchFlagDeprecated, "", "(deprecated) Use --on-module-hash-mismatch instead")
 }
 
 func AddCommonDatabaseChangesFlags(flags *pflag.FlagSet) {
@@ -80,4 +85,35 @@ func (a *cliApplication) WaitForTermination(logger *zap.Logger, unreadyPeriodAft
 
 	logger.Info("run terminated gracefully")
 	return nil
+}
+
+// resolveOnModuleHashMismatchFlag resolves the on-module-hash-mismatch flag with deprecation support.
+// It checks both the new (correct spelling) and deprecated (old typo) flags, logging a deprecation
+// warning if the old flag is used.
+func resolveOnModuleHashMismatchFlag(cmd *cobra.Command) string {
+	correctFlag := sflags.MustGetString(cmd, onModuleHashMismatchFlag)
+	deprecatedFlag := sflags.MustGetString(cmd, onModuleHashMistmatchFlagDeprecated)
+
+	// If correct flag is explicitly set (non-empty), use it
+	if correctFlag != "" {
+		// If deprecated flag is also set, log that it's being ignored
+		if deprecatedFlag != "" && deprecatedFlag != correctFlag {
+			zlog.Info("both --on-module-hash-mismatch and deprecated --on-module-hash-mistmatch flags set, using correct flag value",
+				zap.String("on_module_hash_mismatch", correctFlag),
+				zap.String("ignored_on_module_hash_mistmatch", deprecatedFlag),
+			)
+		}
+		return correctFlag
+	}
+
+	// If only deprecated flag is set, use it but log deprecation warning
+	if deprecatedFlag != "" {
+		zlog.Warn("flag '--on-module-hash-mistmatch' is deprecated and will be removed in a future version. Use '--on-module-hash-mismatch' instead",
+			zap.String("value", deprecatedFlag),
+		)
+		return deprecatedFlag
+	}
+
+	// Neither flag was explicitly set, return the default (empty string will trigger the flag's default)
+	return ""
 }

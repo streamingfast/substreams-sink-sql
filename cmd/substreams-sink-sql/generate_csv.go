@@ -124,7 +124,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		historyTableName,
 		sflags.MustGetString(cmd, "clickhouse-cluster"),
 		0, 0, 0,
-		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		resolveOnModuleHashMismatchFlag(cmd),
 		&handleReorgs,
 		zlog, tracer,
 	)

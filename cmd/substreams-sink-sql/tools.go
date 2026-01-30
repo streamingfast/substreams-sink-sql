@@ -183,7 +183,7 @@ func toolsCreateLoader(cmd *cobra.Command) (*db2.Loader, error) {
 		historyTableName,
 		sflags.MustGetString(cmd, "clickhouse-cluster"),
 		0, 0, 0,
-		sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		resolveOnModuleHashMismatchFlag(cmd),
 		&handleReorgs,
 		zlog, tracer,
 	)
