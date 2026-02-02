@@ -93,7 +93,7 @@ func (a *cliApplication) WaitForTermination(logger *zap.Logger, unreadyPeriodAft
 // warning if the old flag is used.
 func resolveOnModuleHashMismatchFlag(cmd *cobra.Command) string {
 	correctFlag := sflags.MustGetString(cmd, onModuleHashMismatchFlag)
-	deprecatedFlag := sflags.MustGetString(cmd, onModuleHashMistmatchFlagDeprecated)
+	deprecatedFlag, provided := sflags.MustGetStringProvided(cmd, onModuleHashMistmatchFlagDeprecated)
 
 	// If correct flag is explicitly set (non-empty), use it
 	if correctFlag != "" {
