@@ -34,7 +34,8 @@ func AddCommonSinkerFlags(flags *pflag.FlagSet) {
 		updates to the cursor will overwrite the module hash in the database.
 	`))
 	// Register deprecated flag for backward compatibility
-	flags.String(onModuleHashMistmatchFlagDeprecated, "", "(deprecated) Use --on-module-hash-mismatch instead")
+	flags.String(onModuleHashMistmatchFlagDeprecated, "error", "(deprecated) Use --on-module-hash-mismatch instead")
+	flags.Lookup("onModuleHashMistmatchFlagDeprecated").Deprecated = true
 }
 
 func AddCommonDatabaseChangesFlags(flags *pflag.FlagSet) {
