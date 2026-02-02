@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	onModuleHashMismatchFlag          = "on-module-hash-mismatch"   // new, correct spelling
+	onModuleHashMismatchFlag            = "on-module-hash-mismatch"  // new, correct spelling
 	onModuleHashMistmatchFlagDeprecated = "on-module-hash-mistmatch" // old, typo (deprecated)
 )
 
@@ -34,8 +34,8 @@ func AddCommonSinkerFlags(flags *pflag.FlagSet) {
 		updates to the cursor will overwrite the module hash in the database.
 	`))
 	// Register deprecated flag for backward compatibility
-	flags.String(onModuleHashMistmatchFlagDeprecated, "error", "(deprecated) Use --on-module-hash-mismatch instead")
-	flags.Lookup("onModuleHashMistmatchFlagDeprecated").Deprecated = true
+	flags.String(onModuleHashMistmatchFlagDeprecated, "error", "(deprecated) use --on-module-hash-mismatch instead")
+	flags.Lookup(onModuleHashMistmatchFlagDeprecated).Deprecated = "use --on-module-hash-mismatch instead"
 }
 
 func AddCommonDatabaseChangesFlags(flags *pflag.FlagSet) {
@@ -89,32 +89,17 @@ func (a *cliApplication) WaitForTermination(logger *zap.Logger, unreadyPeriodAft
 }
 
 // resolveOnModuleHashMismatchFlag resolves the on-module-hash-mismatch flag with deprecation support.
-// It checks both the new (correct spelling) and deprecated (old typo) flags, logging a deprecation
-// warning if the old flag is used.
 func resolveOnModuleHashMismatchFlag(cmd *cobra.Command) string {
-	correctFlag := sflags.MustGetString(cmd, onModuleHashMismatchFlag)
-	deprecatedFlag, provided := sflags.MustGetStringProvided(cmd, onModuleHashMistmatchFlagDeprecated)
-
-	// If correct flag is explicitly set (non-empty), use it
-	if correctFlag != "" {
-		// If deprecated flag is also set, log that it's being ignored
-		if deprecatedFlag != "" && deprecatedFlag != correctFlag {
-			zlog.Info("both --on-module-hash-mismatch and deprecated --on-module-hash-mistmatch flags set, using correct flag value",
-				zap.String("on_module_hash_mismatch", correctFlag),
-				zap.String("ignored_on_module_hash_mistmatch", deprecatedFlag),
-			)
-		}
+	correctFlag, correctProvided := sflags.MustGetStringProvided(cmd, onModuleHashMismatchFlag)
+	if correctProvided {
 		return correctFlag
 	}
 
-	// If only deprecated flag is set, use it but log deprecation warning
-	if deprecatedFlag != "" {
-		zlog.Warn("flag '--on-module-hash-mistmatch' is deprecated and will be removed in a future version. Use '--on-module-hash-mismatch' instead",
-			zap.String("value", deprecatedFlag),
-		)
+	deprecatedFlag, deprecatedProvided := sflags.MustGetStringProvided(cmd, onModuleHashMistmatchFlagDeprecated)
+	if deprecatedProvided {
 		return deprecatedFlag
 	}
 
-	// Neither flag was explicitly set, return the default (empty string will trigger the flag's default)
-	return ""
+	// Neither flag was explicitly set, return default from correct flag
+	return correctFlag
 }
