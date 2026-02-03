@@ -46,7 +46,7 @@ func (l *Loader) GetAllCursors(ctx context.Context) (out map[string]*sink.Cursor
 	return out, nil
 }
 
-func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (cursor *sink.Cursor, mistmatchDetected bool, err error) {
+func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (cursor *sink.Cursor, mismatchDetected bool, err error) {
 	cursors, err := l.GetAllCursors(ctx)
 	if err != nil {
 		return nil, false, fmt.Errorf("get cursor: %w", err)
@@ -71,7 +71,7 @@ func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (cursor
 
 	case OnModuleHashMismatchWarn:
 		l.logger.Warn(
-			fmt.Sprintf("cursor module hash mismatch, continuing using cursor at highest block %s, this warning can be made silent by using '--on-module-hash-mistmatch=ignore'", activeCursor.Block()),
+			fmt.Sprintf("cursor module hash mismatch, continuing using cursor at highest block %s, this warning can be made silent by using '--on-module-hash-mismatch=ignore'", activeCursor.Block()),
 			zap.String("expected_module_hash", outputModuleHash),
 			zap.String("actual_module_hash", actualOutputModuleHash),
 		)
@@ -79,7 +79,7 @@ func (l *Loader) GetCursor(ctx context.Context, outputModuleHash string) (cursor
 		return activeCursor, true, err
 
 	case OnModuleHashMismatchError:
-		return nil, true, fmt.Errorf("cursor module hash mismatch, refusing to continue because flag '--on-module-hash-mistmatch=error' (defaults) is set, you can change to 'warn' or 'ignore': your module's hash is %q but cursor with highest block (%d) module hash is actually %q in the database",
+		return nil, true, fmt.Errorf("cursor module hash mismatch, refusing to continue because flag '--on-module-hash-mismatch=error' (defaults) is set, you can change to 'warn' or 'ignore': your module's hash is %q but cursor with highest block (%d) module hash is actually %q in the database",
 			outputModuleHash,
 			activeCursor.Block().Num(),
 			actualOutputModuleHash,

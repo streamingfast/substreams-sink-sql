@@ -44,7 +44,7 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 		CursorTableName:            sflags.MustGetString(cmd, "cursors-table"),
 		HistoryTableName:           sflags.MustGetString(cmd, "history-table"),
 		ClickhouseCluster:          sflags.MustGetString(cmd, "clickhouse-cluster"),
-		OnModuleHashMismatch:       sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		OnModuleHashMismatch:       resolveOnModuleHashMismatchFlag(cmd),
 		SystemTablesOnly:           sflags.MustGetBool(cmd, "system-tables-only"),
 		IgnoreDuplicateTableErrors: sflags.MustGetBool(cmd, "ignore-duplicate-table-errors"),
 		Postgraphile:               sflags.MustGetBool(cmd, "postgraphile"),

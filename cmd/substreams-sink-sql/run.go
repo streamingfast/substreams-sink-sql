@@ -109,7 +109,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 		BatchBlockFlushInterval: batchBlockFlushInterval,
 		BatchRowFlushInterval:   batchRowFlushInterval,
 		LiveBlockFlushInterval:  liveBlockFlushInterval,
-		OnModuleHashMismatch:    sflags.MustGetString(cmd, onModuleHashMistmatchFlag),
+		OnModuleHashMismatch:    resolveOnModuleHashMismatchFlag(cmd),
 		HandleReorgs:            handleReorgs,
 		FlushRetryCount:         flushRetryCount,
 		FlushRetryDelay:         flushRetryDelay,
