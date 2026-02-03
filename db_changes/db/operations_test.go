@@ -204,13 +204,13 @@ func newTable(t *testing.T, schema, name, primaryColumn string, columnInfos ...*
 // TestMergeData_ValidTransitions tests all valid UpdateOp transitions
 func TestMergeData_ValidTransitions(t *testing.T) {
 	tests := []struct {
-		name           string
-		existingOp     UpdateOp
-		existingValue  string
-		incomingOp     UpdateOp
-		incomingValue  string
-		expectedValue  string
-		expectedOp     UpdateOp
+		name          string
+		existingOp    UpdateOp
+		existingValue string
+		incomingOp    UpdateOp
+		incomingValue string
+		expectedValue string
+		expectedOp    UpdateOp
 	}{
 		// SET → any (all allowed)
 		{"SET → SET", UpdateOpSet, "100", UpdateOpSet, "200", "200", UpdateOpSet},
@@ -351,10 +351,10 @@ func TestMergeData_NonNumeric(t *testing.T) {
 // TestMergeData_DecimalPrecision tests high precision decimal handling
 func TestMergeData_DecimalPrecision(t *testing.T) {
 	tests := []struct {
-		name           string
-		existingValue  string
-		incomingValue  string
-		expectedValue  string
+		name          string
+		existingValue string
+		incomingValue string
+		expectedValue string
 	}{
 		{"small decimals", "0.000000000000000001", "0.000000000000000002", "0.000000000000000003"},
 		{"large numbers", "1000000000000000000", "1000000000000000000", "2000000000000000000.000000000000000000"},

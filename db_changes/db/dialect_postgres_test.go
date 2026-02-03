@@ -135,12 +135,12 @@ func TestGetPrimaryKeyFakeEmptyValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := getPrimaryKeyFakeEmptyValues(tt.primaryKey)
 			assert.Equal(t, tt.expected, result)
-		
+
 			// For multiple keys, verify the order is predictable (alphabetical)
 			if len(tt.primaryKey) > 1 {
 				parts := strings.Split(result, ",")
 				for i := 1; i < len(parts); i++ {
-					assert.True(t, strings.Compare(parts[i-1], parts[i]) <= 0, 
+					assert.True(t, strings.Compare(parts[i-1], parts[i]) <= 0,
 						"Expected sorted keys, but got %s before %s", parts[i-1], parts[i])
 				}
 			}
@@ -193,12 +193,12 @@ func TestGetPrimaryKeyFakeEmptyValuesAssertion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := getPrimaryKeyFakeEmptyValuesAssertion(tt.primaryKey, tt.escapedTableName)
 			assert.Equal(t, tt.expected, result)
-		
+
 			// For multiple keys, verify the order is predictable (alphabetical)
 			if len(tt.primaryKey) > 1 {
 				parts := strings.Split(result, "AND ")
 				for i := 1; i < len(parts); i++ {
-					assert.True(t, strings.Compare(parts[i-1], parts[i]) <= 0, 
+					assert.True(t, strings.Compare(parts[i-1], parts[i]) <= 0,
 						"Expected sorted parts, but got %s before %s", parts[i-1], parts[i])
 				}
 			}
@@ -274,11 +274,11 @@ func TestPrepareStatement_UpdateOp(t *testing.T) {
 	table := createTestTable(t, "test_table", "id", "amount")
 
 	tests := []struct {
-		name        string
-		opType      OperationType
-		updateOp    UpdateOp
-		value       string
-		expectSQL   string // substring to check in generated SQL
+		name      string
+		opType    OperationType
+		updateOp  UpdateOp
+		value     string
+		expectSQL string // substring to check in generated SQL
 	}{
 		// UPSERT with different UpdateOps
 		{

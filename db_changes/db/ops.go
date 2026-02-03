@@ -277,4 +277,3 @@ func (l *Loader) Delete(tableName string, primaryKey map[string]string, reversib
 	entry.Set(uniqueID, l.newDeleteOperation(table, primaryKey, l.NextBatchOrdinal(), reversibleBlockNum))
 	return nil
 }
-

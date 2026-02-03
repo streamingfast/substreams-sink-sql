@@ -52,4 +52,3 @@ func sinkSetupE(cmd *cobra.Command, args []string) error {
 
 	return sinker2.SinkerSetup(ctx, dsnString, pkgBundle.Package, options, zlog, tracer)
 }
-
