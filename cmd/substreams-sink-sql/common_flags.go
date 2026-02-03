@@ -90,16 +90,11 @@ func (a *cliApplication) WaitForTermination(logger *zap.Logger, unreadyPeriodAft
 
 // resolveOnModuleHashMismatchFlag resolves the on-module-hash-mismatch flag with deprecation support.
 func resolveOnModuleHashMismatchFlag(cmd *cobra.Command) string {
-	correctFlag, correctProvided := sflags.MustGetStringProvided(cmd, onModuleHashMismatchFlag)
-	if correctProvided {
-		return correctFlag
+	// Use deprecated value if set by provider
+	if value, provided := sflags.MustGetStringProvided(cmd, onModuleHashMistmatchFlagDeprecated); provided {
+		return value
 	}
 
-	deprecatedFlag, deprecatedProvided := sflags.MustGetStringProvided(cmd, onModuleHashMistmatchFlagDeprecated)
-	if deprecatedProvided {
-		return deprecatedFlag
-	}
-
-	// Neither flag was explicitly set, return default from correct flag
-	return correctFlag
+	// Deprecated flag wasn't explicitly set, return default from correct flag
+	return sflags.MustGetString(cmd, onModuleHashMismatchFlag)
 }
