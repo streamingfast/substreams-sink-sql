@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/streamingfast/bstream"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/bundler/writer"
 )
 

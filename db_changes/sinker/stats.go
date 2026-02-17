@@ -6,7 +6,7 @@ import (
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/dmetrics"
 	"github.com/streamingfast/shutter"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"go.uber.org/zap"
 )
 

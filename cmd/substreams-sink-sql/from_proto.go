@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	sinksql "github.com/streamingfast/substreams-sink-sql"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
@@ -28,7 +28,7 @@ var fromProtoCmd = Command(fromProtoE,
 	"",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags, ignoreUndoBufferSize{})
+		sink.AddFlagsToSet(flags, sink.FlagIgnore("undo-buffer-size"))
 		flags.StringP("substreams-endpoint", "e", "", "Substreams gRPC endpoint. If empty, will be replaced by the SUBSTREAMS_ENDPOINT_{network_name} environment variable, where `network_name` is determined from the substreams manifest. Some network names have default endpoints.")
 		flags.StringP("start-block", "s", "", "Start block to stream from. If empty, will be replaced by initialBlock of the first module you are streaming. If negative, will be resolved by the server relative to the chain head")
 		flags.StringP("stop-block", "t", "0", "Stop block to end stream at, exclusively. If the start-block is positive, a '+' prefix can indicate 'relative to start-block'")
@@ -103,16 +103,20 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+	
+	// Set the endpoint flag for the sink to use
+	cmd.Flags().Set("endpoint", endpoint)
 
 	startBlock := sflags.MustGetString(cmd, "start-block")
-	endBlock := sflags.MustGetString(cmd, "stop-block")
-	blockRange := ""
 	if startBlock != "" {
-		blockRange = startBlock
+		// Set the start-block flag for the sink to use
+		cmd.Flags().Set("start-block", startBlock)
 	}
-	blockRange += ":"
+	
+	endBlock := sflags.MustGetString(cmd, "stop-block")
 	if endBlock != "0" {
-		blockRange += endBlock
+		// Set the stop-block flag for the sink to use
+		cmd.Flags().Set("stop-block", endBlock)
 	}
 
 	dsn, err := db.ParseDSN(dsnString)
@@ -121,7 +125,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 
 	//todo: handle params
-	spkg, module, _, _, err := sink.ReadManifestAndModuleAndBlockRange(manifestPath, "", nil, outputModuleName, "", false, "", zlog)
+	spkg, module, _, err := sink.ReadManifestAndModule(manifestPath, "", nil, outputModuleName, "", false, nil, zlog)
 	if err != nil {
 		return fmt.Errorf("reading manifest: %w", err)
 	}
@@ -212,10 +216,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	baseSink, err := sink.NewFromViper(
 		cmd,
 		outputType,
-		endpoint,
 		manifestPath,
 		outputModuleName,
-		blockRange,
+		"substreams-sink-sql/1.0.0",
 		zlog,
 		tracer,
 	)

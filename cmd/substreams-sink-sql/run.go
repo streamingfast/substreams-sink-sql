@@ -8,23 +8,16 @@ import (
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
-	"github.com/streamingfast/substreams/manifest"
 )
 
-type ignoreUndoBufferSize struct{}
-
-func (i ignoreUndoBufferSize) IsIgnored(in string) bool {
-	return in == "undo-buffer-size"
-}
-
 var sinkRunCmd = Command(sinkRunE,
-	"run <dsn> <manifest> [<start>:<stop>]",
+	"run <dsn> <manifest> [<module>]",
 	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags, ignoreUndoBufferSize{})
+		sink.AddFlagsToSet(flags, sink.FlagIgnore("undo-buffer-size"))
 		AddCommonSinkerFlags(flags)
 		AddCommonDatabaseChangesFlags(flags)
 
@@ -35,7 +28,6 @@ var sinkRunCmd = Command(sinkRunE,
 		flags.Int("flush-interval", 0, "(deprecated) please use --batch-block-flush-interval instead")
 		flags.Int("flush-retry-count", 3, "Number of retry attempts for flush operations")
 		flags.Duration("flush-retry-delay", 1*time.Second, "Base delay for incremental retry backoff on flush failures")
-		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
 	}),
 	Example("substreams-sink-sql run 'postgres://localhost:5432/posgres?sslmode=disable' uniswap-v3@v0.2.10"),
 	OnCommandErrorLogAndExit(zlog),
@@ -44,44 +36,21 @@ var sinkRunCmd = Command(sinkRunE,
 func sinkRunE(cmd *cobra.Command, args []string) error {
 	app := NewApplication(cmd.Context())
 
-	sink.RegisterMetrics()
 	sinker2.RegisterMetrics()
 
 	dsnString := args[0]
 	manifestPath := args[1]
-	blockRange := ""
+	moduleName := ""
 	if len(args) > 2 {
-		blockRange = args[2]
-	}
-
-	endpoint := sflags.MustGetString(cmd, "endpoint")
-	if endpoint == "" {
-		network := sflags.MustGetString(cmd, "network")
-		if network == "" {
-			reader, err := manifest.NewReader(manifestPath)
-			if err != nil {
-				return fmt.Errorf("setup manifest reader: %w", err)
-			}
-			pkgBundle, err := reader.Read()
-			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
-			}
-			network = pkgBundle.Package.Network
-		}
-		var err error
-		endpoint, err = manifest.ExtractNetworkEndpoint(network, sflags.MustGetString(cmd, "endpoint"), zlog)
-		if err != nil {
-			return err
-		}
+		moduleName = args[2]
 	}
 
 	sink, err := sink.NewFromViper(
 		cmd,
 		supportedOutputTypes,
-		endpoint,
 		manifestPath,
-		sink.InferOutputModuleFromPackage,
-		blockRange,
+		moduleName,
+		"substreams-sink-sql/1.0.0",
 		zlog,
 		tracer,
 	)

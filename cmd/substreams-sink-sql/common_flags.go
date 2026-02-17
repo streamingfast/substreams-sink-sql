@@ -10,8 +10,6 @@ import (
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
 	"github.com/streamingfast/shutter"
-	sink "github.com/streamingfast/substreams-sink"
-	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"go.uber.org/zap"
 )
 
@@ -46,10 +44,7 @@ func AddCommonDatabaseChangesFlags(flags *pflag.FlagSet) {
 }
 
 func readBlockRangeArgument(in string) (blockRange *bstream.Range, err error) {
-	return sink.ReadBlockRange(&pbsubstreams.Module{
-		Name:         "dummy",
-		InitialBlock: 0,
-	}, in)
+	return bstream.ParseRange(in)
 }
 
 type cliApplication struct {

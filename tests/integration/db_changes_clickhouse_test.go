@@ -9,7 +9,7 @@ import (
 	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/streamingfast/bstream"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/sinker"

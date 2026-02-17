@@ -13,7 +13,7 @@ import (
 	"github.com/ClickHouse/ch-go"
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/logging/zapx"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql"

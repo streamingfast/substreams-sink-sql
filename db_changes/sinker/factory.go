@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/streamingfast/logging"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"go.uber.org/zap"
 )

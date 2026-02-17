@@ -9,10 +9,9 @@ import (
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
-	"github.com/streamingfast/substreams/manifest"
 )
 
 // lastCursorFilename is the name of the file where the last cursor is stored, no extension as it's added by the store
@@ -36,14 +35,13 @@ var generateCsvCmd = Command(generateCsvE,
 	`),
 	ExactArgs(3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags, sink.FlagIgnore("final-blocks-only"))
+		sink.AddFlagsToSet(flags)
 		AddCommonSinkerFlags(flags)
 		AddCommonDatabaseChangesFlags(flags)
 
 		flags.Uint64("bundle-size", 10000, "Size of output bundle, in blocks")
 		flags.String("working-dir", "./workdir", "Path to local folder used as working directory")
 		flags.String("output-dir", "./csv-output", "Path to local folder used as destination for CSV")
-		flags.StringP("endpoint", "e", "", "Specify the substreams endpoint, ex: `mainnet.eth.streamingfast.io:443`")
 		flags.Uint64("buffer-max-size", 4*1024*1024, FlagDescription(`
 			Amount of memory bytes to allocate to the buffered writer. If your data set is small enough that every is hold in memory, we are going to avoid
 			the local I/O operation(s) and upload accumulated content in memory directly to final storage location.
@@ -62,12 +60,25 @@ var generateCsvCmd = Command(generateCsvE,
 func generateCsvE(cmd *cobra.Command, args []string) error {
 	app := NewApplication(cmd.Context())
 
-	sink.RegisterMetrics()
 	sinker2.RegisterMetrics()
 
 	dsnString := args[0]
 	manifestPath := args[1]
 	blockRange := args[2]
+
+	// Parse block range and set flags
+	br, err := readBlockRangeArgument(blockRange)
+	if err != nil {
+		return fmt.Errorf("invalid block range %q: %w", blockRange, err)
+	}
+	
+	// Set the start and stop block flags from the parsed block range
+	if br.StartBlock() > 0 {
+		cmd.Flags().Set("start-block", fmt.Sprintf("%d", br.StartBlock()))
+	}
+	if br.EndBlock() != nil {
+		cmd.Flags().Set("stop-block", fmt.Sprintf("%d", *br.EndBlock()))
+	}
 
 	outputDir := sflags.MustGetString(cmd, "output-dir")
 	bundleSize := sflags.MustGetUint64(cmd, "bundle-size")
@@ -76,37 +87,17 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 	historyTableName := sflags.MustGetString(cmd, "history-table")
 
-	endpoint := sflags.MustGetString(cmd, "endpoint")
-	if endpoint == "" {
-		network := sflags.MustGetString(cmd, "network")
-		if network == "" {
-			reader, err := manifest.NewReader(manifestPath)
-			if err != nil {
-				return fmt.Errorf("setup manifest reader: %w", err)
-			}
-			pkgBundle, err := reader.Read()
-			if err != nil {
-				return fmt.Errorf("read manifest: %w", err)
-			}
-			network = pkgBundle.Package.Network
-		}
-		var err error
-		endpoint, err = manifest.ExtractNetworkEndpoint(network, sflags.MustGetString(cmd, "endpoint"), zlog)
-		if err != nil {
-			return err
-		}
-	}
+	// Set final-blocks-only flag to true for CSV generation
+	cmd.Flags().Set("final-blocks-only", "true")
 
 	sink, err := sink.NewFromViper(
 		cmd,
 		supportedOutputTypes,
-		endpoint,
 		manifestPath,
 		sink.InferOutputModuleFromPackage,
-		blockRange,
+		"substreams-sink-sql/1.0.0",
 		zlog,
 		tracer,
-		sink.WithFinalBlocksOnly(),
 	)
 	if err != nil {
 		return fmt.Errorf("new base sinker: %w", err)

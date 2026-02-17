@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/streamingfast/logging"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	protosql "github.com/streamingfast/substreams-sink-sql/db_proto/sql"

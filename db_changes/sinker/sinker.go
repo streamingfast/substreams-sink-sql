@@ -10,7 +10,7 @@ import (
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/logging/zapx"
 	"github.com/streamingfast/shutter"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
@@ -334,8 +334,9 @@ func protoUpdateOpToDbUpdateOp(op pbdatabase.Field_UpdateOp) db2.UpdateOp {
 func (s *SQLSinker) HandleBlockRangeCompletion(ctx context.Context, cursor *sink.Cursor) error {
 	// To be moved in the base sinker library, happens usually only on integration tests where the connection
 	// can close with "nil" error but we haven't completed the range for real yet.
-	if !s.Sinker.BlockRange().ReachedEndBlock(cursor.Block().Num()) {
-		s.logger.Debug("range not completed yet, skipping", zap.Stringer("block", cursor.Block()), zap.Stringer("range", s.Sinker.BlockRange()))
+	stopBlock := s.Sinker.StopBlock()
+	if stopBlock > 0 && cursor.Block().Num() < stopBlock {
+		s.logger.Debug("range not completed yet, skipping", zap.Stringer("block", cursor.Block()), zap.Uint64("stop_block", stopBlock))
 		return nil
 	}
 

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/streamingfast/cli"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )

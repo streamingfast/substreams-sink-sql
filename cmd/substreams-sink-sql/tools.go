@@ -11,7 +11,7 @@ import (
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 )
 

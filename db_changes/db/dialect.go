@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 )
 
 type UnknownDriverError struct {

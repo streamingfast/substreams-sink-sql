@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/lithammer/dedent"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"go.uber.org/zap"
 )
 

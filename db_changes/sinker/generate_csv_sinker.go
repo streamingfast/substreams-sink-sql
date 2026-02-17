@@ -17,7 +17,7 @@ import (
 	"github.com/streamingfast/logging"
 	"github.com/streamingfast/logging/zapx"
 	"github.com/streamingfast/shutter"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	bundler2 "github.com/streamingfast/substreams-sink-sql/db_changes/bundler"
 	writer2 "github.com/streamingfast/substreams-sink-sql/db_changes/bundler/writer"
@@ -61,8 +61,8 @@ func NewGenerateCSVSinker(
 	logger *zap.Logger,
 	tracer logging.Tracer,
 ) (*GenerateCSVSinker, error) {
-	blockRange := sink.BlockRange()
-	if blockRange == nil || blockRange.EndBlock() == nil {
+	stopBlock := sink.StopBlock()
+	if stopBlock == 0 {
 		return nil, fmt.Errorf("sink must have a stop block defined")
 	}
 
@@ -99,7 +99,7 @@ func NewGenerateCSVSinker(
 		bundlersByTable:    make(map[string]*bundler2.Bundler),
 		cursorsTableStore:  cursorsStore,
 		lastCursorFilename: lastCursorFilename,
-		stopBlock:          *blockRange.EndBlock(),
+		stopBlock:          stopBlock,
 
 		loader: loader,
 		logger: logger,
@@ -116,7 +116,7 @@ func NewGenerateCSVSinker(
 	tables := s.loader.GetAvailableTablesInSchema()
 	for _, table := range tables {
 		columns := s.loader.GetColumnsForTable(table)
-		fb, err := getBundler(table, s.Sinker.BlockRange().StartBlock(), s.stopBlock, bundleSize, bufferSize, csvOutputStore, workingDir, logger, columns)
+		fb, err := getBundler(table, uint64(s.Sinker.StartBlock()), s.stopBlock, bundleSize, bufferSize, csvOutputStore, workingDir, logger, columns)
 		if err != nil {
 			return nil, err
 		}

@@ -9,7 +9,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/logging"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams/client"

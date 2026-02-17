@@ -12,7 +12,7 @@ import (
 	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/streamingfast/bstream"
-	sink "github.com/streamingfast/substreams-sink"
+	sink "github.com/streamingfast/substreams/sink"
 	"github.com/streamingfast/substreams-sink-sql/db_proto"
 	pbrelations "github.com/streamingfast/substreams-sink-sql/pb/test/relations"
 	"github.com/streamingfast/substreams/manifest"
