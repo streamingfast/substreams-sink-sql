@@ -28,8 +28,8 @@ var fromProtoCmd = Command(fromProtoE,
 	"",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags, sink.FlagIgnore("undo-buffer-size"))
-		flags.StringP("substreams-endpoint", "e", "", "Substreams gRPC endpoint. If empty, will be replaced by the SUBSTREAMS_ENDPOINT_{network_name} environment variable, where `network_name` is determined from the substreams manifest. Some network names have default endpoints.")
+		sink.AddFlagsToSet(flags, sink.FlagIgnore("undo-buffer-size", "endpoint", "start-block", "stop-block"))
+		flags.String("substreams-endpoint", "", "Substreams gRPC endpoint. If empty, will be replaced by the SUBSTREAMS_ENDPOINT_{network_name} environment variable, where `network_name` is determined from the substreams manifest. Some network names have default endpoints.")
 		flags.StringP("start-block", "s", "", "Start block to stream from. If empty, will be replaced by initialBlock of the first module you are streaming. If negative, will be resolved by the server relative to the chain head")
 		flags.StringP("stop-block", "t", "0", "Stop block to end stream at, exclusively. If the start-block is positive, a '+' prefix can indicate 'relative to start-block'")
 
