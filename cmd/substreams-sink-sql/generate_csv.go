@@ -74,10 +74,14 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	
 	// Set the start and stop block flags from the parsed block range
 	if br.StartBlock() > 0 {
-		cmd.Flags().Set("start-block", fmt.Sprintf("%d", br.StartBlock()))
+		if err := cmd.Flags().Set("start-block", fmt.Sprintf("%d", br.StartBlock())); err != nil {
+			return fmt.Errorf("setting start-block flag: %w", err)
+		}
 	}
 	if br.EndBlock() != nil {
-		cmd.Flags().Set("stop-block", fmt.Sprintf("%d", *br.EndBlock()))
+		if err := cmd.Flags().Set("stop-block", fmt.Sprintf("%d", *br.EndBlock())); err != nil {
+			return fmt.Errorf("setting stop-block flag: %w", err)
+		}
 	}
 
 	outputDir := sflags.MustGetString(cmd, "output-dir")
@@ -88,7 +92,9 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	historyTableName := sflags.MustGetString(cmd, "history-table")
 
 	// Set final-blocks-only flag to true for CSV generation
-	cmd.Flags().Set("final-blocks-only", "true")
+	if err := cmd.Flags().Set("final-blocks-only", "true"); err != nil {
+		return fmt.Errorf("setting final-blocks-only flag: %w", err)
+	}
 
 	sink, err := sink.NewFromViper(
 		cmd,

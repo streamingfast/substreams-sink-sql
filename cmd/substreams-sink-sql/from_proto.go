@@ -105,18 +105,24 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	}
 	
 	// Set the endpoint flag for the sink to use
-	cmd.Flags().Set("endpoint", endpoint)
+	if err := cmd.Flags().Set("endpoint", endpoint); err != nil {
+		return fmt.Errorf("setting endpoint flag: %w", err)
+	}
 
 	startBlock := sflags.MustGetString(cmd, "start-block")
 	if startBlock != "" {
 		// Set the start-block flag for the sink to use
-		cmd.Flags().Set("start-block", startBlock)
+		if err := cmd.Flags().Set("start-block", startBlock); err != nil {
+			return fmt.Errorf("setting start-block flag: %w", err)
+		}
 	}
 	
 	endBlock := sflags.MustGetString(cmd, "stop-block")
 	if endBlock != "0" {
 		// Set the stop-block flag for the sink to use
-		cmd.Flags().Set("stop-block", endBlock)
+		if err := cmd.Flags().Set("stop-block", endBlock); err != nil {
+			return fmt.Errorf("setting stop-block flag: %w", err)
+		}
 	}
 
 	dsn, err := db.ParseDSN(dsnString)
