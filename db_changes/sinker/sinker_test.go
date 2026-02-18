@@ -13,6 +13,7 @@ import (
 	pbdatabase "github.com/streamingfast/substreams-sink-database-changes/pb/sf/substreams/sink/database/v1"
 	db2 "github.com/streamingfast/substreams-sink-sql/db_changes/db"
 	"github.com/streamingfast/substreams/client"
+	"github.com/streamingfast/substreams/manifest"
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	pbsubstreams "github.com/streamingfast/substreams/pb/sf/substreams/v1"
 	"github.com/stretchr/testify/assert"
@@ -207,7 +208,16 @@ func TestSinker_SQLStatements(t *testing.T) {
 				logger,
 				tracer,
 			)
-			s, err := sink.New(sink.SubstreamsModeDevelopment, false, testPackage, testPackage.Modules.Modules[0], []byte("unused"), testClientConfig, logger, nil)
+			s, err := sink.New(&sink.SinkerConfig{
+				Pkg:              testPackage,
+				OutputModule:     testPackage.Modules.Modules[0],
+				OutputModuleHash: manifest.ModuleHash([]byte("unused")),
+				ClientConfig:     testClientConfig,
+				Mode:             sink.SubstreamsModeDevelopment,
+				NoopMode:         false,
+				Logger:           logger,
+				Tracer:           nil,
+			})
 			require.NoError(t, err)
 			sinker, _ := New(s, l, logger, nil, 3, 1*time.Second)
 
