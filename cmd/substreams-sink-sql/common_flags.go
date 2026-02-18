@@ -44,6 +44,8 @@ func AddCommonDatabaseChangesFlags(flags *pflag.FlagSet) {
 }
 
 func readBlockRangeArgument(in string) (blockRange *bstream.Range, err error) {
+	// This replaces the old sink.ReadBlockRange which was removed in the new sink API.
+	// bstream.ParseRange handles the same block range format (e.g., "100:200", "100:", ":200")
 	return bstream.ParseRange(in)
 }
 

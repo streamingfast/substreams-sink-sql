@@ -66,18 +66,19 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	manifestPath := args[1]
 	blockRange := args[2]
 
-	// Parse block range and set flags
+	// Parse block range and set flags to bridge with substreams/sink library
 	br, err := readBlockRangeArgument(blockRange)
 	if err != nil {
 		return fmt.Errorf("invalid block range %q: %w", blockRange, err)
 	}
 	
-	// Set the start and stop block flags from the parsed block range
+	// Bridge start-block flag with substreams/sink library
 	if br.StartBlock() > 0 {
 		if err := cmd.Flags().Set("start-block", fmt.Sprintf("%d", br.StartBlock())); err != nil {
 			return fmt.Errorf("setting start-block flag: %w", err)
 		}
 	}
+	// Bridge stop-block flag with substreams/sink library
 	if br.EndBlock() != nil {
 		if err := cmd.Flags().Set("stop-block", fmt.Sprintf("%d", *br.EndBlock())); err != nil {
 			return fmt.Errorf("setting stop-block flag: %w", err)
@@ -91,7 +92,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 	cursorTableName := sflags.MustGetString(cmd, "cursors-table")
 	historyTableName := sflags.MustGetString(cmd, "history-table")
 
-	// Set final-blocks-only flag to true for CSV generation
+	// Bridge final-blocks-only flag with substreams/sink library (required for CSV generation)
 	if err := cmd.Flags().Set("final-blocks-only", "true"); err != nil {
 		return fmt.Errorf("setting final-blocks-only flag: %w", err)
 	}
@@ -101,7 +102,7 @@ func generateCsvE(cmd *cobra.Command, args []string) error {
 		supportedOutputTypes,
 		manifestPath,
 		sink.InferOutputModuleFromPackage,
-		"substreams-sink-sql/1.0.0",
+		fmt.Sprintf("substreams-sink-sql/%s", version),
 		zlog,
 		tracer,
 	)

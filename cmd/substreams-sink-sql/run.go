@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -13,7 +14,7 @@ import (
 )
 
 var sinkRunCmd = Command(sinkRunE,
-	"run <dsn> <manifest> [<module>]",
+	"run <dsn> <manifest> [<start>:<stop>]",
 	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
@@ -40,17 +41,42 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 
 	dsnString := args[0]
 	manifestPath := args[1]
-	moduleName := ""
+	
+	// Handle third argument - can be either block range or module name
+	// For backward compatibility, if it contains ':', treat it as block range
 	if len(args) > 2 {
-		moduleName = args[2]
+		thirdArg := args[2]
+		// Check if it looks like a block range (contains ':')
+		if strings.Contains(thirdArg, ":") {
+			// Parse and set block range flags to bridge with substreams/sink library
+			br, err := readBlockRangeArgument(thirdArg)
+			if err != nil {
+				return fmt.Errorf("invalid block range %q: %w", thirdArg, err)
+			}
+			
+			if br.StartBlock() > 0 {
+				if err := cmd.Flags().Set("start-block", fmt.Sprintf("%d", br.StartBlock())); err != nil {
+					return fmt.Errorf("setting start-block flag: %w", err)
+				}
+			}
+			if br.EndBlock() != nil {
+				if err := cmd.Flags().Set("stop-block", fmt.Sprintf("%d", *br.EndBlock())); err != nil {
+					return fmt.Errorf("setting stop-block flag: %w", err)
+				}
+			}
+		} else {
+			// Treat as module name (new behavior, for forward compatibility)
+			// Module name is handled via sink.InferOutputModuleFromPackage by default
+			// or can be overridden, but we'll just pass empty string to let it infer
+		}
 	}
 
 	sink, err := sink.NewFromViper(
 		cmd,
 		supportedOutputTypes,
 		manifestPath,
-		moduleName,
-		"substreams-sink-sql/1.0.0",
+		sink.InferOutputModuleFromPackage,
+		fmt.Sprintf("substreams-sink-sql/%s", version),
 		zlog,
 		tracer,
 	)

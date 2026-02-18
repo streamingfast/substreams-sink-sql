@@ -104,14 +104,15 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		}
 	}
 	
-	// Set the endpoint flag for the sink to use
+	// Bridge endpoint with substreams/sink library by setting the endpoint flag
+	// The sink library expects endpoint via --endpoint flag, but this command uses --substreams-endpoint
 	if err := cmd.Flags().Set("endpoint", endpoint); err != nil {
 		return fmt.Errorf("setting endpoint flag: %w", err)
 	}
 
 	startBlock := sflags.MustGetString(cmd, "start-block")
 	if startBlock != "" {
-		// Set the start-block flag for the sink to use
+		// Bridge start-block with substreams/sink library
 		if err := cmd.Flags().Set("start-block", startBlock); err != nil {
 			return fmt.Errorf("setting start-block flag: %w", err)
 		}
@@ -119,7 +120,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	
 	endBlock := sflags.MustGetString(cmd, "stop-block")
 	if endBlock != "0" {
-		// Set the stop-block flag for the sink to use
+		// Bridge stop-block with substreams/sink library
 		if err := cmd.Flags().Set("stop-block", endBlock); err != nil {
 			return fmt.Errorf("setting stop-block flag: %w", err)
 		}
@@ -224,7 +225,7 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 		outputType,
 		manifestPath,
 		outputModuleName,
-		"substreams-sink-sql/1.0.0",
+		fmt.Sprintf("substreams-sink-sql/%s", version),
 		zlog,
 		tracer,
 	)
