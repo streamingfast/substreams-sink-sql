@@ -8,6 +8,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.3
 	github.com/bobg/go-generics/v2 v2.2.2
 	github.com/btcsuite/btcutil v1.0.2
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/drone/envsubst v1.0.3
 	github.com/golang/protobuf v1.5.4
 	github.com/jmoiron/sqlx v1.4.0
@@ -16,7 +17,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20260108192805-38f96de0a641
-	github.com/streamingfast/substreams v1.17.12-0.20260217202545-fbe1e72f01a1
+	github.com/streamingfast/substreams v1.18.0
 	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20260110015235-04b544bbecb9
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
@@ -76,7 +77,6 @@ require (
 	github.com/bobg/go-generics/v3 v3.5.0 // indirect
 	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/charmbracelet/lipgloss v1.0.0 // indirect
 	github.com/charmbracelet/x/ansi v0.4.2 // indirect
@@ -132,6 +132,7 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
+	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/muesli/termenv v0.15.3-0.20240618155329-98d742f6907a // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -212,7 +213,7 @@ require (
 	github.com/streamingfast/bstream v0.0.2-0.20260218220126-524f0df04ee2
 	github.com/streamingfast/cli v0.0.4-0.20250815192146-d8a233ec3d0b
 	github.com/streamingfast/dbin v0.9.1-0.20231117225723-59790c798e2c // indirect
-	github.com/streamingfast/dgrpc v0.0.0-20260213162824-8daf6d0a5775 // indirect
+	github.com/streamingfast/dgrpc v0.0.0-20260218164858-719a69f1b7b4 // indirect
 	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
 	github.com/streamingfast/dmetrics v0.0.0-20260109212625-35256f512c62
 	github.com/streamingfast/dstore v0.1.3-0.20260113210117-94d66eda2027

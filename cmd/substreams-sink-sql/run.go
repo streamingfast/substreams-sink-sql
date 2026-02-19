@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/pflag"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams/sink"
 	sinker2 "github.com/streamingfast/substreams-sink-sql/db_changes/sinker"
+	sink "github.com/streamingfast/substreams/sink"
 )
 
 var sinkRunCmd = Command(sinkRunE,
@@ -18,7 +18,7 @@ var sinkRunCmd = Command(sinkRunE,
 	"Runs SQL sink process",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags, sink.FlagIgnore("undo-buffer-size"))
+		sink.AddFlagsToSet(flags, sink.FlagExcludeDefault("undo-buffer-size"))
 		AddCommonSinkerFlags(flags)
 		AddCommonDatabaseChangesFlags(flags)
 
@@ -41,7 +41,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 
 	dsnString := args[0]
 	manifestPath := args[1]
-	
+
 	// Handle third argument - can be either block range or module name
 	// For backward compatibility, if it contains ':', treat it as block range
 	if len(args) > 2 {
@@ -53,7 +53,7 @@ func sinkRunE(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("invalid block range %q: %w", thirdArg, err)
 			}
-			
+
 			if br.StartBlock() > 0 {
 				if err := cmd.Flags().Set("start-block", fmt.Sprintf("%d", br.StartBlock())); err != nil {
 					return fmt.Errorf("setting start-block flag: %w", err)

@@ -11,7 +11,6 @@ import (
 	"github.com/streamingfast/cli"
 	. "github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	sink "github.com/streamingfast/substreams/sink"
 	sinksql "github.com/streamingfast/substreams-sink-sql"
 	"github.com/streamingfast/substreams-sink-sql/bytes"
 	"github.com/streamingfast/substreams-sink-sql/db_changes/db"
@@ -20,6 +19,7 @@ import (
 	pbsql "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/services/v1"
 	"github.com/streamingfast/substreams-sink-sql/services"
 	"github.com/streamingfast/substreams/manifest"
+	sink "github.com/streamingfast/substreams/sink"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -28,10 +28,11 @@ var fromProtoCmd = Command(fromProtoE,
 	"",
 	RangeArgs(2, 3),
 	Flags(func(flags *pflag.FlagSet) {
-		sink.AddFlagsToSet(flags, sink.FlagIgnore("undo-buffer-size", "endpoint", "start-block", "stop-block"))
-		flags.String("substreams-endpoint", "", "Substreams gRPC endpoint. If empty, will be replaced by the SUBSTREAMS_ENDPOINT_{network_name} environment variable, where `network_name` is determined from the substreams manifest. Some network names have default endpoints.")
-		flags.StringP("start-block", "s", "", "Start block to stream from. If empty, will be replaced by initialBlock of the first module you are streaming. If negative, will be resolved by the server relative to the chain head")
-		flags.StringP("stop-block", "t", "0", "Stop block to end stream at, exclusively. If the start-block is positive, a '+' prefix can indicate 'relative to start-block'")
+		sink.AddFlagsToSet(flags, sink.FlagExcludeDefault("undo-buffer-size"))
+		// Deprecated: use --endpoint instead
+		flags.String("substreams-endpoint", "", "")
+		flags.MarkHidden("substreams-endpoint")
+		flags.MarkDeprecated("substreams-endpoint", "use --endpoint instead")
 
 		flags.Bool("no-constraints", false, "Do not add any constraints to the database. This is useful to speed up the initial import of a large dataset.")
 		//flags.Bool("no-proto-option", false, "this tell the schema manager to not rely on proto option to generate the schema.")
@@ -83,7 +84,15 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 	retryCount := sflags.MustGetInt(cmd, "clickhouse-query-retry-count")
 	retrySleep := sflags.MustGetDuration(cmd, "clickhouse-query-retry-sleep")
 
-	endpoint := sflags.MustGetString(cmd, "substreams-endpoint")
+	// Support deprecated --substreams-endpoint flag for backward compatibility
+	if value, valueProvided := sflags.MustGetStringProvided(cmd, "substreams-endpoint"); valueProvided {
+		if err := cmd.Flags().Set("endpoint", value); err != nil {
+			return fmt.Errorf("setting endpoint flag from substreams-endpoint: %w", err)
+		}
+	}
+
+	endpoint := sflags.MustGetString(cmd, "endpoint")
+
 	if endpoint == "" {
 		network := sflags.MustGetString(cmd, "network")
 		if network == "" {
@@ -98,31 +107,9 @@ func fromProtoE(cmd *cobra.Command, args []string) error {
 			network = pkgBundle.Package.Network
 		}
 		var err error
-		endpoint, err = manifest.ExtractNetworkEndpoint(network, sflags.MustGetString(cmd, "substreams-endpoint"), zlog)
+		endpoint, err = manifest.ExtractNetworkEndpoint(network, "", zlog)
 		if err != nil {
 			return err
-		}
-	}
-	
-	// Bridge endpoint with substreams/sink library by setting the endpoint flag
-	// The sink library expects endpoint via --endpoint flag, but this command uses --substreams-endpoint
-	if err := cmd.Flags().Set("endpoint", endpoint); err != nil {
-		return fmt.Errorf("setting endpoint flag: %w", err)
-	}
-
-	startBlock := sflags.MustGetString(cmd, "start-block")
-	if startBlock != "" {
-		// Bridge start-block with substreams/sink library
-		if err := cmd.Flags().Set("start-block", startBlock); err != nil {
-			return fmt.Errorf("setting start-block flag: %w", err)
-		}
-	}
-	
-	endBlock := sflags.MustGetString(cmd, "stop-block")
-	if endBlock != "0" {
-		// Bridge stop-block with substreams/sink library
-		if err := cmd.Flags().Set("stop-block", endBlock); err != nil {
-			return fmt.Errorf("setting stop-block flag: %w", err)
 		}
 	}
 
