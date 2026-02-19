@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	sink "github.com/streamingfast/substreams/sink"
 	pbSchema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"github.com/streamingfast/substreams-sink-sql/proto"
+	sink "github.com/streamingfast/substreams/sink"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -206,7 +206,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 		if table != nil {
 			err := inserter.Insert(table.Name, fieldValues)
 			if err != nil {
-				fmt.Println("field values:", fieldValues)
+				d.logger.Info("failed to insert into table, printing field values for debugging", zap.String("table_name", table.Name), zap.Any("field_values", fieldValues))
 				return 0, fmt.Errorf("inserting into table %q: %w", table.Name, err)
 			}
 			if len(childs) > 0 && d.useProtoOptions {
