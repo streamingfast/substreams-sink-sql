@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+* Bump `github.com/streamingfast/substreams` to v1.18.0.
+
+* Deprecated `--substreams-endpoint` flag in `substreams-sink-sql from-proto` command in favor of `--endpoint` for consistency with other commands and the upstream substreams sink library. The old flag is still supported for backward compatibility but will show a deprecation warning when used.
+
 ### Fixed
 
 * Fixed typo in flag name `--on-module-hash-mistmatch` → `--on-module-hash-mismatch`. The old flag name is still supported for backward compatibility but is deprecated and will be removed in a future version. A deprecation warning will be logged if the old flag is used.
+
+* Fixed nil pointer panic in integration tests caused by missing backoff configuration when using `sink.New` directly.
 
 ## v4.12.0
 
