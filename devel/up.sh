@@ -5,14 +5,16 @@ set -e
 ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 
 clean=
+detached=
 
 main() {
   pushd "$ROOT" &> /dev/null
 
-  while getopts "hc" opt; do
+  while getopts "hcd" opt; do
     case $opt in
       h) usage && exit 0;;
       c) clean=true;;
+      d) detached=true;;
       \?) usage_error "Invalid option: -$OPTARG";;
     esac
   done
@@ -26,7 +28,7 @@ main() {
   prepare
 
   # Pass execution to docker compose
-  exec docker compose up
+  exec docker compose up ${detached:+-d}
 }
 
 prepare() {
@@ -46,16 +48,15 @@ usage_error() {
 }
 
 usage() {
-  echo "usage: up [-c]"
+  echo "usage: up [-c] [-d]"
   echo ""
   echo "Setup required files layout and launch 'docker compose up'"
   echo "spinning up all required development dependencies."
   echo ""
   echo "Options"
   echo "    -c          Clean 'data' directory before launching dependencies"
+  echo "    -d          Run docker compose in detached mode"
   echo "    -h          Display help about this script"
 }
 
 main "$@"
-
-

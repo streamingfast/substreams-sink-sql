@@ -256,7 +256,14 @@ func setupFakeSubstreamsServer(t *testing.T, pattern ...any) *client.SubstreamsC
 
 	t.Cleanup(server.Stop)
 
-	return client.NewSubstreamsClientConfig(listener.Addr().String(), "", client.None, false, true, "sink-test")
+	return client.NewSubstreamsClientConfig(client.SubstreamsClientConfigOptions{
+		Endpoint:  listener.Addr().String(),
+		AuthToken: "",
+		AuthType:  client.None,
+		Insecure:  false,
+		PlainText: true,
+		Agent:     "sink-test",
+	})
 }
 
 // substreamsTestPackage creates a test package with the given output module name and file descriptor.

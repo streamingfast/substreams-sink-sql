@@ -208,7 +208,7 @@ func TestSinker_SQLStatements(t *testing.T) {
 				logger,
 				tracer,
 			)
-			s, err := sink.New(&sink.SinkerConfig{
+			s, err := sink.NewFromConfig(&sink.SinkerConfig{
 				Pkg:              testPackage,
 				OutputModule:     testPackage.Modules.Modules[0],
 				OutputModuleHash: manifest.ModuleHash([]byte("unused")),

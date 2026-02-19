@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/streamingfast/bstream"
@@ -1852,6 +1853,7 @@ func runSinkerTest(
 	baseSinkOptions := []sink.Option{
 		sink.WithBlockRange(bstream.MustParseRange("1-1000", bstream.WithExclusiveEnd())),
 		sink.WithLivenessChecker(&isAlwaysLiveChecker{}),
+		sink.WithRetryBackOff(&backoff.StopBackOff{}),
 	}
 	if customizeSinkOptions != nil {
 		baseSinkOptions = customizeSinkOptions(baseSinkOptions)

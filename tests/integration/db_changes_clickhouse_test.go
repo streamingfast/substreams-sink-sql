@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/streamingfast/bstream"
 	sink "github.com/streamingfast/substreams/sink"
@@ -213,6 +214,7 @@ func runClickhouseSinkerTest(
 	baseSinkOptions := []sink.Option{
 		sink.WithBlockRange(bstream.MustParseRange("1-1000", bstream.WithExclusiveEnd())),
 		sink.WithLivenessChecker(&isAlwaysLiveChecker{}),
+		sink.WithRetryBackOff(&backoff.StopBackOff{}),
 	}
 	if customizeSinkOptions != nil {
 		baseSinkOptions = customizeSinkOptions(baseSinkOptions)

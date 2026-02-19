@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/jmoiron/sqlx"
 	"github.com/streamingfast/bstream"
 	sink "github.com/streamingfast/substreams/sink"
@@ -105,6 +106,7 @@ func TestDbProtoClickhouseIntegration(t *testing.T) {
 				logger,
 				tracer,
 				sink.WithBlockRange(bstream.MustParseRange("1-2", bstream.WithExclusiveEnd())),
+				sink.WithRetryBackOff(&backoff.StopBackOff{}),
 			)
 			require.NoError(t, err)
 
