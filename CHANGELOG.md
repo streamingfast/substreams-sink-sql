@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* When using `substreams-sink-sql from-proto`, if the specified package has an unsupported front end (e.g. Hasura, Postgraphile or REST), log a warning instead of panicking preventing syncing.
+
 * Bump `github.com/streamingfast/substreams` to v1.18.0.
 
 * Deprecated `--substreams-endpoint` flag in `substreams-sink-sql from-proto` command in favor of `--endpoint` for consistency with other commands and the upstream substreams sink library. The old flag is still supported for backward compatibility but will show a deprecation warning when used.

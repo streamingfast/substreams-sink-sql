@@ -9,13 +9,13 @@ import (
 
 func Run(service *pbsql.Service, logger *zap.Logger) error {
 	if service.HasuraFrontend != nil {
-		panic("Hasura front end not supported yet")
+		logUnsupportedServiceMessage("Hasura front end", logger)
 	}
 	if service.PostgraphileFrontend != nil {
-		panic("Postgraphile front end not supported yet")
+		logUnsupportedServiceMessage("Postgraphile front end", logger)
 	}
 	if service.RestFrontend != nil {
-		panic("Rest front end not supported yet")
+		logUnsupportedServiceMessage("Rest front end", logger)
 	}
 
 	if service.DbtConfig != nil && service.DbtConfig.Enabled {
@@ -31,4 +31,12 @@ func Run(service *pbsql.Service, logger *zap.Logger) error {
 	}
 
 	return nil
+}
+
+func logUnsupportedServiceMessage(serviceName string, logger *zap.Logger) {
+	logger.Warn(
+		"This package has " + serviceName + " service defined, however " + serviceName + " is not " +
+			"supported yet when using relational mappings mode (e.g. 'substreams-sink-sql from-proto ...', " +
+			"skipping it",
+	)
 }
