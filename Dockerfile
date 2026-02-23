@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26-bullseye AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 
 WORKDIR /src
 
