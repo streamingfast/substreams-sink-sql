@@ -246,6 +246,13 @@ func (d *DialectClickHouse) AppendInlineFieldValues(fieldValues []any, fd protor
 	return fieldValues, nil
 }
 
+// CreateEmptyArray creates an empty array for ClickHouse.
+// ClickHouse can infer the array type from the column definition, so we just return
+// an empty slice. No special typing is needed unlike PostgreSQL.
+func (d *DialectClickHouse) CreateEmptyArray(fd protoreflect.FieldDescriptor, column *schema.Column) any {
+	return []interface{}{}
+}
+
 func (d *DialectClickHouse) SchemaHash() string {
 	h := fnv.New64a()
 

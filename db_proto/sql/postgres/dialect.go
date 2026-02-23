@@ -238,6 +238,15 @@ func (d *DialectPostgres) AppendInlineFieldValues(fieldValues []any, fd protoref
 	return fieldValues, nil
 }
 
+// CreateEmptyArray creates a typed empty array for PostgreSQL.
+// PostgreSQL cannot determine the type of an empty array literal (e.g., array[])
+// without an explicit type cast, so we return a TypedEmptyArray that carries
+// the SQL type information needed for the cast.
+func (d *DialectPostgres) CreateEmptyArray(fd protoreflect.FieldDescriptor, column *schema.Column) any {
+	sqlType := MapFieldType(fd, d.bytesEncoding, column)
+	return sql2.TypedEmptyArray{SQLType: string(sqlType)}
+}
+
 func (d *DialectPostgres) SchemaHash() string {
 	h := fnv.New64a()
 

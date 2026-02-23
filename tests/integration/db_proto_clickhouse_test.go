@@ -20,6 +20,7 @@ import (
 	pbsubstreamsrpc "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/clickhouse"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestDbProtoClickhouseIntegration(t *testing.T) {
@@ -38,6 +39,12 @@ func TestDbProtoClickhouseIntegration(t *testing.T) {
 	equalsOrderRows := func(expected []*OrderRow) func(t *testing.T, dbx *sqlx.DB) {
 		return func(t *testing.T, dbx *sqlx.DB) {
 			require.Equal(t, expected, readRowsBy[OrderRow](t, dbx, "orders", "order_id"))
+		}
+	}
+
+	equalsTypesTestRows := func(expected []*TypesTestRow) func(t *testing.T, dbx *sqlx.DB) {
+		return func(t *testing.T, dbx *sqlx.DB) {
+			require.Equal(t, expected, readRowsBy[TypesTestRow](t, dbx, "types_tests", "id"))
 		}
 	}
 
@@ -79,6 +86,23 @@ func TestDbProtoClickhouseIntegration(t *testing.T) {
 			),
 			equalsOrderRows([]*OrderRow{
 				{rowMeta(t, 1, "2025-01-01"), "o1", "c1"},
+			}),
+		},
+		{
+			// This test case verifies that ClickHouse correctly handles empty repeated fields.
+			// Unlike PostgreSQL, ClickHouse can infer the array type from the column definition
+			// in the schema, so empty arrays work correctly.
+			//
+			// This test serves as a regression test to ensure ClickHouse continues to handle
+			// empty arrays properly.
+			"types_test with empty repeated string field",
+			streamMock(
+				relationsBlockData(t, "1a", "2025-01-01",
+					entityTypesTestWithEmptyRepeatedString(1),
+				),
+			),
+			equalsTypesTestRows([]*TypesTestRow{
+				{rowMeta(t, 1, "2025-01-01"), 1},
 			}),
 		},
 	}
@@ -277,4 +301,41 @@ type OrderRow struct {
 	Meta
 	OrderID    string `db:"order_id"`
 	CustomerID string `db:"customer_ref_id"`
+}
+
+// TypesTestRow represents a row from the types_tests table for assertions
+type TypesTestRow struct {
+	Meta
+	ID uint64 `db:"id"`
+}
+
+// entityTypesTestWithEmptyRepeatedString creates a TypesTest entity with an empty
+// repeated string field to reproduce the "cannot determine type of empty array" error.
+func entityTypesTestWithEmptyRepeatedString(id uint64) *pbrelations.Entity {
+	return &pbrelations.Entity{
+		Entity: &pbrelations.Entity_TypesTest{
+			TypesTest: &pbrelations.TypesTest{
+				Id: id,
+				// RepeatedStringField is intentionally left nil/empty to reproduce
+				// the PostgreSQL error: "cannot determine type of empty array"
+				RepeatedStringField: nil,
+				// TimestampField must be set for ClickHouse to avoid panic on nil timestamp
+				TimestampField: timestamppb.New(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)),
+				// These fields have type conversions and require valid numeric strings (not empty)
+				Str_2Int128:     "0",
+				Str_2Uint128:    "0",
+				Str_2Int256:     "0",
+				Str_2Uint256:    "0",
+				Str_2Decimal128: "0",
+				Str_2Decimal256: "0",
+				// Optional numeric conversion field - must be set to valid value for PostgreSQL
+				// (empty string fails with "invalid input syntax for type numeric")
+				OptionalStr_2Uint256: ptr("0"),
+			},
+		},
+	}
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

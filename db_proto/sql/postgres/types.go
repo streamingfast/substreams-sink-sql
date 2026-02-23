@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/streamingfast/substreams-sink-sql/bytes"
+	sql2 "github.com/streamingfast/substreams-sink-sql/db_proto/sql"
 	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	v1 "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -159,6 +160,10 @@ func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
 		s = "'" + v.Format(time.RFC3339) + "'"
 	case *timestamppb.Timestamp:
 		s = "'" + v.AsTime().Format(time.RFC3339) + "'"
+	// Handle typed empty arrays for PostgreSQL (needed because PostgreSQL cannot determine
+	// the type of an empty array literal without an explicit cast)
+	case sql2.TypedEmptyArray:
+		s = "array[]::" + v.SQLType
 	// Handle array types for PostgreSQL
 	case []interface{}:
 		var elements []string

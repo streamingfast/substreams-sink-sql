@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Fixed nil pointer panic in integration tests caused by missing backoff configuration when using `sink.New` directly.
 
+* Fixed PostgreSQL error "cannot determine type of empty array" when inserting rows with empty `repeated` (array) fields in `from-proto` mode. PostgreSQL requires explicit type casts for empty array literals, which are now automatically generated based on the column type.
+
 ## v4.12.0
 
 ### DatabaseChanges mode improvements

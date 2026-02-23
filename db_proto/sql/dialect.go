@@ -16,6 +16,14 @@ const DialectFieldBlockTimestamp = "_block_timestamp_"
 const DialectFieldVersion = "_version_"
 const DialectFieldDeleted = "_deleted_"
 
+// TypedEmptyArray represents an empty array with type information.
+// This is needed because some databases (like PostgreSQL) cannot determine
+// the type of an empty array literal without an explicit type cast.
+type TypedEmptyArray struct {
+	// SQLType is the full SQL array type (e.g., "TEXT[]", "INTEGER[]")
+	SQLType string
+}
+
 type Dialect interface {
 	SchemaHash() string
 	FullTableName(table *schema.Table) string
@@ -24,6 +32,9 @@ type Dialect interface {
 	UseVersionField() bool
 	UseDeletedField() bool
 	AppendInlineFieldValues(fieldValues []any, fd protoreflect.FieldDescriptor, fv protoreflect.Value, dm *dynamicpb.Message) ([]any, error)
+	// CreateEmptyArray creates an empty array value with type information for the given field.
+	// This allows dialects to provide type-specific empty array representations.
+	CreateEmptyArray(fd protoreflect.FieldDescriptor, column *schema.Column) any
 }
 
 type BaseDialect struct {
