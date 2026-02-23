@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 	go func() {
 		defer wg.Done()
 		sharedDbChangesPostgresContainer, pgCleanup = setupRawPostgresContainer(PostgresContainerConfig{
-			Image: "postgres:16-alpine",
+			Image: "postgres:18-alpine",
 		})
 	}()
 
@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 	go func() {
 		defer wg.Done()
 		sharedDbChangesClickhouseContainer, chCleanup = setupRawClickhouseContainer(ClickhouseContainerConfig{
-			Image: "clickhouse/clickhouse-server:24.3-alpine",
+			Image: "clickhouse/clickhouse-server:26.1-alpine",
 		})
 	}()
 
@@ -511,6 +511,8 @@ func TestSinker_Integration_TimescaleDB(t *testing.T) {
 		nil,
 		nil,
 		rawSQLInput(func(schema string) string {
+			// Note: tsdb.segmentby and tsdb.orderby options automatically enable columnstore
+			// in TimescaleDB 2.19+, so no explicit add_columnstore_policy call is needed.
 			return `
 				CREATE TABLE IF NOT EXISTS trades (
 					id BIGSERIAL,
@@ -523,8 +525,6 @@ func TestSinker_Integration_TimescaleDB(t *testing.T) {
 					tsdb.segmentby='token_id',
 					tsdb.orderby='block_time DESC'
 				);
-
-				CALL add_columnstore_policy('trades', after => INTERVAL '1d');
 			`
 		}),
 		streamMock(

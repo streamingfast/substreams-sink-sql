@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/jmoiron/sqlx"
 	"github.com/streamingfast/bstream"
 	"github.com/streamingfast/logging"
@@ -142,11 +143,17 @@ func setupRawClickhouseContainer(config ClickhouseContainerConfig) (*ClickhouseC
 	dbUser := "default"
 	dbPassword := "clickhouse"
 
+	// Use SQL-based wait strategy because ClickHouse logs to file, not stdout
 	clickhouseContainer, err := clickhouse.Run(ctx,
 		config.Image,
 		clickhouse.WithDatabase(dbName),
 		clickhouse.WithUsername(dbUser),
 		clickhouse.WithPassword(dbPassword),
+		testcontainers.WithWaitStrategy(
+			wait.ForSQL("9000/tcp", "clickhouse", func(host string, port nat.Port) string {
+				return fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s", dbUser, dbPassword, host, port.Port(), dbName)
+			}).WithStartupTimeout(30*time.Second).WithQuery("SELECT 1"),
+		),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to start ClickHouse container: %s", err))
@@ -189,11 +196,17 @@ func setupClickhouseContainer(t *testing.T, seedDb ClickhouseSeeder) (dbConnecti
 	dbUser := "default"
 	dbPassword := "clickhouse"
 
+	// Use SQL-based wait strategy because ClickHouse logs to file, not stdout
 	clickhouseContainer, err := clickhouse.Run(ctx,
-		"clickhouse/clickhouse-server:24.3-alpine",
+		"clickhouse/clickhouse-server:26.1-alpine",
 		clickhouse.WithDatabase(dbName),
 		clickhouse.WithUsername(dbUser),
 		clickhouse.WithPassword(dbPassword),
+		testcontainers.WithWaitStrategy(
+			wait.ForSQL("9000/tcp", "clickhouse", func(host string, port nat.Port) string {
+				return fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s", dbUser, dbPassword, host, port.Port(), dbName)
+			}).WithStartupTimeout(30*time.Second).WithQuery("SELECT 1"),
+		),
 	)
 	require.NoError(t, err)
 
@@ -242,7 +255,11 @@ func setupClickhouseContainer(t *testing.T, seedDb ClickhouseSeeder) (dbConnecti
 func setupFakeSubstreamsServer(t *testing.T, pattern ...any) *client.SubstreamsClientConfig {
 	t.Helper()
 
-	listener, err := net.Listen("tcp", ":0")
+	// Bind to 127.0.0.1 explicitly to avoid IPv6 issues. Binding to `:0` results
+	// in `[::]:port` which causes gRPC connection failures in some environments
+	// (e.g., AI sandboxes with proxy configurations). Using 127.0.0.1 works
+	// consistently in both local development and sandboxed environments.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	server := grpc.NewServer()
