@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/streamingfast/substreams-sink-sql/db_proto/sql/schema"
 	pbSchema "github.com/streamingfast/substreams-sink-sql/pb/sf/substreams/sink/sql/schema/v1"
 	"github.com/streamingfast/substreams-sink-sql/proto"
 	sink "github.com/streamingfast/substreams/sink"
@@ -166,15 +165,7 @@ func (d *BaseDatabase) WalkMessageDescriptorAndInsertWithDialect(dm *dynamicpb.M
 				}
 				fieldValues = append(fieldValues, values)
 			} else {
-				// Empty array - use dialect-specific typed empty array to handle
-				// databases that need explicit type information for empty arrays (e.g., PostgreSQL)
-				var column *schema.Column
-				if tableInfo != nil {
-					if table := dialect.GetTable(tableInfo.Name); table != nil {
-						column = table.ColumnByFieldName(string(fd.Name()))
-					}
-				}
-				fieldValues = append(fieldValues, dialect.CreateEmptyArray(fd, column))
+				fieldValues = append(fieldValues, []interface{}{})
 			}
 		} else if fd.Kind() == protoreflect.MessageKind {
 			if fv.Message().IsValid() {
