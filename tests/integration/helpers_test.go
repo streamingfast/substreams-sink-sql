@@ -395,8 +395,9 @@ type finalBlock string
 var fixedBaseTime = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // blockTime can be used in [blockScopedData] to specify the block time for the response.
+// Always returns time in UTC to match database output.
 func blockTime(t *testing.T, in string) time.Time {
-	return blockTimepb(t, in).AsTime()
+	return blockTimepb(t, in).AsTime().UTC()
 }
 
 // blockTimepb can be used in [blockScopedData] to specify the block time for the response.

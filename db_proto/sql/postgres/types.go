@@ -159,8 +159,12 @@ func ValueToString(value any, bytesEncoding bytes.Encoding) (s string) {
 		s = "'" + v.Format(time.RFC3339) + "'"
 	case *timestamppb.Timestamp:
 		s = "'" + v.AsTime().Format(time.RFC3339) + "'"
-	// Handle array types for PostgreSQL
 	case []interface{}:
+		if len(v) == 0 {
+			s = "'{}'"
+			return
+		}
+
 		var elements []string
 		for _, elem := range v {
 			elements = append(elements, ValueToString(elem, bytesEncoding))

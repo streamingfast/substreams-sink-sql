@@ -130,3 +130,13 @@ func (t *Table) processColumns(descriptor protoreflect.MessageDescriptor) error 
 
 	return nil
 }
+
+// ColumnByFieldName returns the column matching the given protobuf field name, or nil if not found.
+func (t *Table) ColumnByFieldName(fieldName string) *Column {
+	for _, col := range t.Columns {
+		if col.FieldDescriptor != nil && string(col.FieldDescriptor.Name()) == fieldName {
+			return col
+		}
+	}
+	return nil
+}
