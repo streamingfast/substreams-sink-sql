@@ -5,13 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v4.13.0
 
 ### Changed
 
 * When using `substreams-sink-sql from-proto`, if the specified package has an unsupported front end (e.g. Hasura, Postgraphile or REST), log a warning instead of panicking preventing syncing.
 
-* Bump `github.com/streamingfast/substreams` to v1.18.0.
+* Bump `github.com/streamingfast/substreams` to v1.18.0, bringing improved performance in the historical segment (20-45% faster in our experiments) due to usage of S2 compression and batched block scoped data.
+
+> [!NOTE]
+> This requires Substreams RPC v4 which is now automatically used for sinks using Substreams v1.18+ on compatible endpoints, StreamingFast endpoints now all support v4.
 
 * Deprecated `--substreams-endpoint` flag in `substreams-sink-sql from-proto` command in favor of `--endpoint` for consistency with other commands and the upstream substreams sink library. The old flag is still supported for backward compatibility but will show a deprecation warning when used.
 
