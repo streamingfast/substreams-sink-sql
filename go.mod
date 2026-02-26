@@ -9,6 +9,7 @@ require (
 	github.com/bobg/go-generics/v2 v2.2.2
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/docker/go-connections v0.5.0
 	github.com/drone/envsubst v1.0.3
 	github.com/golang/protobuf v1.5.4
 	github.com/jmoiron/sqlx v1.4.0
@@ -17,7 +18,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.15.0
 	github.com/streamingfast/logging v0.0.0-20260108192805-38f96de0a641
-	github.com/streamingfast/substreams v1.18.0
+	github.com/streamingfast/substreams v1.18.2
 	github.com/streamingfast/substreams-sink-database-changes v1.3.2-0.20260110015235-04b544bbecb9
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
@@ -90,7 +91,6 @@ require (
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dmarkham/enumer v1.6.1 // indirect
 	github.com/docker/docker v28.4.0+incompatible // indirect
-	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
@@ -210,10 +210,10 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.0 // indirect
-	github.com/streamingfast/bstream v0.0.2-0.20260218220126-524f0df04ee2
+	github.com/streamingfast/bstream v0.0.2-0.20260219205021-a73f004bfdea
 	github.com/streamingfast/cli v0.0.4-0.20250815192146-d8a233ec3d0b
 	github.com/streamingfast/dbin v0.9.1-0.20231117225723-59790c798e2c // indirect
-	github.com/streamingfast/dgrpc v0.0.0-20260218164858-719a69f1b7b4 // indirect
+	github.com/streamingfast/dgrpc v0.0.0-20260224192836-e5cd6cffceff // indirect
 	github.com/streamingfast/dhammer v0.0.0-20220506192416-3797a7906da2
 	github.com/streamingfast/dmetrics v0.0.0-20260109212625-35256f512c62
 	github.com/streamingfast/dstore v0.1.3-0.20260113210117-94d66eda2027
