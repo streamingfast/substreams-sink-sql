@@ -1,5 +1,35 @@
 # Substreams:SQL Sink
 
+> [!IMPORTANT]
+> ## Deprecated — this sink now lives in the `substreams` CLI
+>
+> `substreams-sink-sql` has been folded into the main [`substreams` CLI](https://github.com/streamingfast/substreams)
+> and is available as `substreams sink postgres` and `substreams sink clickhouse` starting with
+> **substreams v1.20.2**. This repository is in maintenance mode: no new features, and it will stop
+> receiving releases. Please migrate.
+>
+> **Your database does not need to change.** The cursor tables and schemas are identical, so the CLI
+> resumes exactly where this binary left off — point it at the same DSN.
+>
+> | `substreams-sink-sql` | `substreams` CLI |
+> | --- | --- |
+> | `run $DSN manifest.yaml 100:200` | `substreams sink postgres manifest.yaml -s 100 -t 200 --dsn $DSN` |
+> | `from-proto $DSN manifest.yaml` | `substreams sink postgres manifest.yaml --dsn $DSN` (mode auto-detected) |
+> | `setup $DSN manifest.yaml` | `substreams sink postgres setup manifest.yaml --dsn $DSN` |
+> | `generate-csv $DSN manifest.yaml 0:100` | `substreams sink postgres generate-csv manifest.yaml -t 100 --dsn $DSN` |
+> | `inject-csv $DSN ./csv table 0:100` | `substreams sink postgres inject-csv ./csv table 0:100 --dsn $DSN` |
+> | `tools --dsn $DSN cursor read` | `substreams sink postgres tools cursor read --dsn $DSN` |
+> | `create-user ...` | removed — create the user directly in your database |
+>
+> Swap `postgres` for `clickhouse` when targeting ClickHouse. Note there is **no `run` subcommand**: the
+> engine command runs the sink itself, and the mapping mode is detected from the output module's type.
+> The Docker image changes from `ghcr.io/streamingfast/substreams-sink-sql` to `ghcr.io/streamingfast/substreams`.
+>
+> Full command and flag mapping, including DSN, block-range and metrics flag changes:
+> **[Migration guide](https://github.com/streamingfast/substreams/blob/develop/docs/how-to-guides/sinks/sql/migration.md)**.
+>
+> The documentation below describes the deprecated standalone binary and is kept for users still running it.
+
 The Substreams:SQL sink helps you quickly and easily sync Substreams modules to a PostgreSQL or Clickhouse database.
 
 It supports two different Substreams output formats, each with distinct advantages:

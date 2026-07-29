@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Deprecated
+
+- **This project is deprecated.** The SQL sink has been folded into the main
+  [`substreams` CLI](https://github.com/streamingfast/substreams) as `substreams sink postgres` and
+  `substreams sink clickhouse`, shipped in substreams **v1.20.2**. The standalone binary is in
+  maintenance mode and will stop receiving releases.
+
+  Databases are compatible in place — cursor tables and schemas are unchanged, so the CLI resumes from
+  the stored cursor. See the
+  [migration guide](https://github.com/streamingfast/substreams/blob/develop/docs/how-to-guides/sinks/sql/migration.md)
+  for the full command and flag mapping. Notable differences: there is no `run` subcommand (the engine
+  command runs the sink), no `from-proto` subcommand (the mode is detected from the output module type),
+  `create-user` was removed, the DSN moved to `--dsn`/`SUBSTREAMS_SINK_DSN`, block ranges moved to
+  `-s`/`-t`, and `--metrics-listen-addr` became `--prometheus-addr`.
+
 ## v4.13.1
 
 ### Fixed
