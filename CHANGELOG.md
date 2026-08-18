@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **This project is deprecated.** The SQL sink has been folded into the main
   [`substreams` CLI](https://github.com/streamingfast/substreams) as `substreams sink postgres` and
   `substreams sink clickhouse`, shipped in substreams **v1.20.2**. The standalone binary is in
-  maintenance mode and will stop receiving releases.
+  maintenance mode for one year — security fixes only, if any, and no new features — after which the
+  repository is archived read-only. Existing releases, tags and Docker images stay available.
 
   Databases are compatible in place — cursor tables and schemas are unchanged, so the CLI resumes from
   the stored cursor. See the

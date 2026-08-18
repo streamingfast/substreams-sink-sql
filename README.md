@@ -5,8 +5,9 @@
 >
 > `substreams-sink-sql` has been folded into the main [`substreams` CLI](https://github.com/streamingfast/substreams)
 > and is available as `substreams sink postgres` and `substreams sink clickhouse` starting with
-> **substreams v1.20.2**. This repository is in maintenance mode: no new features, and it will stop
-> receiving releases. Please migrate.
+> **substreams v1.20.2**. This repository is in maintenance mode for one year: security fixes only, if
+> any, and no new features. It is then archived read-only — existing releases, tags and Docker images
+> stay available, so anything already running keeps working. Please migrate.
 >
 > **Your database does not need to change.** The cursor tables and schemas are identical, so the CLI
 > resumes exactly where this binary left off — point it at the same DSN.
